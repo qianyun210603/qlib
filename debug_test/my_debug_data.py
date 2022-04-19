@@ -54,5 +54,10 @@ if __name__ == '__main__':
     }
 
     # model initiaiton
-    # model = init_instance_by_config(task["model"])
+    model = init_instance_by_config(task["model"])
     dataset = init_instance_by_config(task["dataset"])
+    with R.start(experiment_name="train_model"):
+        R.log_params(**flatten_dict(task))
+        model.fit(dataset)
+        R.save_objects(trained_model=model)
+        rid = R.get_recorder().id

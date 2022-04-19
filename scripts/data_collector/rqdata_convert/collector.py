@@ -28,18 +28,15 @@ from qlib.constant import REG_CN as REGION_CN
 CUR_DIR = Path(__file__).resolve().parent
 sys.path.append(str(CUR_DIR.parent.parent))
 
-from dump_bin import DumpDataUpdate
+from dump_bin import DumpDataUpdate, DumpDataAll
 from data_collector.base import BaseCollector, BaseNormalize, BaseRun, Normalize
 from data_collector.utils import (
     deco_retry,
     get_calendar_list,
     get_hs_stock_symbols,
-    get_us_stock_symbols,
-    get_in_stock_symbols,
     generate_minutes_calendar_from_daily,
 )
 
-INDEX_BENCH_URL = "http://push2his.eastmoney.com/api/qt/stock/kline/get?secid=1.{index_code}&fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58&klt=101&fqt=0&beg={begin}&end={end}"
 
 
 class RqdataCollector(BaseCollector):
@@ -80,10 +77,16 @@ class RqdataCollector(BaseCollector):
             using for debug, by default None
         """
         self.arctic_store = Arctic("127.0.0.1")
-        self.bar_data_infos = self.arctic_store.get_library('data_overview')
+        self.meta_lib = self.arctic_store.get_library("convert_meta")
+        self.convert_price_lib = self.arctic_store.get_library("convert_convert_price")
+
         self.bar_lib = self.arctic_store.get_library('bar_data')
         self.ex_factor_lib = self.arctic_store.get_library("ex_factor")  # 复权因子
         self.split_lib = self.arctic_store.get_library("split")  # 拆分信息
+
+        self.derived_lib = self.arctic_store.get_library("convert_derived")
+        self.indicator_lib = self.arctic_store.get_library("convert_indicator")
+
         interval = 'd' if interval.endswith('d') else '1m'
 
         super(RqdataCollector, self).__init__(
@@ -122,28 +125,61 @@ class RqdataCollector(BaseCollector):
             raise ValueError(f"cannot support {interval}")
         # start_datetime = self.convert_datetime(start_datetime, self._timezone)
         # end_datetime = self.convert_datetime(end_datetime, self._timezone)
+        metadata = self.meta_lib.read(symbol)
         interval = 'd' if interval.endswith('d') else '1m'
         db_symbol = symbol + '_' + interval
-        _result = self.bar_lib.read(db_symbol, chunk_range=DateRange(start_datetime.tz_localize(None),
+        _resultb = self.bar_lib.read(db_symbol, chunk_range=DateRange(start_datetime.tz_localize(None),
                                                                      end_datetime.tz_localize(None)))
-        try:
-            _result.set_index('date', inplace=True)
-        except:
-            print(start_datetime, end_datetime, db_symbol, symbol, _result)
 
-        if self.ex_factor_lib.has_symbol(symbol):
-            ex_factors = self.ex_factor_lib.read(symbol)
-            _result = pd.merge_asof(_result, ex_factors[['ex_cum_factor', 'ex_factor']], left_index=True,
+        try:
+            _resultb.set_index('date', inplace=True)
+        except:
+            print(start_datetime, end_datetime, db_symbol, symbol, _resultb)
+
+        convert_prices = self.convert_price_lib.read(symbol).set_index('effective_date')
+        _resultb = pd.merge_asof(_resultb, convert_prices, left_index=True, right_index=True)
+        stock_symbol =  metadata['stock_code'] + '_' + metadata['stock_exchange']
+        db_stock_symbol = stock_symbol + '_' + interval
+        _results = self.bar_lib.read(
+            db_stock_symbol, chunk_range=DateRange(start_datetime.tz_localize(None), end_datetime.tz_localize(None)))
+        try:
+            _results.set_index('date', inplace=True)
+        except:
+            print(start_datetime, end_datetime, db_stock_symbol, stock_symbol, _resultb)
+        if self.ex_factor_lib.has_symbol(stock_symbol):
+            ex_factors = self.ex_factor_lib.read(stock_symbol)
+            _results = pd.merge_asof(_results, ex_factors[['ex_cum_factor', 'ex_factor']], left_index=True,
                                     right_index=True)
         else:
-            _result[['ex_cum_factor', 'ex_factor']] = 1.0
+            _results[['ex_cum_factor', 'ex_factor']] = 1.0
 
-        if self.split_lib.has_symbol(symbol):
-            split_factor = self.split_lib.read(symbol)
-            _result = pd.merge_asof(_result, split_factor[['cum_factor']].rename(columns={'cum_factor': 'split_cum_factor'}),
-                                 left_index=True, right_index=True)
+        if self.split_lib.has_symbol(stock_symbol):
+            split_factor = self.split_lib.read(stock_symbol)
+            _results = pd.merge_asof(
+                _results, split_factor[['cum_factor']].rename(columns={'cum_factor': 'split_cum_factor'}),
+                left_index=True, right_index=True)
         else:
-            _result['split_cum_factor'] = 1.0
+            _results['split_cum_factor'] = 1.0
+
+        _result = pd.merge(
+            _resultb, _results.rename(columns={c: c+'_stock' for c in _results.columns}), left_index=True, right_index=True,
+            how = 'left'
+        )
+
+        derived = self.derived_lib.read(
+            symbol, chunk_range=DateRange(start_datetime.tz_localize(None), end_datetime.tz_localize(None))
+        )
+        indicator = self.indicator_lib.read(
+            symbol, chunk_range=DateRange(start_datetime.tz_localize(None), end_datetime.tz_localize(None))
+        )
+        indicator['call_announced'] = indicator.call_status.apply(lambda x: 1.0 if x == 3 else 0)
+        indicator['call_satisfied'] = indicator.call_status.apply(lambda x: 1.0 if x >= 2 else 0)
+        _resulta = pd.concat(
+            [derived, indicator[['call_announced', 'call_satisfied', 'remaining_size', 'turnover_rate',
+                                 'convertible_market_cap_ratio', 'conversion_price_reset_status']]],
+            axis=1)
+
+        _result = pd.merge(_result, _resulta, left_index=True, right_index=True, how = 'left')
 
         time.sleep(self.delay)
 
@@ -157,8 +193,16 @@ class RqdataCollector(BaseCollector):
         self.download_index_data()
 
     def get_instrument_list(self):
+        def symbol_validation(k, v):
+            if pd.isna(v['listed_date']):
+                return False
+            if pd.isna(v['de_listed_date']):
+                return v['listed_date']<=self.start_datetime or v['listed_date']<=self.end_datetime
+            return v['listed_date']<=self.start_datetime<=v['de_listed_date'] or v['listed_date']<=self.end_datetime<=v['de_listed_date']
+
         logger.info("get HS stock symbols......")
-        symbols = [x.rsplit('_', 1)[0] for x in self.bar_data_infos.list_symbols() if ('SSE' in x or 'SZSE' in x) and not x.startswith('INDEX') and x.endswith(self.interval)]
+        symbol_dict = {x: self.meta_lib.read(x) for x in self.meta_lib.list_symbols()}
+        symbols = [k for k, v in symbol_dict.items() if symbol_validation(k, v)]
         logger.info(f"get {len(symbols)} symbols.")
         return symbols
 
@@ -172,7 +216,6 @@ class RqdataCollector(BaseCollector):
         return "Asia/Shanghai"
 
     def download_index_data(self):
-        # TODO: from MSN
         _format = "%Y%m%d"
         _begin = self.start_datetime.tz_localize(None)
         _end = self.end_datetime.tz_localize(None)
@@ -190,7 +233,7 @@ class RqdataCollector(BaseCollector):
             df["symbol"] = f"sh{_index_code}"
             _path = self.save_dir.joinpath(f"sh{_index_code}.csv")
             if _path.exists():
-                _old_df = pd.read_csv(_path)
+                _old_df = pd.read_csv(_path, index_col=['date'], parse_dates=['date'])
                 df = pd.concat([_old_df[~_old_df.index.isin(df.index)], df], sort=True)
             df.to_csv(_path)
             time.sleep(1)
@@ -214,14 +257,21 @@ class RqdataCollector(BaseCollector):
         instrument_path = self.save_dir.joinpath(f"{symbol}.csv")
         df["symbol"] = symbol
         if instrument_path.exists():
-            _old_df = pd.read_csv(instrument_path)
+            _old_df = pd.read_csv(instrument_path, index_col=['date'], parse_dates=['date'])
             df = pd.concat([_old_df[~_old_df.index.isin(df.index)], df], sort=True)
         df.to_csv(instrument_path)
 
 
 class RqdataNormalize(BaseNormalize):
-    SOURCE_COLS = ["open_price", "close_price", "high_price", "low_price", "volume", 'turnover']
-    COLUMNS = ["open", "close", "high", "low", "volume", 'money']
+    SOURCE_COLS = [
+        "open_price", "close_price", "high_price", "low_price", "volume", 'turnover', 'conversion_price',
+        'open_price_stock', 'high_price_stock', 'low_price_stock', 'close_price_stock', 'volume_stock',
+        'turnover_stock'
+    ]
+    COLUMNS = [
+        "open", "close", "high", "low", "volume", 'money', 'conversionprice', 'openstock',
+        'highstock', 'lowstock', 'closestock', 'volumestock', 'turnoverstock'
+    ]
     DAILY_FORMAT = "%Y-%m-%d"
 
     @staticmethod
@@ -261,34 +311,17 @@ class RqdataNormalize(BaseNormalize):
             df = df.reindex(index_from_cal)
 
         # assign adjclose as close price adjusted by split only
-        df["adjclose"] = df.close
-        # adjust ohlc by split and dividends
-        df[["open", "close", "high", "low"]] = df[["open", "close", "high", "low"]].multiply(df.ex_cum_factor, axis=0)
-        df['factor'] = df.ex_cum_factor
+        if 'closestock' in df.columns:
+            df["adjclosestock"] = df.closestock
+            # adjust ohlc by split and dividends
+            df[['openstock', 'highstock', 'lowstock', 'closestock']] = df[['openstock', 'highstock', 'lowstock', 'closestock']].multiply(df.ex_cum_factor_stock, axis=0)
+            df['factor'] = df.ex_cum_factor_stock
 
         df.sort_index(inplace=True)
 
-
         df.loc[(df["volume"] <= 1e-10) | np.isnan(df["volume"]), list(set(df.columns) - {"symbol"})] = np.nan
 
-        # NOTE: The data obtained by Rqdata finance sometimes has exceptions
-        # WARNING: If it is normal for a `symbol(exchange)` to differ by a factor of *89* to *111* for consecutive trading days,
-        # WARNING: the logic in the following line needs to be modified
         _count = 0
-        change_series = RqdataNormalize.calc_change(df, last_close)
-        while True:
-            # NOTE: may appear unusual for many days in a row
-            _mask = (change_series >= 89) & (change_series <= 111)
-            if not _mask.any():
-                break
-            _tmp_cols = ["high", "close", "low", "open", "adjclose"]
-            df.loc[_mask, _tmp_cols] = df.loc[_mask, _tmp_cols] / 100
-            _count += 1
-            if _count >= 10:
-                _symbol = df.loc[df["symbol"].first_valid_index()]["symbol"]
-                logger.warning(
-                    f"{_symbol} `change` is abnormal for {_count} consecutive days, please check the specific data file carefully"
-                )
 
         df["change"] = RqdataNormalize.calc_change(df, last_close)
 
@@ -296,7 +329,11 @@ class RqdataNormalize(BaseNormalize):
         df.loc[(df["volume"] <= 0) | np.isnan(df["volume"]), columns] = np.nan
 
         df["symbol"] = symbol
-        return df.drop(columns=['ex_cum_factor', 'ex_factor', 'split_cum_factor']).reset_index()
+        return df.drop(
+            columns=['ex_cum_factor_stock', 'ex_factor_stock', 'split_cum_factor_stock',
+                     'ex_cum_factor', 'ex_factor', 'split_cum_factor'],
+            errors='ignore'
+        ).reset_index()
 
     def normalize(self, df: pd.DataFrame) -> pd.DataFrame:
         # normalize
@@ -462,15 +499,15 @@ class Run(BaseRun):
             if self.max_workers is None or self.max_workers < 1
             else self.max_workers
         )
-        # download data from Rqdata
-        # NOTE: when downloading data from RqdataFinance, max_workers is recommended to be 1
-        self.download_data(max_collector_count=self.max_workers, start=trading_date, end=end_date)
-
-        # normalize data
-        self.normalize_data(qlib_data_1d_dir)
+        # # download data from Rqdata
+        # # NOTE: when downloading data from RqdataFinance, max_workers is recommended to be 1
+        # self.download_data(max_collector_count=self.max_workers, start=trading_date, end=end_date)
+        #
+        # # normalize data
+        # self.normalize_data(qlib_data_1d_dir)
 
         # dump bin
-        _dump = DumpDataUpdate(
+        _dump = DumpDataAll(
             csv_path=self.normalize_dir,
             qlib_dir=qlib_data_1d_dir,
             exclude_fields="symbol,date",
@@ -479,21 +516,21 @@ class Run(BaseRun):
         _dump.dump()
 
         # parse index
-        index_list = ["CSI100", "CSI300", "CSI500"]
-        get_instruments = getattr(
-            importlib.import_module(f"data_collector.cn_index.collector"), "get_instruments"
-        )
-        for _index in index_list:
-            get_instruments(str(qlib_data_1d_dir), _index)
+        # index_list = ["CSI100", "CSI300", "CSI500"]
+        # get_instruments = getattr(
+        #     importlib.import_module(f"data_collector.cn_index.collector"), "get_instruments"
+        # )
+        # for _index in index_list:
+        #     get_instruments(str(qlib_data_1d_dir), _index)
 
 
 if __name__ == "__main__":
     # fire.Fire(Run)
     runner = Run(
-        source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata\source",
-        normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata\normalize",
-        max_workers=6
+        source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert\source",
+        normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert\normalize",
+        max_workers=2
     )
-    # runner.download_data(max_collector_count=1, start=pd.Timestamp("2014-01-01"), end=pd.Timestamp("2021-12-31"))
+    # runner.download_data(max_collector_count=1, start=pd.Timestamp("2010-01-01"), end=pd.Timestamp("2021-12-31"))
     # runner.normalize_data()
-    runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata", trading_date='2005-01-01', end_date="2022-04-01")
+    runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert", trading_date='2010-01-01', end_date="2021-12-31")

@@ -203,8 +203,8 @@ class Exchange:
             # Use adjusted price
             self.trade_w_adj_price = True
             self.logger.warning("factor.day.bin file not exists or factor contains `nan`. Order using adjusted_price.")
-            if self.trade_unit is not None:
-                self.logger.warning(f"trade unit {self.trade_unit} is not supported in adjusted_price mode.")
+            # if self.trade_unit is not None:
+            #     self.logger.warning(f"trade unit {self.trade_unit} is not supported in adjusted_price mode.")
         else:
             # The `factor.day.bin` file exists and all data `close` and `factor` are not `nan`
             # Use normal price
@@ -615,10 +615,10 @@ class Exchange:
         end_time :
             the end time of trading range
         """
-        if not self.trade_w_adj_price and self.trade_unit is not None:
+        if self.trade_unit is not None:
             factor = self._get_factor_or_raise_error(
                 factor=factor, stock_id=stock_id, start_time=start_time, end_time=end_time
-            )
+            ) if not self.trade_w_adj_price else 1
             return self.trade_unit / factor
         else:
             return None
@@ -636,7 +636,7 @@ class Exchange:
             # the minimal amount is 1. Add 0.1 for solving precision problem.
             factor = self._get_factor_or_raise_error(
                 factor=factor, stock_id=stock_id, start_time=start_time, end_time=end_time
-            )
+            ) if not self.trade_w_adj_price else 1
             return (deal_amount * factor + 0.1) // self.trade_unit * self.trade_unit / factor
         return deal_amount
 

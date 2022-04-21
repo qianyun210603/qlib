@@ -333,6 +333,7 @@ class MLflowExpManager(ExpManager):
         recorder_name: Optional[Text] = None,
         uri: Optional[Text] = None,
         resume: bool = False,
+        **kwargs
     ):
         # Set the tracking uri
         self.set_uri(uri)
@@ -347,7 +348,7 @@ class MLflowExpManager(ExpManager):
 
         return self.active_experiment
 
-    def end_exp(self, recorder_status: Text = Recorder.STATUS_S):
+    def end_exp(self, recorder_status: Text = Recorder.STATUS_S, **kwargs):
         if self.active_experiment is not None:
             self.active_experiment.end(recorder_status)
             self.active_experiment = None

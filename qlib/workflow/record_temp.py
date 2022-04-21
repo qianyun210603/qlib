@@ -243,7 +243,7 @@ class HFSignalRecord(SignalRecord):
     artifact_path = "hg_sig_analysis"
     depend_cls = SignalRecord
 
-    def __init__(self, recorder, **kwargs):
+    def __init__(self, recorder):
         super().__init__(recorder=recorder)
 
     def generate(self):
@@ -365,7 +365,6 @@ class PortAnaRecord(ACRecordTemp):
         indicator_analysis_freq: Union[List, str] = None,
         indicator_analysis_method=None,
         skip_existing=False,
-        **kwargs,
     ):
         """
         config["strategy"] : dict
@@ -381,7 +380,7 @@ class PortAnaRecord(ACRecordTemp):
         indicator_analysis_method : str, optional, default by None
             the candidated values include 'mean', 'amount_weighted', 'value_weighted'
         """
-        super().__init__(recorder=recorder, skip_existing=skip_existing, **kwargs)
+        super().__init__(recorder=recorder, skip_existing=skip_existing)
 
         if config is None:
             config = {  # Default config for daily trading

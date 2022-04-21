@@ -197,8 +197,8 @@ class RqdataCollector(BaseCollector):
             if pd.isna(v['listed_date']):
                 return False
             if pd.isna(v['de_listed_date']):
-                return v['listed_date']<=self.start_datetime or v['listed_date']<=self.end_datetime
-            return v['listed_date']<=self.start_datetime<=v['de_listed_date'] or v['listed_date']<=self.end_datetime<=v['de_listed_date']
+                return v['listed_date']<=self.end_datetime
+            return self.start_datetime<=v['de_listed_date'] and v['listed_date']<=self.end_datetime
 
         logger.info("get HS stock symbols......")
         symbol_dict = {x: self.meta_lib.read(x) for x in self.meta_lib.list_symbols()}
@@ -504,7 +504,7 @@ class Run(BaseRun):
         # self.download_data(max_collector_count=self.max_workers, start=trading_date, end=end_date)
         #
         # # normalize data
-        # self.normalize_data(qlib_data_1d_dir)
+        self.normalize_data(qlib_data_1d_dir)
 
         # dump bin
         _dump = DumpDataAll(

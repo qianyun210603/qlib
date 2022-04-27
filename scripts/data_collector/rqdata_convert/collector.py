@@ -36,6 +36,7 @@ from data_collector.utils import (
     get_hs_stock_symbols,
     generate_minutes_calendar_from_daily,
 )
+from qlib.data.inst_info import ConvertInstrumentInfo
 
 
 
@@ -79,6 +80,8 @@ class RqdataCollector(BaseCollector):
         self.arctic_store = Arctic("127.0.0.1")
         self.meta_lib = self.arctic_store.get_library("convert_meta")
         self.convert_price_lib = self.arctic_store.get_library("convert_convert_price")
+        self.convert_cf_lib = self.arctic_store.get_library("convert_cash_flow")
+        self.coupon_lib = self.arctic_store.get_library("convert_coupon")
 
         self.bar_lib = self.arctic_store.get_library('bar_data')
         self.ex_factor_lib = self.arctic_store.get_library("ex_factor")  # 复权因子
@@ -117,6 +120,21 @@ class RqdataCollector(BaseCollector):
         if dt.tzinfo is None:
             return dt.tz_localize(timezone)
         return dt.tz_convert(timezone)
+
+    def get_info(self, symbol):
+        meta = self.meta_lib.read(symbol)
+        coupon = self.coupon_lib.read(symbol)
+        cash_flow = self.convert_cf_lib.read(symbol)
+        coupon.index += pd.Timedelta(days=1)
+        if cash_flow.index.max() != coupon.index.max():
+            # if abs((cash_flow.index.max() - coupon.index.max()).days) < 3:
+            #     logger.warning(f"to check coupon/cf {symbol}, coupon: {coupon.index.max().isoformat()}, cf: {cash_flow.index.max().isoformat()}")
+            # else:
+            #     logger.info(f"{symbol} called @ {cash_flow.index.max().isoformat()}")
+            call_date = cash_flow.index.max()
+        else:
+            call_date = pd.Timestamp(year=2200, month=1, day=1)
+        return ConvertInstrumentInfo(cash_flow.cash_flow, coupon.coupon_rate, meta['maturity_date'], call_date=call_date)
 
     def get_data(
         self, symbol: str, interval: str, start_datetime: pd.Timestamp, end_datetime: pd.Timestamp
@@ -220,13 +238,14 @@ class RqdataCollector(BaseCollector):
         _begin = self.start_datetime.tz_localize(None)
         _end = self.end_datetime.tz_localize(None)
         interval = 'd' if self.interval.endswith('d') else '1m'
-        for _index_name, _index_code in {"csi300": "000300", "csi100": "000903", "csi500": "000905"}.items():
+        for _index_name, _index_code in {"csi300": "000300", "csi100": "000903", "csi500": "000905", 'csiconvert': "000832"}.items():
             logger.info(f"get bench data: {_index_name}({_index_code})......")
             try:
                 exch_str = 'SZSE' if _index_code.startswith('INDEX399') else 'SSE'
                 db_symbol = f'INDEX{_index_code}_{exch_str}_{interval}'
                 df = self.bar_lib.read(db_symbol, chunk_range=DateRange(_begin, _end)).set_index('date')
                 df[['ex_cum_factor', 'ex_factor', 'split_cum_factor']] = 1.0
+                df[['call_announced']] = 0
             except Exception as e:
                 logger.warning(f"get {_index_name} error: {e}")
                 continue
@@ -238,7 +257,7 @@ class RqdataCollector(BaseCollector):
             df.to_csv(_path)
             time.sleep(1)
 
-    def save_instrument(self, symbol, df: pd.DataFrame):
+    def save_instrument(self, symbol, df: pd.DataFrame, info: ConvertInstrumentInfo):
         """save instrument data to file
 
         Parameters
@@ -260,6 +279,27 @@ class RqdataCollector(BaseCollector):
             _old_df = pd.read_csv(instrument_path, index_col=['date'], parse_dates=['date'])
             df = pd.concat([_old_df[~_old_df.index.isin(df.index)], df], sort=True)
         df.to_csv(instrument_path)
+
+        info_path = self.save_dir.joinpath(f"{symbol}.pkl")
+        info.to_pickle(info_path)
+
+    def _simple_collector(self, symbol: str):
+        """
+
+        Parameters
+        ----------
+        symbol: str
+
+        """
+        self.sleep()
+        df = self.get_data(symbol, self.interval, self.start_datetime, self.end_datetime)
+        info = self.get_info(symbol)
+        _result = self.NORMAL_FLAG
+        if self.check_data_length > 0:
+            _result = self.cache_small_data(symbol, df)
+        if _result == self.NORMAL_FLAG:
+            self.save_instrument(symbol, df, info)
+        return _result
 
 
 class RqdataNormalize(BaseNormalize):
@@ -315,7 +355,7 @@ class RqdataNormalize(BaseNormalize):
             df["adjclosestock"] = df.closestock
             # adjust ohlc by split and dividends
             df[['openstock', 'highstock', 'lowstock', 'closestock']] = df[['openstock', 'highstock', 'lowstock', 'closestock']].multiply(df.ex_cum_factor_stock, axis=0)
-            df['factor'] = df.ex_cum_factor_stock
+            df['factorstock'] = df.ex_cum_factor_stock
 
         df.sort_index(inplace=True)
 
@@ -499,10 +539,10 @@ class Run(BaseRun):
             if self.max_workers is None or self.max_workers < 1
             else self.max_workers
         )
-        # # download data from Rqdata
-        # # NOTE: when downloading data from RqdataFinance, max_workers is recommended to be 1
-        # self.download_data(max_collector_count=self.max_workers, start=trading_date, end=end_date)
-        #
+        # download data from Rqdata
+        # NOTE: when downloading data from RqdataFinance, max_workers is recommended to be 1
+        self.download_data(max_collector_count=self.max_workers, start=trading_date, end=end_date)
+
         # # normalize data
         self.normalize_data(qlib_data_1d_dir)
 
@@ -525,12 +565,12 @@ class Run(BaseRun):
 
 
 if __name__ == "__main__":
-    # fire.Fire(Run)
-    runner = Run(
-        source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert\source",
-        normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert\normalize",
-        max_workers=2
-    )
-    # runner.download_data(max_collector_count=1, start=pd.Timestamp("2010-01-01"), end=pd.Timestamp("2021-12-31"))
-    # runner.normalize_data()
-    runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert", trading_date='2010-01-01', end_date="2021-12-31")
+    fire.Fire(Run)
+    # runner = Run(
+    #     source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert\source",
+    #     normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert\normalize",
+    #     max_workers=2
+    # )
+    # # runner.download_data(max_collector_count=1, start=pd.Timestamp("2010-01-01"), end=pd.Timestamp("2022-03-31"))
+    # # runner.normalize_data()
+    # runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert", trading_date='2010-01-01', end_date="2022-04-23")

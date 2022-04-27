@@ -118,8 +118,8 @@ class Exchange:
         self.end_time = end_time
 
         self.trade_unit = kwargs.pop("trade_unit", C.trade_unit)
-        if len(kwargs) > 0:
-            raise ValueError(f"Get Unexpected arguments {kwargs}")
+        # if len(kwargs) > 0:
+        #     raise ValueError(f"Get Unexpected arguments {kwargs}")
 
         if limit_threshold is None:
             limit_threshold = C.limit_threshold
@@ -182,6 +182,16 @@ class Exchange:
         self.quote_cls = quote_cls
         self.quote: BaseQuote = self.quote_cls(self.quote_df, freq)
 
+        self.instrument_info = {}
+        instrument_info_path = kwargs.pop("instrument_info_path", "")
+        if instrument_info_path != "":
+            from pathlib import Path
+            import pickle
+            instrument_info_path = Path(instrument_info_path)
+            self.instrument_info.update({
+                p.stem.upper(): pickle.load(open(p, 'rb')) for p in instrument_info_path.glob('*.pkl')
+            })
+
     def get_quote_from_qlib(self):
         # get stock data from qlib
         if len(self.codes) == 0:
@@ -237,6 +247,9 @@ class Exchange:
     LT_TP_EXP = "(exp)"  # Tuple[str, str]
     LT_FLT = "float"  # float
     LT_NONE = "none"  # none
+
+    def get_instrument_info(self, symbol: str):
+        return self.instrument_info.get(symbol, None)
 
     def _get_limit_type(self, limit_threshold):
         """get limit type"""
@@ -632,7 +645,7 @@ class Exchange:
         factor : float, adjusted factor
         return : float, real amount
         """
-        if not self.trade_w_adj_price and self.trade_unit is not None:
+        if self.trade_unit is not None:
             # the minimal amount is 1. Add 0.1 for solving precision problem.
             factor = self._get_factor_or_raise_error(
                 factor=factor, stock_id=stock_id, start_time=start_time, end_time=end_time

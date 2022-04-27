@@ -2,11 +2,11 @@
 # Licensed under the MIT License.
 from __future__ import annotations
 import copy
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, cast
 from qlib.utils import init_instance_by_config
 import pandas as pd
 
-from .position import BasePosition
+from .position import BasePosition, Position
 from .report import PortfolioMetrics, Indicator
 from .decision import BaseTradeDecision, Order
 from .exchange import Exchange
@@ -220,10 +220,14 @@ class Account:
             stock_list = self.current_position.get_stock_list()
             for code in stock_list:
                 # if suspend, no new price to be updated, profit is 0
-                if trade_exchange.check_stock_suspended(code, trade_start_time, trade_end_time):
-                    continue
-                bar_close = trade_exchange.get_close(code, trade_start_time, trade_end_time)
-                self.current_position.update_stock_price(stock_id=code, price=bar_close)
+                if not trade_exchange.check_stock_suspended(code, trade_start_time, trade_end_time):
+                    bar_close = trade_exchange.get_close(code, trade_start_time, trade_end_time)
+                    self.current_position.update_stock_price(stock_id=code, price=bar_close)
+                inst_info = trade_exchange.get_instrument_info(code)
+                if inst_info:
+                    cast(Position, self.current_position).update_event(
+                        code, inst_info, trade_start_time.replace(hour=0, minute=0, second=0, microsecond=0)
+                    )
             # update holding day count
             # NOTE: updating bar_count does not only serve portfolio metrics, it also serve the strategy
             self.current_position.add_count_all(bar=self.freq)

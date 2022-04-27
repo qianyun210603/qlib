@@ -10,6 +10,7 @@ import numpy as np
 
 from .decision import Order
 from ..data.data import D
+from ..data.inst_info import ConvertInstrumentInfo
 
 
 class BasePosition:
@@ -378,6 +379,17 @@ class Position(BasePosition):
 
     def check_stock(self, stock_id):
         return stock_id in self.position
+
+    def update_event(self, stock_id, inst_info, date):
+        if isinstance(inst_info, ConvertInstrumentInfo):
+            if date in inst_info.cash_flow_schedule:
+                new_cash = self.position[stock_id]['amount'] * inst_info.cash_flow_schedule[date]
+                self.position['cash'] += new_cash
+                print(f"coupon or coupon+repayment for {stock_id}: {inst_info.cash_flow_schedule[date]}*{self.position[stock_id]['amount']}={new_cash} @ {date.isoformat()}")
+
+            if date >= min(inst_info.maturity_date, inst_info.call_date):
+                self._del_stock(stock_id)
+                print(f"{stock_id}: matured/called @ {date.isoformat()}")
 
     def update_order(self, order, trade_val, cost, trade_price):
         # handle order, order is a order class, defined in exchange.py

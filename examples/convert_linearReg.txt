@@ -1,0 +1,157 @@
+7 factors
+fit to 2018 array([-0.02930256,  0.00087573, -0.00881939, -0.0266306 ,  0.00321226, 0.00803521, -0.00961327], dtype=float32)
+fit to 2019 array([-0.01638673,  0.00652465, -0.02010559,  0.00635915, -0.00127895,0.00809591, -0.00721922], dtype=float32)
+fit to 2020 array([-0.02837729,  0.01079738, -0.01939985,  0.00725532,  0.00443303, 0.00438352, -0.01882578], dtype=float32)
+
+combine ivhv
+fit to 2018 array([-0.00885435, -0.01008071, -0.00179521,  0.00187176,  0.00953208, 0.0035584 ], dtype=float32)
+fit to 2019 array([-0.01042172, -0.01873483,  0.0171279 , -0.00148528,  0.00789837, -0.00089014], dtype=float32)
+fit to 2020 array([-0.02042361, -0.01652319,  0.02243382,  0.0041621 ,  0.00351811, -0.00936638], dtype=float32)
+
+hv only
+fit to 2018 array([ 0.00116064, -0.00785832,  0.00457427,  0.0013719 ,  0.00805859, 0.00797648], dtype=float32)
+fit to 2019 array([ 0.00652913, -0.01787444,  0.02421912, -0.00213335,  0.00745729, 0.00355022], dtype=float32)
+fit to 2020 array([ 0.01127377, -0.01319262,  0.03843434,  0.00544625,  0.00294851,0.0003581 ], dtype=float32)
+
+
+convert premium & pure bond yield
+fit to 2018 array([0.00250659, 0.01438163], dtype=float32)
+'The following are analysis results of benchmark return(1day).'
+                       risk
+mean               0.000633
+std                0.006725
+annualized_return  0.150540
+information_ratio  1.451024
+max_drawdown      -0.107447
+'The following are analysis results of the excess return without cost(1day).'
+                       risk
+mean               0.000325
+std                0.005325
+annualized_return  0.077333
+information_ratio  0.941303
+max_drawdown      -0.132244
+'The following are analysis results of the excess return with cost(1day).'
+                       risk
+mean               0.000298
+std                0.005325
+annualized_return  0.071037
+information_ratio  0.864698
+max_drawdown      -0.136624
+fit to 2019 array([0.02173153, 0.01669155], dtype=float32)
+'The following are analysis results of benchmark return(1day).'
+                       risk
+mean               0.000476
+std                0.006611
+annualized_return  0.113348
+information_ratio  1.111400
+max_drawdown      -0.083718
+'The following are analysis results of the excess return without cost(1day).'
+                       risk
+mean               0.001141
+std                0.007294
+annualized_return  0.271609
+information_ratio  2.413630
+max_drawdown      -0.154295
+'The following are analysis results of the excess return with cost(1day).'
+                       risk
+mean               0.001101
+std                0.007295
+annualized_return  0.262108
+information_ratio  2.328993
+max_drawdown      -0.156600
+
+fit to 2020 array([0.03278318, 0.01014023], dtype=float32)
+'The following are analysis results of benchmark return(1day).'
+                       risk
+mean               0.000714
+std                0.005631
+annualized_return  0.169916
+information_ratio  1.955809
+max_drawdown      -0.061281
+'The following are analysis results of the excess return without cost(1day).'
+                       risk
+mean              -0.000135
+std                0.011269
+annualized_return -0.032086
+information_ratio -0.184568
+max_drawdown      -0.299974
+'The following are analysis results of the excess return with cost(1day).'
+                       risk
+mean              -0.000183
+std                0.011268
+annualized_return -0.043580
+information_ratio -0.250691
+max_drawdown      -0.303639
+
+
+rolling
+17-20£º21
+array([0.0351014 , 0.01089114], dtype=float32)
+'The following are analysis results of benchmark return(1day).'
+                       risk
+mean               0.000714
+std                0.005631
+annualized_return  0.169916
+information_ratio  1.955809
+max_drawdown      -0.061281
+'The following are analysis results of the excess return without cost(1day).'
+                       risk
+mean              -0.000027
+std                0.011330
+annualized_return -0.006413
+information_ratio -0.036686
+max_drawdown      -0.278137
+'The following are analysis results of the excess return with cost(1day).'
+                       risk
+mean              -0.000074
+std                0.011331
+annualized_return -0.017683
+information_ratio -0.101164
+max_drawdown      -0.281718
+
+16-19£º20
+                       risk
+mean               0.000239
+std                0.007467
+annualized_return  0.056781
+information_ratio  0.492891
+max_drawdown      -0.083718
+'The following are analysis results of the excess return without cost(1day).'
+                       risk
+mean               0.000960
+std                0.008523
+annualized_return  0.228587
+information_ratio  1.738505
+max_drawdown      -0.106171
+'The following are analysis results of the excess return with cost(1day).'
+                       risk
+mean               0.000917
+std                0.008524
+annualized_return  0.218151
+information_ratio  1.658977
+max_drawdown      -0.107103
+
+
+15-18£º19
+array([0.00250659, 0.01438163], dtype=float32)
+'The following are analysis results of benchmark return(1day).'
+                       risk
+mean               0.000944
+std                0.006950
+annualized_return  0.224617
+information_ratio  2.094953
+max_drawdown      -0.107447
+'The following are analysis results of the excess return without cost(1day).'
+                       risk
+mean              -0.000160
+std                0.004541
+annualized_return -0.037998
+information_ratio -0.542419
+max_drawdown      -0.062527
+'The following are analysis results of the excess return with cost(1day).'
+                       risk
+mean              -0.000182
+std                0.004540
+annualized_return -0.043389
+information_ratio -0.619500
+max_drawdown      -0.065160

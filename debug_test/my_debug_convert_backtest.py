@@ -52,7 +52,7 @@ def _generate_dataset():
 
 
 if __name__ == '__main__':
-    provider_uri = r"D:\Documents\TradeResearch\qlib_test\rqdata_convert"
+    provider_uri = r"D:\Documents\TradeResearch\qlib_test\rqdata_convert.bak"
     if exists_qlib_data(provider_uri):
         qlib.init(provider_uri=provider_uri, region=REG_CN)
     else:
@@ -73,19 +73,20 @@ if __name__ == '__main__':
                 },
             },
             "strategy": {
-                "class": "TopkDropoutStrategy",
+                "class": "TopkKeepnDropoutStrategy",
                 "module_path": "qlib.contrib.strategy.signal_strategy",
                 "kwargs": {
                     "model": model,
                     "dataset": dataset,
                     "topk": 20,
+                    "keepn": 40,
                     "n_drop": 5,
                 },
             },
             "backtest": {
                 "start_time": "2018-01-01",
                 "end_time": "2021-12-31",
-                "account": 100000000,
+                "account": 1000000,
                 "benchmark": "SH000300",
                 "exchange_kwargs": {
                     "freq": "day",
@@ -94,6 +95,8 @@ if __name__ == '__main__':
                     "open_cost": 0.00015,
                     "close_cost": 0.00015,
                     "min_cost": 0.1,
+                    "trade_unit": 10,
+                    "instrument_info_path": r"D:\Documents\TradeResearch\qlib_test\rqdata_convert\contract_specs"
                 },
             },
         }

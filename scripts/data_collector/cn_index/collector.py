@@ -4,7 +4,6 @@
 import re
 import abc
 import sys
-import importlib
 import time
 from io import BytesIO
 from typing import List, Iterable
@@ -16,7 +15,6 @@ import requests
 import pandas as pd
 import baostock as bs
 from tqdm import tqdm
-from datetime import datetime
 from loguru import logger
 
 CUR_DIR = Path(__file__).resolve().parent
@@ -24,6 +22,7 @@ sys.path.append(str(CUR_DIR.parent.parent))
 
 from data_collector.index import IndexBase
 from data_collector.utils import get_calendar_list, get_trading_date_by_shift, deco_retry
+from data_collector.utils import get_instruments
 
 
 NEW_COMPANIES_URL = "https://csi-web-dev.oss-cn-shanghai-finance-1-pub.aliyuncs.com/static/html/csindex/public/uploads/file/autofile/cons/{index_code}cons.xls"
@@ -92,7 +91,6 @@ class CSIIndex(IndexBase):
         raise NotImplementedError("rewrite index_code")
 
     @property
-    @abc.abstractmethod
     def html_table_index(self) -> int:
         """Which table of changes in html
 
@@ -100,7 +98,7 @@ class CSIIndex(IndexBase):
         CSI100: 1
         :return:
         """
-        raise NotImplementedError()
+        raise NotImplementedError("rewrite html_table_index")
 
     def format_datetime(self, inst_df: pd.DataFrame) -> pd.DataFrame:
         """formatting the datetime in an instrument
@@ -166,7 +164,7 @@ class CSIIndex(IndexBase):
         if isinstance(symbol, float) and np.isnan(symbol):
             return str(symbol)
         symbol = f"{int(symbol):06}"
-        return f"SH{symbol}" if symbol.startswith("60") else f"SZ{symbol}"
+        return f"SH{symbol}" if symbol.startswith("60") or symbol.startswith("688") else f"SZ{symbol}"
 
     def _parse_excel(self, excel_url: str, add_date: pd.Timestamp, remove_date: pd.Timestamp) -> pd.DataFrame:
         content = retry_request(excel_url, exclude_status=[404]).content
@@ -192,7 +190,7 @@ class CSIIndex(IndexBase):
         df = pd.DataFrame()
         _tmp_count = 0
         for _df in pd.read_html(content):
-            if _df.shape[-1] != 4:
+            if _df.shape[-1] != 4 or _df.isnull().loc(0)[0][0]:
                 continue
             _tmp_count += 1
             if self.html_table_index + 1 > _tmp_count:
@@ -220,6 +218,12 @@ class CSIIndex(IndexBase):
 
     def _read_change_from_url(self, url: str) -> pd.DataFrame:
         """read change from url
+        The parameter url is from the _get_change_notices_url method.
+        Determine the stock add_date/remove_date based on the title.
+        The response contains three cases:
+            1.Only excel_url(extract data from excel_url)
+            2.Both the excel_url and the body text(try to extract data from excel_url first, and then try to extract data from body text)
+            3.Only body text(extract data from body text)
 
         Parameters
         ----------
@@ -267,14 +271,18 @@ class CSIIndex(IndexBase):
                     excel_url = excel_url if excel_url.startswith("/") else "/" + excel_url
                     excel_url = f"https://www.csindex.com.cn/file{excel_url}"
         if excel_url:
-            logger.info(f"get {add_date} changes from excel, title={title}, excel_url={excel_url}")
             try:
+                logger.info(f"get {add_date} changes from the excel, title={title}, excel_url={excel_url}")
                 df = self._parse_excel(excel_url, add_date, remove_date)
             except ValueError:
-                logger.warning(f"error downloading file: {excel_url}, will parse the table from the content")
+                logger.info(
+                    f"get {add_date} changes from the web page, title={title}, url=https://www.csindex.com.cn/#/about/newsDetail?id={url.split('id=')[-1]}"
+                )
                 df = self._parse_table(_text, add_date, remove_date)
         else:
-            logger.info(f"get {add_date} changes from url content, title={title}")
+            logger.info(
+                f"get {add_date} changes from the web page, title={title}, url=https://www.csindex.com.cn/#/about/newsDetail?id={url.split('id=')[-1]}"
+            )
             df = self._parse_table(_text, add_date, remove_date)
         return df
 
@@ -324,7 +332,7 @@ class CSIIndex(IndexBase):
         return df
 
 
-class CSI300(CSIIndex):
+class CSI300Index(CSIIndex):
     @property
     def index_code(self):
         return "000300"
@@ -334,11 +342,11 @@ class CSI300(CSIIndex):
         return pd.Timestamp("2005-01-01")
 
     @property
-    def html_table_index(self):
-        return 1
+    def html_table_index(self) -> int:
+        return 0
 
 
-class CSI100(CSIIndex):
+class CSI100Index(CSIIndex):
     @property
     def index_code(self):
         return "000903"
@@ -348,11 +356,11 @@ class CSI100(CSIIndex):
         return pd.Timestamp("2006-05-29")
 
     @property
-    def html_table_index(self):
-        return 2
+    def html_table_index(self) -> int:
+        return 1
 
 
-class CSI500(CSIIndex):
+class CSI500Index(CSIIndex):
     @property
     def index_code(self) -> str:
         return "000905"
@@ -360,10 +368,6 @@ class CSI500(CSIIndex):
     @property
     def bench_start_date(self) -> pd.Timestamp:
         return pd.Timestamp("2007-01-15")
-
-    @property
-    def html_table_index(self) -> int:
-        return 0
 
     def get_changes(self) -> pd.DataFrame:
         """get companies changes
@@ -468,47 +472,5 @@ class CSI500(CSIIndex):
         return df
 
 
-def get_instruments(
-    qlib_dir: str,
-    index_name: str,
-    method: str = "parse_instruments",
-    freq: str = "day",
-    request_retry: int = 5,
-    retry_sleep: int = 3,
-):
-    """
-
-    Parameters
-    ----------
-    qlib_dir: str
-        qlib data dir, default "Path(__file__).parent/qlib_data"
-    index_name: str
-        index name, value from ["csi100", "csi300"]
-    method: str
-        method, value from ["parse_instruments", "save_new_companies"]
-    freq: str
-        freq, value from ["day", "1min"]
-    request_retry: int
-        request retry, by default 5
-    retry_sleep: int
-        request sleep, by default 3
-
-    Examples
-    -------
-        # parse instruments
-        $ python collector.py --index_name CSI300 --qlib_dir ~/.qlib/qlib_data/cn_data --method parse_instruments
-
-        # parse new companies
-        $ python collector.py --index_name CSI300 --qlib_dir ~/.qlib/qlib_data/cn_data --method save_new_companies
-
-    """
-    _cur_module = importlib.import_module("data_collector.cn_index.collector")
-    obj = getattr(_cur_module, f"{index_name.upper()}")(
-        qlib_dir=qlib_dir, index_name=index_name, freq=freq, request_retry=request_retry, retry_sleep=retry_sleep
-    )
-    getattr(obj, method)()
-
-
 if __name__ == "__main__":
-    #fire.Fire(get_instruments)
-    get_instruments("D:\Documents\TradeResearch\qlib_test\data", index_name='CSI300')
+    fire.Fire(get_instruments)

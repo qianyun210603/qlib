@@ -253,15 +253,15 @@ class TopkDropoutStrategy(BaseTopkStrategy):
 
         current_stock_list = self.trade_position.get_stock_list()
 
-        last = pred_score.reindex(current_stock_list).sort_values(ascending=False).index
+        last = pred_score[pred_score.index.isin(current_stock_list)].sort_values(ascending=False, kind='stable').index
         # The new stocks today want to buy **at most**
         if self.method_buy == "top":
             today = get_first_n(
-                pred_score[~pred_score.index.isin(last)].sort_values(ascending=False).index,
+                pred_score[~pred_score.index.isin(last)].sort_values(ascending=False, kind='stable').index,
                 self.n_drop + self.topk - len(last),
             )
         elif self.method_buy == "random":
-            topk_candi = get_first_n(pred_score.sort_values(ascending=False).index, self.topk)
+            topk_candi = get_first_n(pred_score.sort_values(ascending=False, kind='stable').index, self.topk)
             candi = list(filter(lambda x: x not in last, topk_candi))
             n = self.n_drop + self.topk - len(last)
             try:
@@ -272,7 +272,7 @@ class TopkDropoutStrategy(BaseTopkStrategy):
             raise NotImplementedError(f"This type of input is not supported")
         # combine(new stocks + last stocks),  we will drop stocks from this list
         # In case of dropping higher score stock and buying lower score stock.
-        comb = pred_score.reindex(last.union(pd.Index(today))).sort_values(ascending=False).index
+        comb = pred_score.reindex(last.append(pd.Index(today))).sort_values(ascending=False, kind='stable').index
 
         # Get the stock list we really want to sell (After filtering the case that we sell high and buy low)
         if self.method_sell == "bottom":
@@ -332,7 +332,7 @@ class TopkKeepnDropoutStrategy(BaseTopkStrategy):
     def _generate_buy_sell_list(self, pred_score, trade_start_time, trade_end_time):
         current_stock_list = self.trade_position.get_stock_list()
 
-        pred_df = pred_score.sort_values(ascending=False).to_frame()
+        pred_df = pred_score.sort_values(ascending=False, kind='stable').to_frame()
         pred_df['current_hold'] = pred_df.index.isin(current_stock_list)
         pred_df['cum_current_hold'] = pred_df['current_hold'].cumsum()
         pred_df['tradable'] = pred_df.apply(
@@ -354,32 +354,39 @@ class TopkKeepnDropoutStrategy(BaseTopkStrategy):
 class TopkDropout4ConvertStrategy(TopkDropoutStrategy):
 
     def _generate_buy_sell_list(self, pred_score: pd.Series, trade_start_time, trade_end_time):
-        pred_df = pred_score.sort_values(ascending=False).to_frame()
-        pred_df['current_hold'] = pred_df.index.isin(current_stock_list)
-        # pred_df['call_annouced'] = pred_df.apply(
-        #     lambda x: self.trade_exchange.quote.get_data(x.name, trade_start_time, trade_end_time, "call_announced"),
-        #     axis=1)
-        pred_df['call_announced'] = False
+        current_stock_list = self.trade_position.get_stock_list()
 
-        pred_df['tradable'] = pred_df.apply(lambda x: self.trade_exchange.is_stock_tradable(x.name, trade_start_time, trade_end_time), axis=1) if self.only_tradable else True
+        pred_df = pred_score.to_frame(name='score')
+        pred_df['current_hold'] = pred_df.index.isin(current_stock_list)
+
+        pred_df['call_announced'] = pred_df.apply(
+            lambda x: self.trade_exchange.quote.get_data(x.name, trade_start_time, trade_end_time, field="$call_announced", method='ts_data_last'),
+            axis=1).fillna(0) > 0.5
+        # pred_df['call_announced'] = False
+
+        pred_df['tradestatusflag'] = pred_df.apply(
+            lambda x: 0 if self.trade_exchange.is_stock_tradable(x.name, trade_start_time, trade_end_time)
+            else 1 if x.current_hold else -1, axis=1
+        ) if self.only_tradable else 0
+        pred_df.sort_values(by=['tradestatusflag', 'score', 'current_hold'], ascending=False, inplace=True, kind='stable')
 
         # sell all sellable holdings which annouced force redemption
-        sell = pred_df[pred_df.current_hold & pred_df.tradable & pred_df.call_announced].index.tolist()
+        sell = pred_df[pred_df.current_hold & (pred_df.tradestatusflag==0) & pred_df.call_announced].index.tolist()
 
         # drop items annouced force redemption
         pred_df = pred_df[~pred_df.call_announced]
 
-        pred_df['rank'] = list(range(len(pred_df)))
+        pred_df['rank'] = (pred_df['current_hold'] | (0==pred_df['tradestatusflag'])).cumsum()
         pred_df['cum_current_hold'] = pred_df['current_hold'].cumsum()
         # sell only contains called ones now
         additional_n_drop = max(0, self.n_drop - len(sell))
 
-        pred_df['keep'] = pred_df['current_hold'] & ((pred_df['rank'] < self.topk) | (pred_df['cum_current_hold'] <= self.topk - additional_n_drop) | (~pred_df['tradable']))
+        pred_df['keep'] = pred_df['current_hold'] & ((pred_df['rank'] <= self.topk) | (pred_df['cum_current_hold'] <= len(current_stock_list) - additional_n_drop))
 
         num_keep = pred_df.keep.sum()
 
-        sell.extend(pred_df[(~pred_df.keep) & pred_df.current_hold].index.tolist())
-        buy = pred_df[~pred_df.current_hold & pred_df.tradable].iloc[:self.topk-num_keep].index.tolist()
+        sell.extend(pred_df[~pred_df.keep & (pred_df.tradestatusflag==0) & pred_df.current_hold].index.tolist())
+        buy = pred_df[~pred_df.current_hold & (pred_df.tradestatusflag==0)].iloc[:self.topk-num_keep].index.tolist()
 
         return buy, sell
 

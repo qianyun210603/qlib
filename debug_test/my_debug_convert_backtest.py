@@ -1,6 +1,6 @@
 import qlib
 from qlib.constant import REG_CN
-from qlib.utils import exists_qlib_data, init_instance_by_config
+from qlib.utils import exists_qlib_data
 from qlib.workflow import R
 from functools import lru_cache
 from qlib.workflow.record_temp import SignalRecord, PortAnaRecord
@@ -8,51 +8,55 @@ from qlib.data.dataset import DatasetH
 from qlib.data.dataset.handler import DataHandlerLP
 from qlib.contrib.data.handler import check_transform_proc
 
+segments = {
+    "train": ("2017-01-01", "2020-01-01"),
+    "test": ("2020-01-01", "2020-07-01"),
+}
 
 @lru_cache
 def _generate_dataset():
-    fit_start_time = "2010-01-01"
-    fit_end_time = "2015-12-31"
-    learn_processors = check_transform_proc([
-        {"class": "DropnaLabel"},
-        {"class": "CSZScoreNorm", "kwargs": {"fields_group": "label"}},
-    ], fit_start_time, fit_end_time)
+
+    features = ['($adjclosestock * 100 / $conversionprice) / $close - 1', '$pure_bond_ytm']
+    feature_labels = ["convertion_premium", 'pure_bond_ytm']
+
+    assert len(feature_labels) == len(features), "'features' and its labels must have same length"
+
     data_loader = {
         "class": "QlibDataLoader",
         "kwargs": {
             "config": {
-                "feature": (['$open', '$high', '$low', '$close', '$hv20', '$hv60', '$iv', '$closestock',
-                             '$conversion_price_reset_status', '$remaining_size', '$pure_bond_ytm', '$turnover_rate',
-                             '$call_announced', '$call_satisfied'],
-                            ['open', 'high', 'low', 'close', 'hv20', 'hv60', 'iv', 'closestock',
-                             'CPRS', 'remaining_size', 'pure_bond_ytm', 'turnover_rate',
-                             'call_announced', 'call_satisfied']),
+                "feature": (features, feature_labels),
                 "label": (["Ref($close, -2)/Ref($close, -1) - 1"], ["LABEL0"]),
             },
         },
     }
+    infer_processors = check_transform_proc([
+        {"class": 'RobustZScoreNorm', "kwargs": {"fields_group": "feature", 'clip_outlier': True}},
+        {"class": 'Fillna', "kwargs": {"fields_group": "feature"}}
+    ], segments["train"][0], segments["train"][1])
+    learn_processors = check_transform_proc([
+        {"class": "DropnaLabel"},
+        {"class": "CSZScoreNorm", "kwargs": {"fields_group": "label"}},
+    ], segments["train"][0], segments["train"][1])
+    process_type = DataHandlerLP.PTYPE_A
 
     h = DataHandlerLP(
         instruments='all',
-        start_time="2010-01-01",
-        end_time="2021-12-31",
+        start_time=segments["train"][0],
+        end_time=segments["test"][1],
         data_loader=data_loader,
-        infer_processors=[],
+        infer_processors=infer_processors,
         learn_processors=learn_processors,
-        process_type=DataHandlerLP.PTYPE_A,
+        process_type=process_type,
     )
     dataset = DatasetH(
-        handler=h, segments={
-            "train": ("2010-01-01", "2015-12-31"),
-            "valid": ("2016-01-01", "2017-12-31"),
-            "test": ("2018-01-01", "2021-12-31"),
-        }
+        handler=h, segments=segments
     )
     return dataset
 
 
 if __name__ == '__main__':
-    provider_uri = r"D:\Documents\TradeResearch\qlib_test\rqdata_convert.bak"
+    provider_uri = r"D:\Documents\TradeResearch\qlib_test\rqdata_convert"
     if exists_qlib_data(provider_uri):
         qlib.init(provider_uri=provider_uri, region=REG_CN)
     else:
@@ -61,7 +65,7 @@ if __name__ == '__main__':
     dataset = _generate_dataset()
 
     with R.start(experiment_name="backtest_analysis", uri='file:D:\\Documents\\TradeResearch\\qlib\\examples\\mlruns'):
-        model_recorder = R.get_recorder(experiment_name="train_model", recorder_id='169d854168214dd6a333180d7c49de9c')
+        model_recorder = R.get_recorder(experiment_name="train_model", recorder_id='a0154477e767421e8fcc54c469639ab1')
         model = model_recorder.load_object("trained_model")
         port_analysis_config = {
             "executor": {
@@ -73,25 +77,26 @@ if __name__ == '__main__':
                 },
             },
             "strategy": {
-                "class": "TopkKeepnDropoutStrategy",
+                "class": "TopkDropout4ConvertStrategy", #4Convert
                 "module_path": "qlib.contrib.strategy.signal_strategy",
                 "kwargs": {
                     "model": model,
                     "dataset": dataset,
                     "topk": 20,
-                    "keepn": 40,
                     "n_drop": 5,
+                    #"only_tradable": True
                 },
             },
             "backtest": {
-                "start_time": "2018-01-01",
-                "end_time": "2021-12-31",
-                "account": 1000000,
-                "benchmark": "SH000300",
+                "start_time": segments["test"][0],
+                "end_time": segments["test"][1],
+                "account": 100000000,
+                "benchmark": "SH000832",
                 "exchange_kwargs": {
                     "freq": "day",
                     "limit_threshold": 0.095,
                     "deal_price": "close",
+                    "subscribe_fields": ["$call_announced"],
                     "open_cost": 0.00015,
                     "close_cost": 0.00015,
                     "min_cost": 0.1,

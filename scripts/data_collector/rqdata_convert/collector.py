@@ -28,6 +28,8 @@ from qlib.constant import REG_CN as REGION_CN
 CUR_DIR = Path(__file__).resolve().parent
 sys.path.append(str(CUR_DIR.parent.parent))
 
+INDEXES = {"csi300": "000300", "csi100": "000903", "csi500": "000905", 'csiconvert': "000832"}
+
 from dump_bin import DumpDataUpdate, DumpDataAll
 from data_collector.base import BaseCollector, BaseNormalize, BaseRun, Normalize
 from data_collector.utils import (
@@ -190,8 +192,8 @@ class RqdataCollector(BaseCollector):
         indicator = self.indicator_lib.read(
             symbol, chunk_range=DateRange(start_datetime.tz_localize(None), end_datetime.tz_localize(None))
         )
-        indicator['call_announced'] = indicator.call_status.apply(lambda x: 1.0 if x == 3 else 0)
-        indicator['call_satisfied'] = indicator.call_status.apply(lambda x: 1.0 if x >= 2 else 0)
+        indicator['call_announced'] = indicator.call_status.apply(lambda x: 1.0 if x == 3 else 0).ffill()
+        indicator['call_satisfied'] = indicator.call_status.apply(lambda x: 1.0 if x >= 2 else 0).ffill()
         _resulta = pd.concat(
             [derived, indicator[['call_announced', 'call_satisfied', 'remaining_size', 'turnover_rate',
                                  'convertible_market_cap_ratio', 'conversion_price_reset_status']]],
@@ -238,7 +240,7 @@ class RqdataCollector(BaseCollector):
         _begin = self.start_datetime.tz_localize(None)
         _end = self.end_datetime.tz_localize(None)
         interval = 'd' if self.interval.endswith('d') else '1m'
-        for _index_name, _index_code in {"csi300": "000300", "csi100": "000903", "csi500": "000905", 'csiconvert': "000832"}.items():
+        for _index_name, _index_code in INDEXES.items():
             logger.info(f"get bench data: {_index_name}({_index_code})......")
             try:
                 exch_str = 'SZSE' if _index_code.startswith('INDEX399') else 'SSE'
@@ -533,21 +535,21 @@ class Run(BaseRun):
             # noinspection PyTypeChecker
             end_date = (pd.Timestamp(trading_date) + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
 
-        # NOTE: a larger max_workers setting here would be faster
-        self.max_workers = (
-            max(multiprocessing.cpu_count() - 2, 1)
-            if self.max_workers is None or self.max_workers < 1
-            else self.max_workers
-        )
-        # download data from Rqdata
-        # NOTE: when downloading data from RqdataFinance, max_workers is recommended to be 1
-        self.download_data(max_collector_count=self.max_workers, start=trading_date, end=end_date)
-
-        # # normalize data
-        self.normalize_data(qlib_data_1d_dir)
+        # # NOTE: a larger max_workers setting here would be faster
+        # self.max_workers = (
+        #     max(multiprocessing.cpu_count() - 2, 1)
+        #     if self.max_workers is None or self.max_workers < 1
+        #     else self.max_workers
+        # )
+        # # download data from Rqdata
+        # # NOTE: when downloading data from RqdataFinance, max_workers is recommended to be 1
+        # self.download_data(max_collector_count=self.max_workers, start=trading_date, end=end_date)
+        #
+        # # # normalize data
+        # self.normalize_data(qlib_data_1d_dir)
 
         # dump bin
-        _dump = DumpDataAll(
+        _dump = DumpDataUpdate(
             csv_path=self.normalize_dir,
             qlib_dir=qlib_data_1d_dir,
             exclude_fields="symbol,date",
@@ -565,12 +567,12 @@ class Run(BaseRun):
 
 
 if __name__ == "__main__":
-    fire.Fire(Run)
-    # runner = Run(
-    #     source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert\source",
-    #     normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert\normalize",
-    #     max_workers=2
-    # )
-    # # runner.download_data(max_collector_count=1, start=pd.Timestamp("2010-01-01"), end=pd.Timestamp("2022-03-31"))
-    # # runner.normalize_data()
-    # runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert", trading_date='2010-01-01', end_date="2022-04-23")
+    #fire.Fire(Run)
+    runner = Run(
+        source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert\source",
+        normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert\normalize",
+        max_workers=1
+    )
+    # runner.download_data(max_collector_count=1, start=pd.Timestamp("2010-01-01"), end=pd.Timestamp("2022-03-31"))
+    # runner.normalize_data()
+    runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert", trading_date='2010-01-01', end_date="2022-05-01")

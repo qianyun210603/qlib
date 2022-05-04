@@ -4,13 +4,12 @@
 import re
 import abc
 import sys
-import time
+import datetime
 from io import BytesIO
 from typing import List, Iterable
 from pathlib import Path
 
 import fire
-import numpy as np
 import requests
 import pandas as pd
 import baostock as bs
@@ -139,7 +138,6 @@ class CSIIndex(IndexBase):
         res = []
         for _url in self._get_change_notices_url():
             _df = self._read_change_from_url(_url)
-            time.sleep(1.0)
             if not _df.empty:
                 res.append(_df)
         logger.info("get companies changes finish")
@@ -158,11 +156,6 @@ class CSIIndex(IndexBase):
         -------
             symbol
         """
-        if isinstance(symbol, (str, bytes)):
-            if symbol.endswith('.HK'):
-                return symbol
-        if isinstance(symbol, float) and np.isnan(symbol):
-            return str(symbol)
         symbol = f"{int(symbol):06}"
         return f"SH{symbol}" if symbol.startswith("60") or symbol.startswith("688") else f"SZ{symbol}"
 
@@ -269,7 +262,7 @@ class CSIIndex(IndexBase):
                 excel_url = excel_url_list[0]
                 if not excel_url.startswith("http"):
                     excel_url = excel_url if excel_url.startswith("/") else "/" + excel_url
-                    excel_url = f"https://www.csindex.com.cn/file{excel_url}"
+                    excel_url = f"http://www.csindex.com.cn{excel_url}"
         if excel_url:
             try:
                 logger.info(f"get {add_date} changes from the excel, title={title}, excel_url={excel_url}")
@@ -401,7 +394,7 @@ class CSI500Index(CSIIndex):
                 type: str, value from ["add", "remove"]
         """
         bs.login()
-        today = pd.Timestamp.now()
+        today = pd.datetime.now()
         date_range = pd.DataFrame(pd.date_range(start="2007-01-15", end=today, freq="7D"))[0].dt.date
         ret_list = []
         col = ["date", "symbol", "code_name"]
@@ -435,7 +428,7 @@ class CSI500Index(CSIIndex):
                 code_name: str
         """
         col = ["date", "symbol", "code_name"]
-        rs = bs.query_zz500_stocks(date=date.strftime("%Y-%m-%d"))
+        rs = bs.query_zz500_stocks(date=str(date))
         zz500_stocks = []
         while (rs.error_code == "0") & rs.next():
             zz500_stocks.append(rs.get_row_data())
@@ -459,8 +452,7 @@ class CSI500Index(CSIIndex):
                 end_date: pd.Timestamp
         """
         logger.info("get new companies......")
-        today = pd.Timestamp.now()
-        # today = datetime.date.today()
+        today = datetime.date.today()
         bs.login()
         result = self.get_data_from_baostock(today)
         bs.logout()

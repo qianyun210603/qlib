@@ -13,39 +13,52 @@ if __name__ == "__main__":
     provider_uri = r"D:\Documents\TradeResearch\qlib_test\rqdata_convert"
     qlib.init(provider_uri=provider_uri, region=REG_CN)
 
-    fit_start_time = "2010-01-01"
-    fit_end_time = "2015-12-31"
-    learn_processors = check_transform_proc(_DEFAULT_LEARN_PROCESSORS, fit_start_time, fit_end_time)
+    segments = {
+        "train": ("2017-01-01", "2019-01-01"),
+        "valid": ("2019-01-01", "2020-12-31"),
+        "test": ("2020-01-01", "2020-07-01"),
+    }
+    features = ['($adjclosestock * 100 / $conversionprice) / $close - 1', '$pure_bond_ytm', "call"]
+    feature_labels = ["convertion_premium", 'pure_bond_ytm']
+
+    assert len(feature_labels) == len(features), "'features' and its labels must have same length"
+
     data_loader = {
         "class": "QlibDataLoader",
         "kwargs": {
             "config": {
-                "feature": (['$open', '$high', '$low', '$close', '$volume', '$hv20', '$hv60', '$iv', '$closestock',
-                          '$conversion_price_reset_status', '$remaining_size', '$pure_bond_ytm', '$turnover_rate',
-                          '$call_announced', '$call_satisfied'],
-                           ['open', 'high', 'low', 'close', 'volume', 'hv20', 'hv60', 'iv', 'closestock',
-                          'CPRS', 'remaining_size', 'pure_bond_ytm', 'turnover_rate',
-                          'call_announced', 'call_satisfied']),
+                "feature": (features, feature_labels),
                 "label": (["Ref($close, -2)/Ref($close, -1) - 1"], ["LABEL0"]),
             },
         },
     }
 
+    infer_processors = check_transform_proc([
+        {"class": 'RobustZScoreNorm', "kwargs": {"fields_group": "feature", 'clip_outlier': True}},
+        {"class": 'Fillna', "kwargs": {"fields_group": "feature"}}
+    ], segments["train"][0], segments["train"][1])
+    learn_processors = check_transform_proc([
+        {"class": "DropnaLabel"},
+        {"class": "CSZScoreNorm", "kwargs": {"fields_group": "label"}},
+    ], segments["train"][0], segments["train"][1])
+
+    process_type = DataHandlerLP.PTYPE_A
+
     h = DataHandlerLP(
         instruments='all',
-        start_time="2010-01-01",
-        end_time="2021-12-31",
+        start_time=segments["train"][0],
+        end_time=segments["test"][1],
         data_loader=data_loader,
-        infer_processors=[],
+        infer_processors=infer_processors,
         learn_processors=learn_processors,
-        process_type=DataHandlerLP.PTYPE_A,
+        process_type=process_type,
+    )
+    dataset = DatasetH(
+        handler=h, segments=segments
     )
 
-    # get all the columns of the data
-    print(h.get_cols())
+    #dataset.prepare('train', col_set=["feature", "label"], data_key=DataHandlerLP.DK_L)
+    #dataset.prepare('valid', col_set=["feature", "label"], data_key=DataHandlerLP.DK_L)
+    # dataset.prepare('test', col_set=["feature", "label"], data_key=DataHandlerLP.DK_I)
+    h.fetch()
 
-    # fetch all the labels
-    print(h.fetch(col_set="label"))
-
-    # fetch all the features
-    print(h.fetch(col_set="feature"))

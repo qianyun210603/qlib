@@ -3,7 +3,7 @@
 
 import numpy as np
 import pandas as pd
-from typing import Text, Union
+from typing import Text, Union, cast
 from qlib.data.dataset.weight import Reweighter
 from scipy.optimize import nnls
 from sklearn.linear_model import LinearRegression, Ridge, Lasso
@@ -54,11 +54,7 @@ class LinearModel(Model):
         df_train = dataset.prepare("train", col_set=["feature", "label"], data_key=DataHandlerLP.DK_L)
         if df_train.empty:
             raise ValueError("Empty data from dataset, please check your dataset config.")
-        if reweighter is not None:
-            w: pd.Series = reweighter.reweight(df_train)
-            w = w.values
-        else:
-            w = None
+        w = None if reweighter is None else cast(pd.Series, reweighter.reweight(df_train)).value
         X, y = df_train["feature"].values, np.squeeze(df_train["label"].values)
 
         if self.estimator in [self.OLS, self.RIDGE, self.LASSO]:

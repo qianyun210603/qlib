@@ -361,7 +361,7 @@ class TopkDropout4ConvertStrategy(TopkDropoutStrategy):
 
         pred_df['call_announced'] = pred_df.apply(
             lambda x: self.trade_exchange.quote.get_data(x.name, trade_start_time, trade_end_time, field="$call_announced", method='ts_data_last'),
-            axis=1).fillna(0) > 0.5
+            axis=1).fillna(1) > 0.5
         # pred_df['call_announced'] = False
 
         pred_df['tradestatusflag'] = pred_df.apply(

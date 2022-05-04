@@ -181,7 +181,7 @@ class DatasetH(Dataset):
     def prepare(
         self,
         segments: Union[List[Text], Tuple[Text], Text, slice, pd.Index],
-        col_set=DataHandler.CS_ALL,
+        col_set: Union[List[Text], Tuple[Text], Text]=DataHandler.CS_ALL,
         data_key=DataHandlerLP.DK_I,
         **kwargs,
     ) -> Union[List[pd.DataFrame], pd.DataFrame]:
@@ -310,7 +310,7 @@ class TSDataSampler:
                 ffill with previous sample
             ffill+bfill:
                 ffill with previous samples first and fill with later samples second
-        flt_data : pd.Series
+        flt_data : pd.Series | pd.DataFrame
             a column of data(True or False) to filter data.
             None:
                 kepp all data
@@ -469,7 +469,7 @@ class TSDataSampler:
             assert self.fillna_type == "none"
         return indices
 
-    def _get_row_col(self, idx) -> Tuple[int]:
+    def _get_row_col(self, idx) -> Tuple[int, int]:
         """
         get the col index and row index of a given sample index in self.idx_df
 
@@ -480,7 +480,7 @@ class TSDataSampler:
 
         Returns
         -------
-        Tuple[int]:
+        Tuple[int, int]:
             the row and col index
         """
         # The the right row number `i` and col number `j` in idx_df

@@ -13,13 +13,13 @@ from pathlib import Path
 from typing import Iterable
 from arctic import Arctic
 from arctic.date import DateRange
+from tqdm import tqdm
 
 import fire
 import requests
 import numpy as np
 import pandas as pd
 from loguru import logger
-
 
 from qlib.tests.data import GetData
 from qlib.utils import code_to_fname, fname_to_code, exists_qlib_data
@@ -29,6 +29,9 @@ CUR_DIR = Path(__file__).resolve().parent
 sys.path.append(str(CUR_DIR.parent.parent))
 
 INDEXES = {"csi300": "000300", "csi100": "000903", "csi500": "000905", 'csiconvert': "000832"}
+
+INDICATOR_COLS = ['remaining_size', 'turnover_rate', "call_status",
+                  'convertible_market_cap_ratio', 'conversion_price_reset_status']
 
 from dump_bin import DumpDataUpdate, DumpDataAll
 from data_collector.base import BaseCollector, BaseNormalize, BaseRun, Normalize
@@ -79,7 +82,8 @@ class RqdataCollector(BaseCollector):
         limit_nums: int
             using for debug, by default None
         """
-        self.arctic_store = Arctic("127.0.0.1")
+        import pytz
+        self.arctic_store = Arctic("127.0.0.1", tz_aware=True, tzinfo=pytz.timezone('Asia/Shanghai'))
         self.meta_lib = self.arctic_store.get_library("convert_meta")
         self.convert_price_lib = self.arctic_store.get_library("convert_convert_price")
         self.convert_cf_lib = self.arctic_store.get_library("convert_cash_flow")
@@ -94,10 +98,12 @@ class RqdataCollector(BaseCollector):
 
         interval = 'd' if interval.endswith('d') else '1m'
 
+        # self.init_datetime()
+
         super(RqdataCollector, self).__init__(
             save_dir=save_dir,
-            start=start,
-            end=end,
+            start=self.convert_datetime(start, self._timezone),
+            end=self.convert_datetime(end, self._timezone),
             interval=interval,
             max_workers=max_workers,
             max_collector_count=max_collector_count,
@@ -105,15 +111,12 @@ class RqdataCollector(BaseCollector):
             check_data_length=check_data_length,
             limit_nums=limit_nums,
         )
-
-        self.init_datetime()
-
-    def init_datetime(self):
         if self.interval not in {'d', '1d', '1m', '1min'}:
             raise ValueError(f"interval error: {self.interval}")
 
-        self.start_datetime = self.convert_datetime(self.start_datetime, self._timezone)
-        self.end_datetime = self.convert_datetime(self.end_datetime, self._timezone)
+    # def init_datetime(self):
+    #     self.start_datetime = self.convert_datetime(self.start_datetime, self._timezone)
+    #     self.end_datetime = self.convert_datetime(self.end_datetime, self._timezone)
 
     @staticmethod
     def convert_datetime(dt: [pd.Timestamp, str], timezone):
@@ -129,14 +132,11 @@ class RqdataCollector(BaseCollector):
         cash_flow = self.convert_cf_lib.read(symbol)
         coupon.index += pd.Timedelta(days=1)
         if cash_flow.index.max() != coupon.index.max():
-            # if abs((cash_flow.index.max() - coupon.index.max()).days) < 3:
-            #     logger.warning(f"to check coupon/cf {symbol}, coupon: {coupon.index.max().isoformat()}, cf: {cash_flow.index.max().isoformat()}")
-            # else:
-            #     logger.info(f"{symbol} called @ {cash_flow.index.max().isoformat()}")
             call_date = cash_flow.index.max()
         else:
             call_date = pd.Timestamp(year=2200, month=1, day=1)
-        return ConvertInstrumentInfo(cash_flow.cash_flow, coupon.coupon_rate, meta['maturity_date'], call_date=call_date)
+
+        return ConvertInstrumentInfo(cash_flow.cash_flow, coupon.coupon_rate, meta['maturity_date'].replace(tzinfo=None), call_date=call_date)
 
     def get_data(
         self, symbol: str, interval: str, start_datetime: pd.Timestamp, end_datetime: pd.Timestamp
@@ -149,12 +149,11 @@ class RqdataCollector(BaseCollector):
         interval = 'd' if interval.endswith('d') else '1m'
         db_symbol = symbol + '_' + interval
         _resultb = self.bar_lib.read(db_symbol, chunk_range=DateRange(start_datetime.tz_localize(None),
-                                                                     end_datetime.tz_localize(None)))
-
+                                                                      end_datetime.tz_localize(None)))
         try:
             _resultb.set_index('date', inplace=True)
         except:
-            print(start_datetime, end_datetime, db_symbol, symbol, _resultb)
+            print(start_datetime, end_datetime, db_symbol, symbol)
 
         convert_prices = self.convert_price_lib.read(symbol).set_index('effective_date')
         _resultb = pd.merge_asof(_resultb, convert_prices, left_index=True, right_index=True)
@@ -189,14 +188,23 @@ class RqdataCollector(BaseCollector):
         derived = self.derived_lib.read(
             symbol, chunk_range=DateRange(start_datetime.tz_localize(None), end_datetime.tz_localize(None))
         )
+
         indicator = self.indicator_lib.read(
-            symbol, chunk_range=DateRange(start_datetime.tz_localize(None), end_datetime.tz_localize(None))
+            symbol, chunk_range=DateRange(start_datetime.tz_localize(None), end_datetime.tz_localize(None)),
+            columns=INDICATOR_COLS
         )
-        indicator['call_announced'] = indicator.call_status.apply(lambda x: 1.0 if x == 3 else 0).ffill()
-        indicator['call_satisfied'] = indicator.call_status.apply(lambda x: 1.0 if x >= 2 else 0).ffill()
+        try:
+            indicator['call_announced'] = indicator.call_status.apply(lambda x: 1.0 if x == 3 else 0).ffill()
+            indicator['call_satisfied'] = indicator.call_status.apply(lambda x: 1.0 if x >= 2 else 0).ffill()
+        except:
+            logger.error(f"no call announced for {db_symbol}")
+            return pd.DataFrame()
+
+        indicator_cols = copy.deepcopy(INDICATOR_COLS)
+        indicator_cols.remove("call_status")
+
         _resulta = pd.concat(
-            [derived, indicator[['call_announced', 'call_satisfied', 'remaining_size', 'turnover_rate',
-                                 'convertible_market_cap_ratio', 'conversion_price_reset_status']]],
+            [derived, indicator[indicator_cols + ['call_announced', 'call_satisfied']]],
             axis=1)
 
         _result = pd.merge(_result, _resulta, left_index=True, right_index=True, how = 'left')
@@ -218,7 +226,7 @@ class RqdataCollector(BaseCollector):
                 return False
             if pd.isna(v['de_listed_date']):
                 return v['listed_date']<=self.end_datetime
-            return self.start_datetime<=v['de_listed_date'] and v['listed_date']<=self.end_datetime
+            return self.start_datetime<=v['de_listed_date'] and v['listed_date'].replace(hour=16) <= min(self.end_datetime, pd.Timestamp.now('Asia/Shanghai')) #- pd.Timedelta(days=1)
 
         logger.info("get HS stock symbols......")
         symbol_dict = {x: self.meta_lib.read(x) for x in self.meta_lib.list_symbols()}
@@ -535,21 +543,25 @@ class Run(BaseRun):
             # noinspection PyTypeChecker
             end_date = (pd.Timestamp(trading_date) + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
 
-        # # NOTE: a larger max_workers setting here would be faster
-        # self.max_workers = (
-        #     max(multiprocessing.cpu_count() - 2, 1)
-        #     if self.max_workers is None or self.max_workers < 1
-        #     else self.max_workers
-        # )
-        # # download data from Rqdata
-        # # NOTE: when downloading data from RqdataFinance, max_workers is recommended to be 1
-        # self.download_data(max_collector_count=self.max_workers, start=trading_date, end=end_date)
-        #
-        # # # normalize data
-        # self.normalize_data(qlib_data_1d_dir)
+        # NOTE: a larger max_workers setting here would be faster
+        self.max_workers = (
+            max(multiprocessing.cpu_count() - 2, 1)
+            if self.max_workers is None or self.max_workers < 1
+            else self.max_workers
+        )
+        # download data from Rqdata
+        # NOTE: when downloading data from RqdataFinance, max_workers is recommended to be 1
+        self.download_data(max_collector_count=self.max_workers, start=trading_date, end=end_date)
+
+        # normalize data
+        self.normalize_data(qlib_data_1d_dir)
+
 
         # dump bin
-        _dump = DumpDataUpdate(
+        qlib_dir = Path(qlib_data_1d_dir).expanduser().resolve()
+
+        DumpClass = DumpDataUpdate if qlib_dir.joinpath(r"calendars\day.txt").exists() else DumpDataAll
+        _dump = DumpClass(
             csv_path=self.normalize_dir,
             qlib_dir=qlib_data_1d_dir,
             exclude_fields="symbol,date",
@@ -557,13 +569,24 @@ class Run(BaseRun):
         )
         _dump.dump()
 
-        # parse index
-        # index_list = ["CSI100", "CSI300", "CSI500"]
-        # get_instruments = getattr(
-        #     importlib.import_module(f"data_collector.cn_index.collector"), "get_instruments"
-        # )
-        # for _index in index_list:
-        #     get_instruments(str(qlib_data_1d_dir), _index)
+        logger.info("Start copy contract info files")
+        contract_spec_dir = qlib_dir.joinpath("contract_specs")
+        contract_spec_dir.mkdir(parents=True, exist_ok=True)
+        all_info_files = list(self.source_dir.glob('*.pkl'))
+        for info_file in tqdm(all_info_files):
+            contract_spec_dir.joinpath(info_file.name).write_bytes(info_file.read_bytes())
+        logger.info("Copy contract info files done")
+
+        logger.info("Exclude indexes from `all` to formulate `convert` population")
+        instrument_dir = _dump._instruments_dir
+        all_instrument_path = instrument_dir.joinpath(_dump.INSTRUMENTS_FILE_NAME)
+        all_instrument_w_index = pd.read_csv(
+            _dump._instruments_dir.joinpath(_dump.INSTRUMENTS_FILE_NAME),
+            sep='\t', header=None
+        )
+        indexes = ['SH' + x for x in INDEXES.values()]
+        all_instrument_wo_index = all_instrument_w_index[~all_instrument_w_index.iloc[:, 0].isin(indexes)]
+        all_instrument_wo_index.to_csv(instrument_dir.joinpath("converts.txt"), header=False, sep=_dump.INSTRUMENTS_SEP, index=False)
 
 
 if __name__ == "__main__":
@@ -573,6 +596,6 @@ if __name__ == "__main__":
         normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert\normalize",
         max_workers=1
     )
-    # runner.download_data(max_collector_count=1, start=pd.Timestamp("2010-01-01"), end=pd.Timestamp("2022-03-31"))
+    # runner.download_data(max_collector_count=1, start=pd.Timestamp("2010-01-01"), end=pd.Timestamp("2022-05-18"))
     # runner.normalize_data()
-    runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert", trading_date='2010-01-01', end_date="2022-05-01")
+    runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert", trading_date='2022-05-12', end_date="2022-05-20")

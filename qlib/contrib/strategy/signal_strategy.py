@@ -75,10 +75,11 @@ class BaseTopkStrategy(BaseSignalStrategy):
     hold top k instruments with equal amount of market value based on score
     (to reduce turnover we may switch less than k instruments in one period, so it is not exactly equal amount of top k.
     """
-    def __init__(self, **kwargs):
+    def __init__(self, hold_thresh, **kwargs):
+        self.hold_thresh = hold_thresh
         super().__init__(**kwargs)
 
-    def _generate_buy_sell_list(self, pred_score):
+    def _generate_buy_sell_list(self, pred_score, trade_start_time, trade_end_time):
         raise NotImplementedError("Please implement `_generate_buy_sell_list` method")
 
     def generate_trade_decision(self, execute_result=None):
@@ -93,7 +94,6 @@ class BaseTopkStrategy(BaseSignalStrategy):
             pred_score = pred_score.iloc[:, 0]
         if pred_score is None:
             return TradeDecisionWO([], self)
-        current_temp = copy.deepcopy(self.trade_position)
         current_temp = copy.deepcopy(self.trade_position)
         # generate order list for this adjust date
         sell_order_list = []
@@ -118,7 +118,7 @@ class BaseTopkStrategy(BaseSignalStrategy):
                 factor = self.trade_exchange.get_factor(
                     stock_id=code, start_time=trade_start_time, end_time=trade_end_time
                 )
-                # sell_amount = self.trade_exchange.round_amount_by_trade_unit(sell_amount, factor)
+                sell_amount = self.trade_exchange.round_amount_by_trade_unit(sell_amount, factor)
                 sell_order = Order(
                     stock_id=code,
                     amount=sell_amount,
@@ -137,7 +137,7 @@ class BaseTopkStrategy(BaseSignalStrategy):
         # buy new stock
         # note the current has been changed
         current_stock_list = current_temp.get_stock_list()
-        value = cash * self.risk_degree / len(buy) if len(buy) > 0 else 0
+        value = cash * self.risk_degree / len(buy) if len(buy) > 0.0 else 0.0
 
         # open_cost should be considered in the real trading environment, while the backtest in evaluate.py does not
         # consider it as the aim of demo is to accomplish same strategy as evaluate.py, so comment out this line
@@ -203,12 +203,11 @@ class TopkDropoutStrategy(BaseTopkStrategy):
             else:
                 strategy will make decision with the tradable state of the stock info and avoid buy and sell them.
         """
-        super().__init__(**kwargs)
+        super().__init__(hold_thresh=hold_thresh, **kwargs)
         self.topk = topk
         self.n_drop = n_drop
         self.method_sell = method_sell
         self.method_buy = method_buy
-        self.hold_thresh = hold_thresh
         self.only_tradable = only_tradable
 
     def _generate_buy_sell_list(self, pred_score, trade_start_time, trade_end_time):
@@ -322,7 +321,7 @@ class TopkKeepnDropoutStrategy(BaseTopkStrategy):
             else:
                 strategy will make decision with the tradable state of the stock info and avoid buy and sell them.
         """
-        super().__init__(**kwargs)
+        super().__init__(hold_thresh=0, **kwargs)
         self.topk = topk
         self.keepn = keepn
         assert keepn >= topk, "number to keep must larger than top k"

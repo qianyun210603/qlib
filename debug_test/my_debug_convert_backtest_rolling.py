@@ -23,34 +23,20 @@ if __name__ == '__main__':
         print("data not exist")
 
     wf_segments = [
-        # {
-        #     "train": ("2017-01-01", "2019-12-31"),
-        #     # "valid": ("2018-01-01", "2018-12-31"),
-        #     "test": ("2020-01-01", "2020-06-30"),
-        # },
-        # {
-        #     "train": ("2017-07-01", "2020-06-30"),
-        #     # "valid": ("2018-01-01", "2018-12-31"),
-        #     "test": ("2020-07-01", "2020-12-31"),
-        # },
-        # {
-        #     "train": ("2018-01-01", "2020-12-31"),
-        #     # "valid": ("2018-01-01", "2018-12-31"),
-        #     "test": ("2021-01-01", "2021-06-30"),
-        # },
-        # {
-        #     "train": ("2018-07-01", "2021-06-30"),
-        #     # "valid": ("2018-01-01", "2018-12-31"),
-        #     "test": ("2021-07-01", "2021-12-31"),
-        # },
         {
-            "train": ("2019-01-01", "2021-12-31"),
+            "train": ("2017-01-01", "2019-12-31"),
             # "valid": ("2018-01-01", "2018-12-31"),
-            "test": ("2022-01-01", "2022-06-30"),
+            "test": ("2020-01-01", "2020-06-30"),
+        },
+        {
+            "train": ("2017-07-01", "2020-06-30"),
+            # "valid": ("2018-01-01", "2018-12-31"),
+            "test": ("2020-07-01", "2020-12-31"),
         },
     ]
 
-    features = ['($adjclosestock * 100 / $conversionprice) / $close - 1', '$pure_bond_ytm']
+    features = ['Greater(-0.03, ($adjclosestock * 100 / $conversionprice) / $close - 1)',
+                '$pure_bond_ytm']
     feature_labels = ["convertion_premium", 'pure_bond_ytm']
 
     assert len(feature_labels) == len(features), "'features' and its labels must have same length"
@@ -66,7 +52,7 @@ if __name__ == '__main__':
     }
 
     pre_handler = DataHandlerLP(
-        instruments='all',
+        instruments="converts",
         start_time=wf_segments[0]['train'][0],
         end_time=wf_segments[-1]['test'][-1],
         data_loader=data_loader,
@@ -111,60 +97,60 @@ if __name__ == '__main__':
 
         dataset.prepare("test", col_set="label")
 
-    #     model = init_instance_by_config(model_config)
-    #     model.fit(dataset)
-    #     trained_models.append(model)
-    #
-    #     pred_score = model.predict(dataset)
-    #     pred_scores.append(pred_score)
-    #
-    # port_analysis_config = {
-    #     "executor": {
-    #         "class": "SimulatorExecutor",
-    #         "module_path": "qlib.backtest.executor",
-    #         "kwargs": {
-    #             "time_per_step": "day",
-    #             "generate_portfolio_metrics": True,
-    #         },
-    #     },
-    #     "strategy": {
-    #         "class": "TopkDropout4ConvertStrategy",  # 4Convert
-    #         "module_path": "qlib.contrib.strategy.signal_strategy",
-    #         "kwargs": {
-    #             "signal": pd.concat(pred_scores).sort_index(),
-    #             "topk": 20,
-    #             "n_drop": 5,
-    #             "only_tradable": False
-    #             # "forcedropnum": 5,
-    #         },
-    #     },
-    #     "backtest": {
-    #         "start_time": wf_segments[0]["test"][0],
-    #         "end_time": wf_segments[-1]["test"][-1],
-    #         "account": 1000000,
-    #         "benchmark": benchmark,
-    #         "exchange_kwargs": {
-    #             "freq": "day",
-    #             "limit_threshold": 0.095,
-    #             "deal_price": "close",
-    #             "subscribe_fields": ["$call_announced"],
-    #             "open_cost": 0.00015,
-    #             "close_cost": 0.00015,
-    #             "min_cost": 0.1,
-    #             "trade_unit": 10,
-    #             "instrument_info_path": r"D:\Documents\TradeResearch\qlib_test\rqdata_convert\contract_specs",
-    #         },
-    #     },
-    # }
-    #
-    # # backtest and analysis
-    # with R.start(experiment_name="backtest_analysis"):
-    #
-    #     recorder = R.get_recorder()
-    #     ba_rid = recorder.id
-    #     sr = SignalSeriesRecord(models=trained_models, datasets=datasets, recorder=recorder)
-    #     sr.generate()
-    #     #     recorder.set_tags(strategy=port_analysis_config["strategy"])
-    #     # backtest & analysis
-    #     par = PortAnaRecord(recorder, port_analysis_config, "day")
-    #     par.generate()
+        model = init_instance_by_config(model_config)
+        model.fit(dataset)
+        trained_models.append(model)
+
+        pred_score = model.predict(dataset)
+        pred_scores.append(pred_score)
+
+    port_analysis_config = {
+        "executor": {
+            "class": "SimulatorExecutor",
+            "module_path": "qlib.backtest.executor",
+            "kwargs": {
+                "time_per_step": "day",
+                "generate_portfolio_metrics": True,
+            },
+        },
+        "strategy": {
+            "class": "TopkDropout4ConvertStrategy",  # 4Convert
+            "module_path": "qlib.contrib.strategy.signal_strategy",
+            "kwargs": {
+                "signal": pd.concat(pred_scores).sort_index(),
+                "topk": 20,
+                "n_drop": 5,
+                "only_tradable": False
+                # "forcedropnum": 5,
+            },
+        },
+        "backtest": {
+            "start_time": wf_segments[0]["test"][0],
+            "end_time": min(pd.Timestamp.now().replace(hour=0, minute=0, second=0, microsecond=0), pd.Timestamp(wf_segments[-1]["test"][-1])),
+            "account": 100000,
+            "benchmark": benchmark,
+            "exchange_kwargs": {
+                "freq": "day",
+                "limit_threshold": 0.095,
+                "deal_price": "open",
+                "subscribe_fields": ["$call_announced"],
+                "open_cost": 0.00015,
+                "close_cost": 0.00015,
+                "min_cost": 0.1,
+                "trade_unit": 10,
+                "instrument_info_path": r"D:\Documents\TradeResearch\qlib_test\rqdata_convert\contract_specs",
+            },
+        },
+    }
+
+    # backtest and analysis
+    with R.start(experiment_name="backtest_analysis"):
+
+        recorder = R.get_recorder()
+        ba_rid = recorder.id
+        sr = SignalSeriesRecord(models=trained_models, datasets=datasets, recorder=recorder)
+        sr.generate()
+        #     recorder.set_tags(strategy=port_analysis_config["strategy"])
+        # backtest & analysis
+        par = PortAnaRecord(recorder, port_analysis_config, "day")
+        par.generate()

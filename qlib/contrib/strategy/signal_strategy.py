@@ -136,7 +136,6 @@ class BaseTopkStrategy(BaseSignalStrategy):
                     cash += trade_val - trade_cost
         # buy new stock
         # note the current has been changed
-        current_stock_list = current_temp.get_stock_list()
         value = cash * self.risk_degree / len(buy) if len(buy) > 0.0 else 0.0
 
         # open_cost should be considered in the real trading environment, while the backtest in evaluate.py does not
@@ -302,6 +301,7 @@ class TopkKeepnDropoutStrategy(BaseTopkStrategy):
         keepn,
         forcedropnum = 0,
         only_positive_score = False,
+        only_tradable=False,
         **kwargs,
     ):
         """
@@ -327,6 +327,7 @@ class TopkKeepnDropoutStrategy(BaseTopkStrategy):
         assert keepn >= topk, "number to keep must larger than top k"
         self.only_positive_score = only_positive_score
         self.forcedropnum = forcedropnum
+        self.only_tradable = only_tradable
 
     def _generate_buy_sell_list(self, pred_score, trade_start_time, trade_end_time):
         current_stock_list = self.trade_position.get_stock_list()
@@ -430,9 +431,6 @@ class WeightStrategyBase(BaseSignalStrategy):
             pred score for this trade date, index is stock_id, contain 'score' column.
         current : Position()
             current position.
-        trade_exchange : Exchange()
-        trade_date : pd.Timestamp
-            trade date.
         """
         raise NotImplementedError()
 

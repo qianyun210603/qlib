@@ -598,4 +598,4 @@ if __name__ == "__main__":
     )
     # runner.download_data(max_collector_count=1, start=pd.Timestamp("2010-01-01"), end=pd.Timestamp("2022-05-18"))
     # runner.normalize_data()
-    runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert", trading_date='2022-05-12', end_date="2022-05-20")
+    runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert", trading_date='2022-05-12', end_date="2022-05-25")

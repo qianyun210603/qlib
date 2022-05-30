@@ -27,6 +27,10 @@ examples/estimator/estimator_example/
 
 *.egg-info/
 
+# test related
+test-output.xml
+.output
+.data
 
 # special software
 mlruns/
@@ -34,10 +38,15 @@ mlruns/
 tags
 
 .pytest_cache/
+.mypy_cache/
 .vscode/
 
 *.swp
 
 ./pretrain
+<<<<<<< HEAD
 
 .idea/*
+=======
+./idea
+>>>>>>> main

@@ -579,7 +579,7 @@ class Run(BaseRun):
 
         logger.info("Exclude indexes from `all` to formulate `convert` population")
         instrument_dir = _dump._instruments_dir
-        all_instrument_path = instrument_dir.joinpath(_dump.INSTRUMENTS_FILE_NAME)
+        #all_instrument_path = instrument_dir.joinpath(_dump.INSTRUMENTS_FILE_NAME)
         all_instrument_w_index = pd.read_csv(
             _dump._instruments_dir.joinpath(_dump.INSTRUMENTS_FILE_NAME),
             sep='\t', header=None
@@ -598,4 +598,4 @@ if __name__ == "__main__":
     )
     # runner.download_data(max_collector_count=1, start=pd.Timestamp("2010-01-01"), end=pd.Timestamp("2022-05-18"))
     # runner.normalize_data()
-    runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert", trading_date='2022-05-20', end_date="2022-05-30")
+    runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert", trading_date='2022-06-01', end_date=pd.Timestamp.now().strftime("%Y-%m-%d"))

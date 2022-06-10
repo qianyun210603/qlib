@@ -44,9 +44,5 @@ tags
 *.swp
 
 ./pretrain
-<<<<<<< HEAD
 
-.idea/*
-=======
-./idea
->>>>>>> main
+.idea/

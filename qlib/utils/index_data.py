@@ -269,7 +269,7 @@ class LocIndexer:
                         if isinstance(_indexing, IndexData):
                             _indexing = _indexing.data
                         assert _indexing.ndim == 1
-                        if _indexing.dtype != np.bool:
+                        if _indexing.dtype != bool:
                             _indexing = np.array(list(index.index(i) for i in _indexing))
                     else:
                         _indexing = index.index(_indexing)

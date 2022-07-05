@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+import pytz
 import sys
 import copy
 import time
@@ -9,15 +10,15 @@ from pathlib import Path
 from typing import Iterable
 from arctic import Arctic
 from arctic.date import DateRange
-from tqdm import tqdm
+from functools import partial
+from operator import itemgetter
 
 import fire
 import numpy as np
 import pandas as pd
 from loguru import logger
-logger.add("rqdata2qlib.log", rotation="12:00")
-from qlib.utils import code_to_fname
 
+from qlib.utils import code_to_fname
 
 CUR_DIR = Path(__file__).resolve().parent
 sys.path.append(str(CUR_DIR.parent.parent))
@@ -30,8 +31,6 @@ INDICATOR_COLS = ['remaining_size', 'turnover_rate', "call_status",
 from dump_bin import DumpDataUpdate, DumpDataAll
 from data_collector.base import BaseCollector, BaseNormalize, BaseRun, Normalize
 from data_collector.utils import get_calendar_list
-from qlib.data.inst_info import ConvertInstrumentInfo
-
 
 
 class RqdataCollector(BaseCollector):
@@ -71,23 +70,15 @@ class RqdataCollector(BaseCollector):
         limit_nums: int
             using for debug, by default None
         """
-        import pytz
+
         self.arctic_store = Arctic("127.0.0.1", tz_aware=True, tzinfo=pytz.timezone('Asia/Shanghai'))
-        self.meta_lib = self.arctic_store.get_library("convert_meta")
-        self.convert_price_lib = self.arctic_store.get_library("convert_convert_price")
-        self.convert_cf_lib = self.arctic_store.get_library("convert_cash_flow")
-        self.coupon_lib = self.arctic_store.get_library("convert_coupon")
+        self.meta_lib = self.arctic_store.get_library("future_meta")
 
         self.bar_lib = self.arctic_store.get_library('bar_data')
-        self.ex_factor_lib = self.arctic_store.get_library("ex_factor")  # 复权因子
-        self.split_lib = self.arctic_store.get_library("split")  # 拆分信息
 
-        self.derived_lib = self.arctic_store.get_library("convert_derived")
-        self.indicator_lib = self.arctic_store.get_library("convert_indicator")
+        self.limit_lib = self.arctic_store.get_library('future_limit_up_down')
 
         interval = 'd' if interval.endswith('d') else '1m'
-
-        # self.init_datetime()
 
         super(RqdataCollector, self).__init__(
             save_dir=save_dir,
@@ -100,7 +91,7 @@ class RqdataCollector(BaseCollector):
             check_data_length=check_data_length,
             limit_nums=limit_nums,
         )
-        if self.interval not in {'d', '1d', '1m', '1min'}:
+        if self.interval not in {'d', '1d', '1m', '1min', "15min", "30min", "1h", '1hour'}:
             raise ValueError(f"interval error: {self.interval}")
 
     @staticmethod
@@ -111,88 +102,34 @@ class RqdataCollector(BaseCollector):
             return dt.tz_localize(timezone)
         return dt.tz_convert(timezone)
 
-    def get_info(self, symbol):
-        meta = self.meta_lib.read(symbol)
-        coupon = self.coupon_lib.read(symbol)
-        cash_flow = self.convert_cf_lib.read(symbol)
-        coupon.index += pd.Timedelta(days=1)
-        if cash_flow.index.max() != coupon.index.max():
-            call_date = cash_flow.index.max()
-        else:
-            call_date = pd.Timestamp(year=2200, month=1, day=1)
-
-        return ConvertInstrumentInfo(cash_flow.cash_flow, coupon.coupon_rate, meta['maturity_date'].replace(tzinfo=None), call_date=call_date)
-
     def get_data(
         self, symbol: str, interval: str, start_datetime: pd.Timestamp, end_datetime: pd.Timestamp
     ) -> pd.DataFrame:
         if interval not in {'d', '1d', '1m', '1min'}:
             raise ValueError(f"cannot support {interval}")
-        # start_datetime = self.convert_datetime(start_datetime, self._timezone)
-        # end_datetime = self.convert_datetime(end_datetime, self._timezone)
-        metadata = self.meta_lib.read(symbol)
         interval = 'd' if interval.endswith('d') else '1m'
         db_symbol = symbol + '_' + interval
-        _resultb = self.bar_lib.read(db_symbol, chunk_range=DateRange(start_datetime.tz_localize(None),
-                                                                      end_datetime.tz_localize(None)))
+        _result = self.bar_lib.read(
+            db_symbol, chunk_range=DateRange(start_datetime.tz_localize(None), end_datetime.tz_localize(None))
+        )
+
         try:
-            _resultb.set_index('date', inplace=True)
+            _result = _result.set_index('date').sort_index()
         except:
             print(start_datetime, end_datetime, db_symbol, symbol)
 
-        convert_prices = self.convert_price_lib.read(symbol).set_index('effective_date')
-        _resultb = pd.merge_asof(_resultb, convert_prices, left_index=True, right_index=True)
-        stock_symbol =  metadata['stock_code'] + '_' + metadata['stock_exchange']
-        db_stock_symbol = stock_symbol + '_' + interval
-        _results = self.bar_lib.read(
-            db_stock_symbol, chunk_range=DateRange(start_datetime.tz_localize(None), end_datetime.tz_localize(None)))
+        _limits = self.limit_lib.read(
+            symbol, chunk_range = DateRange(start_datetime.tz_localize(None).normalize(), end_datetime.tz_localize(None)),
+            columns=['limit_up', 'limit_down', 'settlement']
+        )
+
+        if self.interval not in {'d', '1d'}:
+            _limits.index = _limits.index - pd.Timedelta('6H')
+
         try:
-            _results.set_index('date', inplace=True)
+            _result = pd.merge_asof(_result, _limits, left_index=True, right_index=True)
         except:
-            print(start_datetime, end_datetime, db_stock_symbol, stock_symbol, _resultb)
-        if self.ex_factor_lib.has_symbol(stock_symbol):
-            ex_factors = self.ex_factor_lib.read(stock_symbol)
-            _results = pd.merge_asof(_results, ex_factors[['ex_cum_factor', 'ex_factor']], left_index=True,
-                                    right_index=True)
-        else:
-            _results[['ex_cum_factor', 'ex_factor']] = 1.0
-
-        if self.split_lib.has_symbol(stock_symbol):
-            split_factor = self.split_lib.read(stock_symbol)
-            _results = pd.merge_asof(
-                _results, split_factor[['cum_factor']].rename(columns={'cum_factor': 'split_cum_factor'}),
-                left_index=True, right_index=True)
-        else:
-            _results['split_cum_factor'] = 1.0
-
-        _result = pd.merge(
-            _resultb, _results.rename(columns={c: c+'_stock' for c in _results.columns}), left_index=True, right_index=True,
-            how = 'left'
-        )
-
-        derived = self.derived_lib.read(
-            symbol, chunk_range=DateRange(start_datetime.tz_localize(None), end_datetime.tz_localize(None))
-        )
-
-        indicator = self.indicator_lib.read(
-            symbol, chunk_range=DateRange(start_datetime.tz_localize(None), end_datetime.tz_localize(None)),
-            columns=INDICATOR_COLS
-        )
-        try:
-            indicator['call_announced'] = indicator.call_status.apply(lambda x: 1.0 if x == 3 else 0).ffill()
-            indicator['call_satisfied'] = indicator.call_status.apply(lambda x: 1.0 if x >= 2 else 0).ffill()
-        except:
-            logger.error(f"no call announced for {db_symbol}")
-            return pd.DataFrame()
-
-        indicator_cols = copy.deepcopy(INDICATOR_COLS)
-        indicator_cols.remove("call_status")
-
-        _resulta = pd.concat(
-            [derived, indicator[indicator_cols + ['call_announced', 'call_satisfied']]],
-            axis=1)
-
-        _result = pd.merge(_result, _resulta, left_index=True, right_index=True, how = 'left')
+            raise
 
         time.sleep(self.delay)
 
@@ -201,7 +138,7 @@ class RqdataCollector(BaseCollector):
     def collector_data(self):
         """collector data"""
         super(RqdataCollector, self).collector_data()
-        self.download_index_data()
+        # self.download_index_data()
 
     def get_instrument_list(self):
         def symbol_validation(_, v):
@@ -211,46 +148,45 @@ class RqdataCollector(BaseCollector):
                 return v['listed_date']<=self.end_datetime
             return self.start_datetime<=v['de_listed_date'] and v['listed_date'].replace(hour=16) <= min(self.end_datetime, pd.Timestamp.now('Asia/Shanghai')) #- pd.Timedelta(days=1)
 
-        logger.info("get HS converts symbols......")
+        logger.info("get china future contracts......")
         symbol_dict = {x: self.meta_lib.read(x) for x in self.meta_lib.list_symbols()}
-        symbols = [k for k, v in symbol_dict.items() if symbol_validation(k, v)]
+        symbols = [k for k, v in symbol_dict.items() if k!='_exchange_underlying_mapping' and symbol_validation(k, v)]#  and '888' in k]
         logger.info(f"get {len(symbols)} symbols.")
         return symbols
-
-    def normalize_symbol(self, symbol):
-        symbol_s = symbol.split("_")
-        symbol = f"sh{symbol_s[0]}" if symbol_s[-1] == "SSE" else f"sz{symbol_s[0]}"
-        return symbol
 
     @property
     def _timezone(self):
         return "Asia/Shanghai"
 
-    def download_index_data(self):
-        _format = "%Y%m%d"
-        _begin = self.start_datetime.tz_localize(None)
-        _end = self.end_datetime.tz_localize(None)
-        interval = 'd' if self.interval.endswith('d') else '1m'
-        for _index_name, _index_code in INDEXES.items():
-            logger.info(f"get bench data: {_index_name}({_index_code})......")
-            try:
-                exch_str = 'SZSE' if _index_code.startswith('INDEX399') else 'SSE'
-                db_symbol = f'INDEX{_index_code}_{exch_str}_{interval}'
-                df = self.bar_lib.read(db_symbol, chunk_range=DateRange(_begin, _end)).set_index('date')
-                df[['ex_cum_factor', 'ex_factor', 'split_cum_factor']] = 1.0
-                df[['call_announced']] = 0
-            except Exception as e:
-                logger.warning(f"get {_index_name} error: {e}")
-                continue
-            df["symbol"] = f"sh{_index_code}"
-            _path = self.save_dir.joinpath(f"sh{_index_code}.csv")
-            if _path.exists():
-                _old_df = pd.read_csv(_path, index_col=['date'], parse_dates=['date'])
-                df = pd.concat([_old_df[~_old_df.index.isin(df.index)], df], sort=True)
-            df.to_csv(_path)
-            time.sleep(1)
+    def normalize_symbol(self, symbol: str):
+        """normalize symbol"""
+        return symbol
 
-    def save_instrument(self, symbol, df: pd.DataFrame, info: ConvertInstrumentInfo):
+    # def download_index_data(self):
+    #     _format = "%Y%m%d"
+    #     _begin = self.start_datetime.tz_localize(None)
+    #     _end = self.end_datetime.tz_localize(None)
+    #     interval = 'd' if self.interval.endswith('d') else '1m'
+    #     for _index_name, _index_code in INDEXES.items():
+    #         logger.info(f"get bench data: {_index_name}({_index_code})......")
+    #         try:
+    #             exch_str = 'SZSE' if _index_code.startswith('INDEX399') else 'SSE'
+    #             db_symbol = f'INDEX{_index_code}_{exch_str}_{interval}'
+    #             df = self.bar_lib.read(db_symbol, chunk_range=DateRange(_begin, _end)).set_index('date')
+    #             df[['ex_cum_factor', 'ex_factor', 'split_cum_factor']] = 1.0
+    #             df[['call_announced']] = 0
+    #         except Exception as e:
+    #             logger.warning(f"get {_index_name} error: {e}")
+    #             continue
+    #         df["symbol"] = f"sh{_index_code}"
+    #         _path = self.save_dir.joinpath(f"sh{_index_code}.csv")
+    #         if _path.exists():
+    #             _old_df = pd.read_csv(_path, index_col=['date'], parse_dates=['date'])
+    #             df = pd.concat([_old_df[~_old_df.index.isin(df.index)], df], sort=True)
+    #         df.to_csv(_path)
+    #         time.sleep(1)
+
+    def save_instrument(self, symbol, df: pd.DataFrame):
         """save instrument data to file
 
         Parameters
@@ -264,7 +200,6 @@ class RqdataCollector(BaseCollector):
             logger.warning(f"{symbol} is empty")
             return
 
-        symbol = self.normalize_symbol(symbol)
         symbol = code_to_fname(symbol)
         instrument_path = self.save_dir.joinpath(f"{symbol}.csv")
         df["symbol"] = symbol
@@ -273,8 +208,8 @@ class RqdataCollector(BaseCollector):
             df = pd.concat([_old_df[~_old_df.index.isin(df.index)], df], sort=True)
         df.to_csv(instrument_path)
 
-        info_path = self.save_dir.joinpath(f"{symbol}.pkl")
-        info.to_pickle(info_path)
+        # info_path = self.save_dir.joinpath(f"{symbol}.pkl")
+        # info.to_pickle(info_path)
 
     def _simple_collector(self, symbol: str):
         """
@@ -286,26 +221,26 @@ class RqdataCollector(BaseCollector):
         """
         self.sleep()
         df = self.get_data(symbol, self.interval, self.start_datetime, self.end_datetime)
-        info = self.get_info(symbol)
+        # info = self.get_info(symbol)
         _result = self.NORMAL_FLAG
         if self.check_data_length > 0:
             _result = self.cache_small_data(symbol, df)
         if _result == self.NORMAL_FLAG:
-            self.save_instrument(symbol, df, info)
+            self.save_instrument(symbol, df)
         return _result
 
 
 class RqdataNormalize(BaseNormalize):
     SOURCE_COLS = [
-        "open_price", "close_price", "high_price", "low_price", "volume", 'turnover', 'conversion_price',
-        'open_price_stock', 'high_price_stock', 'low_price_stock', 'close_price_stock', 'volume_stock',
-        'turnover_stock'
+        "open_price", "close_price", "high_price", "low_price", "volume", 'turnover', 'open_interest',
     ]
     COLUMNS = [
-        "open", "close", "high", "low", "volume", 'money', 'conversionprice', 'openstock',
-        'highstock', 'lowstock', 'closestock', 'volumestock', 'turnoverstock'
+        "open", "close", "high", "low", "volume", 'money', 'open_interest',
     ]
     DAILY_FORMAT = "%Y-%m-%d"
+
+    def __init__(self, date_field_name: str = "date", symbol_field_name: str = "symbol", **kwargs):
+        super(RqdataNormalize, self).__init__(date_field_name, symbol_field_name, **kwargs)
 
     @staticmethod
     def calc_change(df: pd.DataFrame, last_close: float) -> pd.Series:
@@ -336,19 +271,13 @@ class RqdataNormalize(BaseNormalize):
             logger.warning(f"Duplicated record discovered for {symbol}")
             df = df[~duplicated_record]
         if calendar_list is not None:
-            index_from_cal = pd.DatetimeIndex(
-                [x for x in calendar_list if
-                 df.index.min().replace(hour=0, minute=0, second=0) <= x
-                 < df.index.max().replace(hour=23, minute=59, second=59)]
-                , name='date')
+            tmp_idx_cal = pd.DatetimeIndex(calendar_list, name='date').sort_values()
+            index_from_cal = tmp_idx_cal[
+                tmp_idx_cal.searchsorted(df.index.min().replace(hour=0, minute=0, second=0)):
+                tmp_idx_cal.searchsorted(df.index.max().replace(hour=23, minute=59, second=59))
+            ]
             df = df.reindex(index_from_cal)
 
-        # assign adjclose as close price adjusted by split only
-        if 'closestock' in df.columns:
-            df["adjclosestock"] = df.closestock
-            # adjust ohlc by split and dividends
-            df[['openstock', 'highstock', 'lowstock', 'closestock']] = df[['openstock', 'highstock', 'lowstock', 'closestock']].multiply(df.ex_cum_factor_stock, axis=0)
-            df['factorstock'] = df.ex_cum_factor_stock
 
         df.sort_index(inplace=True)
 
@@ -360,13 +289,8 @@ class RqdataNormalize(BaseNormalize):
 
         columns += ["change"]
         df.loc[(df["volume"] <= 0) | np.isnan(df["volume"]), columns] = np.nan
-
         df["symbol"] = symbol
-        return df.drop(
-            columns=['ex_cum_factor_stock', 'ex_factor_stock', 'split_cum_factor_stock',
-                     'ex_cum_factor', 'ex_factor', 'split_cum_factor'],
-            errors='ignore'
-        ).reset_index()
+        return df.reset_index()
 
     def normalize(self, df: pd.DataFrame) -> pd.DataFrame:
         # normalize
@@ -375,6 +299,93 @@ class RqdataNormalize(BaseNormalize):
 
     def _get_calendar_list(self) -> Iterable[pd.Timestamp]:
         return [x for x in get_calendar_list("ALL")]
+
+class RqdataNormalize1min(RqdataNormalize):
+
+    def __init__(
+        self, qlib_data_1d_dir: [str, Path], date_field_name: str = "date", symbol_field_name: str = "symbol", **kwargs
+    ):
+        self.qlib_data_1d_dir = qlib_data_1d_dir
+        self.arctic_store = Arctic("127.0.0.1", tz_aware=True, tzinfo=pytz.timezone('Asia/Shanghai'))
+        self.meta_lib = self.arctic_store.get_library("future_meta")
+        super(RqdataNormalize1min, self).__init__(date_field_name, symbol_field_name, **kwargs)
+
+    def _get_calendar_list(self) -> Iterable[pd.Timestamp]:
+        return self.generate_1min_from_daily(self.calendar_list_1d)
+
+    def _get_1d_calendar_list(self) -> Iterable[pd.Timestamp]:
+        import qlib
+        from qlib.data import D
+
+        qlib.init(provider_uri=self.qlib_data_1d_dir)
+        return list(D.calendar(freq="day"))
+
+    @property
+    def calendar_list_1d(self):
+        calendar_list_1d = getattr(self, "_calendar_list_1d", None)
+        if calendar_list_1d is None:
+            calendar_list_1d = self._get_1d_calendar_list()
+            setattr(self, "_calendar_list_1d", calendar_list_1d)
+        return calendar_list_1d
+
+    def _generate_intraday_intervals(self):
+
+        def _merge_union_interval(open_periods_sets):
+
+            def process(tt):
+                tl, tr = pd.Timestamp(tt[0]) - pd.Timedelta(minutes=1), pd.Timestamp(tt[1]) - pd.Timedelta(minutes=1)
+                return tl if tl.hour < 17 else tl - pd.Timedelta(days=1), tr if tr.hour < 17 else tr - pd.Timedelta(
+                    days=1)
+
+            tss = sorted(sum([[process(tt) for tt in one_set] for one_set in open_periods_sets], []), key=itemgetter(0))
+            merged = []
+            # Traverse all input Intervals starting from
+            # second interval
+            curr_lb, curr_rb = tss[0]
+            for interval in tss[1:]:
+
+                # If this is not first Interval and overlaps
+                # with the previous one, Merge previous and
+                # current Intervals
+                if curr_rb >= interval[0]:
+                    curr_rb = max(curr_rb, interval[1])
+                else:
+                    merged.append((curr_lb, curr_rb))
+                    curr_lb, curr_rb = interval
+            merged.append((curr_lb, curr_rb))
+
+            return [(lb.time(), rb.time()) for lb, rb in merged]
+
+        metas = {x: self.meta_lib.read(x) for x in self.meta_lib.list_symbols() if '888' in x}
+        trading_hours = {k: v['trading_hours'] for k, v in metas.items()}
+        open_periods_sets = [[tuple(x.split('-')) for x in th.split(',')] for th in trading_hours.values()]
+        return _merge_union_interval(open_periods_sets)
+
+    def generate_1min_from_daily(self, calendars: Iterable) -> pd.Index:
+
+        def _generate_offset_intervals(time_interval):
+            left_time_delta = pd.Timedelta(hours=time_interval[0].hour, minutes=time_interval[0].minute, seconds=time_interval[0].second)
+            right_time_delta = pd.Timedelta(hours=time_interval[1].hour, minutes=time_interval[1].minute, seconds=time_interval[1].second)
+            if right_time_delta < left_time_delta:
+                right_time_delta += pd.Timedelta(hours=24)
+            return left_time_delta, right_time_delta
+
+        intraday_ranges = self._generate_intraday_intervals()
+
+        offset_intervals = [_generate_offset_intervals(interval) for interval in intraday_ranges]
+
+        res = []
+        for _day in calendars:
+            for _range in offset_intervals:
+                res.append(
+                    pd.date_range(
+                        pd.Timestamp(_day).normalize() + _range[0],
+                        pd.Timestamp(_day).normalize() + _range[1],
+                        freq="1 min",
+                    )
+                )
+
+        return pd.Index(sorted(set(np.hstack(res))))
 
 
 class Run(BaseRun):
@@ -392,6 +403,7 @@ class Run(BaseRun):
         interval: str
             freq, value from [1min, 1d], default 1d
         """
+        self.suffix = 'day' if interval in ('d', '1d') else interval
         super().__init__(source_dir, normalize_dir, max_workers, interval)
 
     @property
@@ -400,7 +412,9 @@ class Run(BaseRun):
 
     @property
     def normalize_class_name(self):
-        return f"RqdataNormalize"
+        if self.suffix == 'day':
+            return f"RqdataNormalize"
+        return f"RqdataNormalize{self.interval}"
 
     @property
     def default_base_dir(self) -> [Path, str]:
@@ -478,6 +492,7 @@ class Run(BaseRun):
             target_dir=self.normalize_dir,
             normalize_class=_class,
             max_workers=self.max_workers,
+            qlib_data_1d_dir = qlib_data_1d_dir
         )
         yc.normalize()
 
@@ -486,7 +501,7 @@ class Run(BaseRun):
         qlib_data_1d_dir: str,
         trading_date: str = None,
         end_date: str = None,
-        check_data_length: bool = False,
+        check_data_length: int = None,
     ):
         """update Rqdata data to bin
 
@@ -511,8 +526,8 @@ class Run(BaseRun):
             # get 1m data
         """
 
-        if self.interval.lower() != "1d":
-            logger.warning(f"currently supports 1d data updates: --interval 1d")
+        # if self.interval.lower() != "1d":
+        #     logger.warning(f"currently supports 1d data updates: --interval 1d")
 
         # start/end date
         if trading_date is None:
@@ -529,56 +544,50 @@ class Run(BaseRun):
             if self.max_workers is None or self.max_workers < 1
             else self.max_workers
         )
-        # download data from Rqdata
-        # NOTE: when downloading data from RqdataFinance, max_workers is recommended to be 1
-        self.download_data(max_collector_count=self.max_workers, start=trading_date, end=end_date, check_data_length=check_data_length)
-
-        # normalize data
+        # # download data from Rqdata
+        self.download_data(max_collector_count=1, start=trading_date, end=end_date, check_data_length=check_data_length)
+        #
+        # # normalize data
         self.normalize_data(qlib_data_1d_dir)
-
 
         # dump bin
         qlib_dir = Path(qlib_data_1d_dir).expanduser().resolve()
 
-        DumpClass = DumpDataUpdate if qlib_dir.joinpath(r"calendars\day.txt").exists() else DumpDataAll
+        DumpClass = DumpDataUpdate if qlib_dir.joinpath(f"calendars/{self.suffix}.txt").exists() else DumpDataAll
         _dump = DumpClass(
             csv_path=self.normalize_dir,
-            qlib_dir=qlib_data_1d_dir,
+            qlib_dir=qlib_dir,
             exclude_fields="symbol,date",
             max_workers=self.max_workers,
+            freq = self.suffix,
         )
         _dump.dump()
 
-        logger.info("Start copy contract info files")
-        contract_spec_dir = qlib_dir.joinpath("contract_specs")
-        contract_spec_dir.mkdir(parents=True, exist_ok=True)
-        all_info_files = list(self.source_dir.glob('*.pkl'))
-        for info_file in tqdm(all_info_files):
-            contract_spec_dir.joinpath(info_file.name).write_bytes(info_file.read_bytes())
-        logger.info("Copy contract info files done")
+        if self.suffix == 'day':
+            logger.info("generate continuous population")
+            instruments_dir = _dump._instruments_dir
+            #all_instrument_path = instrument_dir.joinpath(_dump.INSTRUMENTS_FILE_NAME)
+            all_instrument_date_range = pd.read_csv(instruments_dir.joinpath(_dump.INSTRUMENTS_FILE_NAME), sep='\t', header=None)
 
-        logger.info("Exclude indexes from `all` to formulate `convert` population")
-        instruments_dir = _dump._instruments_dir
-        #all_instrument_path = instrument_dir.joinpath(_dump.INSTRUMENTS_FILE_NAME)
-        all_instrument_w_index = pd.read_csv(
-            instruments_dir.joinpath(_dump.INSTRUMENTS_FILE_NAME),
-            sep='\t', header=None
-        )
-        indexes = ['SH' + x for x in INDEXES.values()]
-        all_instrument_wo_index = all_instrument_w_index[~all_instrument_w_index.iloc[:, 0].isin(indexes)]
-        all_instrument_wo_index.to_csv(instruments_dir.joinpath("converts.txt"), header=False, sep=_dump.INSTRUMENTS_SEP, index=False)
+            def check_symbol(symbol, suffix):
+                base, _ = symbol.rsplit('_', 1)
+                return base.endswith(suffix) and base[:-len(suffix)].isalpha()
 
+            for suffix, name in [('88', 'continuous'), ('888', 'cont_prev_close_spread', ), ('889', 'cont_open_spread'), ('890', 'cont_prev_close_ratio', ), ('891', 'cont_open_ratio')]:
+                this_kind_conti = all_instrument_date_range[
+                    all_instrument_date_range.iloc[:, 0].apply(partial(check_symbol, suffix=suffix))
+                ]
+                this_kind_conti.to_csv(instruments_dir.joinpath(f"{name}.txt"), header=False,
+                                               sep=_dump.INSTRUMENTS_SEP, index=False)
 
 if __name__ == "__main__":
     #fire.Fire(Run)
     runner = Run(
-        source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert\source",
-        normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert\normalize",
-        max_workers=1
+        source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_1m\source_1m",
+        normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_1m\normalize_1m",
+        max_workers=12,
+        interval='1min'
     )
-    today =  pd.Timestamp.now().normalize()
-
-    runner.update_data_to_bin(
-        qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert",
-        trading_date=(today - pd.Timedelta(days=7)).strftime("%Y-%m-%d"), end_date=today.strftime("%Y-%m-%d")
-    )
+    # runner.download_data(max_collector_count=1, start=pd.Timestamp('2017-01-01'), end=pd.Timestamp.now().strftime("%Y-%m-%d"))
+    # runner.normalize_data(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_1m")
+    runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_1m", trading_date='2018-12-24', end_date="2021-01-08")#pd.Timestamp.now().strftime("%Y-%m-%d"))

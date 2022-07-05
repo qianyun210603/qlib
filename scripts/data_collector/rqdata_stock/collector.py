@@ -1,13 +1,11 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-import abc
+import pytz
 import sys
 import copy
 import time
-import datetime
 import importlib
-from abc import ABC
 import multiprocessing
 from pathlib import Path
 from typing import Iterable
@@ -21,23 +19,13 @@ import pandas as pd
 from loguru import logger
 
 
-from qlib.tests.data import GetData
 from qlib.utils import code_to_fname, fname_to_code, exists_qlib_data
-from qlib.constant import REG_CN as REGION_CN
-
 CUR_DIR = Path(__file__).resolve().parent
 sys.path.append(str(CUR_DIR.parent.parent))
 
-from dump_bin import DumpDataUpdate
+from dump_bin import DumpDataUpdate, DumpDataAll
 from data_collector.base import BaseCollector, BaseNormalize, BaseRun, Normalize
-from data_collector.utils import (
-    deco_retry,
-    get_calendar_list,
-    get_hs_stock_symbols,
-    get_us_stock_symbols,
-    get_in_stock_symbols,
-    generate_minutes_calendar_from_daily,
-)
+from data_collector.utils import get_calendar_list
 
 INDEX_BENCH_URL = "http://push2his.eastmoney.com/api/qt/stock/kline/get?secid=1.{index_code}&fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58&klt=101&fqt=0&beg={begin}&end={end}"
 
@@ -79,7 +67,7 @@ class RqdataCollector(BaseCollector):
         limit_nums: int
             using for debug, by default None
         """
-        self.arctic_store = Arctic("127.0.0.1")
+        self.arctic_store = Arctic("127.0.0.1", tz_aware=True, tzinfo=pytz.timezone('Asia/Shanghai'))
         self.bar_data_infos = self.arctic_store.get_library('data_overview')
         self.bar_lib = self.arctic_store.get_library('bar_data')
         self.ex_factor_lib = self.arctic_store.get_library("ex_factor")  # 复权因子
@@ -88,8 +76,8 @@ class RqdataCollector(BaseCollector):
 
         super(RqdataCollector, self).__init__(
             save_dir=save_dir,
-            start=start,
-            end=end,
+            start=self.convert_datetime(start, self._timezone),
+            end=self.convert_datetime(end, self._timezone),
             interval=interval,
             max_workers=max_workers,
             max_collector_count=max_collector_count,
@@ -157,8 +145,15 @@ class RqdataCollector(BaseCollector):
         self.download_index_data()
 
     def get_instrument_list(self):
+
+        def symbol_validation(_, v):
+            return self.start_datetime <= v['end'] and v['start'].replace(hour=16) <= min(
+                self.end_datetime, pd.Timestamp.now('Asia/Shanghai'))
+
         logger.info("get HS stock symbols......")
-        symbols = [x.rsplit('_', 1)[0] for x in self.bar_data_infos.list_symbols() if ('SSE' in x or 'SZSE' in x) and not x.startswith('INDEX') and not x.startswith("1") and x.endswith(self.interval)]
+        symbol_dict = {x.rsplit('_', 1)[0]: self.bar_data_infos.read(x) for x in self.bar_data_infos.list_symbols()  if ('SSE' in x or 'SZSE' in x)
+                   and not x.startswith('INDEX') and not x.startswith("1") and x.endswith(self.interval)}
+        symbols = [k for k, v in symbol_dict.items() if symbol_validation(k, v)]
         logger.info(f"get {len(symbols)} symbols.")
         return symbols
 
@@ -172,7 +167,6 @@ class RqdataCollector(BaseCollector):
         return "Asia/Shanghai"
 
     def download_index_data(self):
-        # TODO: from MSN
         _format = "%Y%m%d"
         _begin = self.start_datetime.tz_localize(None)
         _end = self.end_datetime.tz_localize(None)
@@ -464,27 +458,29 @@ class Run(BaseRun):
         )
         # download data from Rqdata
         # NOTE: when downloading data from RqdataFinance, max_workers is recommended to be 1
-        #self.download_data(max_collector_count=self.max_workers, start=trading_date, end=end_date)
+        self.download_data(max_collector_count=self.max_workers, start=trading_date, end=end_date)
 
         # normalize data
-        #self.normalize_data(qlib_data_1d_dir)
+        self.normalize_data(qlib_data_1d_dir)
 
+        qlib_dir = Path(qlib_data_1d_dir).expanduser().resolve()
         # dump bin
-        _dump = DumpDataUpdate(
+        DumpClass = DumpDataUpdate if qlib_dir.joinpath(r"calendars\day.txt").exists() else DumpDataAll
+        _dump = DumpClass(
             csv_path=self.normalize_dir,
             qlib_dir=qlib_data_1d_dir,
             exclude_fields="symbol,date",
             max_workers=self.max_workers,
         )
         _dump.dump()
-        #
-        # # parse index
-        # index_list = ["CSI100", "CSI300", "CSI500"]
-        # get_instruments = getattr(
-        #     importlib.import_module(f"data_collector.cn_index.collector"), "get_instruments"
-        # )
-        # for _index in index_list:
-        #     get_instruments(str(qlib_data_1d_dir), _index)
+
+        # parse index
+        index_list = ["CSI100", "CSI300", "CSI500"]
+        get_instruments = getattr(
+            importlib.import_module(f"data_collector.cn_index.collector"), "get_instruments"
+        )
+        for _index in index_list:
+            get_instruments(str(qlib_data_1d_dir), _index)
 
 
 if __name__ == "__main__":
@@ -492,8 +488,8 @@ if __name__ == "__main__":
     runner = Run(
         source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata\source",
         normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata\normalize",
-        max_workers=6
+        max_workers=1
     )
     # runner.download_data(max_collector_count=1, start=pd.Timestamp("2014-01-01"), end=pd.Timestamp("2021-12-31"))
     # runner.normalize_data()
-    runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata", trading_date='2005-01-01', end_date="2022-04-01")
+    runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata", trading_date='2022-03-01', end_date="2022-06-11")

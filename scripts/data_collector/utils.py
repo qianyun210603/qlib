@@ -52,7 +52,7 @@ _CALENDAR_MAP = {}
 MINIMUM_SYMBOLS_NUM = 3900
 
 
-def get_calendar_list(bench_code="CSI300") -> List[pd.Timestamp]:
+def get_calendar_list(bench_code="CSI300", start_date = pd.Timestamp("2012-01-01")) -> List[pd.Timestamp]:
     """get SH/SZ history calendar list
 
     Parameters
@@ -93,7 +93,7 @@ def get_calendar_list(bench_code="CSI300") -> List[pd.Timestamp]:
                         raise ValueError(f"{month}-->{e}")
                     return _cal
 
-                month_range = pd.date_range(start="2019-01", end=pd.Timestamp.now() + pd.Timedelta(days=31), freq="M")
+                month_range = pd.date_range(start=pd.Timestamp(start_date), end=pd.Timestamp.now() + pd.Timedelta(days=31), freq="M")
                 calendar = []
                 for _m in month_range:
                     cal = _get_calendar(_m.strftime("%Y-%m"))

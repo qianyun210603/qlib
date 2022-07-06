@@ -8,6 +8,7 @@ import datetime
 from io import BytesIO
 from typing import List, Iterable
 from pathlib import Path
+from functools import lru_cache
 
 import fire
 import requests
@@ -34,6 +35,7 @@ REQ_HEADERS = {
 }
 
 
+@lru_cache(maxsize=1000)
 @deco_retry
 def retry_request(url: str, method: str = "get", exclude_status: List = None):
     if exclude_status is None:

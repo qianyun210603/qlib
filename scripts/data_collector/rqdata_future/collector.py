@@ -585,9 +585,9 @@ if __name__ == "__main__":
     runner = Run(
         source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_1m\source_1m",
         normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_1m\normalize_1m",
-        max_workers=12,
+        max_workers=8,
         interval='1min'
     )
     # runner.download_data(max_collector_count=1, start=pd.Timestamp('2017-01-01'), end=pd.Timestamp.now().strftime("%Y-%m-%d"))
     # runner.normalize_data(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_1m")
-    runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_1m", trading_date='2018-12-24', end_date="2021-01-08")#pd.Timestamp.now().strftime("%Y-%m-%d"))
+    runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_1m", trading_date='2022-06-30', end_date=pd.Timestamp.now().strftime("%Y-%m-%d"))

@@ -336,11 +336,11 @@ class RqdataNormalize(BaseNormalize):
             logger.warning(f"Duplicated record discovered for {symbol}")
             df = df[~duplicated_record]
         if calendar_list is not None:
-            index_from_cal = pd.DatetimeIndex(
-                [x for x in calendar_list if
-                 df.index.min().replace(hour=0, minute=0, second=0) <= x
-                 < df.index.max().replace(hour=23, minute=59, second=59)]
-                , name='date')
+            tmp_idx_cal = pd.DatetimeIndex(calendar_list, name='date').sort_values()
+            index_from_cal = tmp_idx_cal[
+                tmp_idx_cal.searchsorted(df.index.min().replace(hour=0, minute=0, second=0)):
+                tmp_idx_cal.searchsorted(df.index.max().replace(hour=23, minute=59, second=59))
+            ]
             df = df.reindex(index_from_cal)
 
         # assign adjclose as close price adjusted by split only

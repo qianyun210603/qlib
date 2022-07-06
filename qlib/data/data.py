@@ -32,7 +32,6 @@ from ..utils import (
     hash_args,
     normalize_cache_fields,
     code_to_fname,
-    set_log_with_config,
     time_to_slc_point,
     read_period_data,
     get_period_list,
@@ -109,14 +108,16 @@ class CalendarProvider(abc.ABC):
         _, _, si, ei = self.locate_index(start_time, end_time, freq, future)
         return _calendar[si : ei + 1]
 
-    def locate_index(self, start_time, end_time, freq, future=False):
+    def locate_index(
+        self, start_time: Union[pd.Timestamp, str], end_time: Union[pd.Timestamp, str], freq: str, future: bool = False
+    ):
         """Locate the start time index and end time index in a calendar under certain frequency.
 
         Parameters
         ----------
-        start_time : str
+        start_time : pd.Timestamp
             start of the time range.
-        end_time : str
+        end_time : pd.Timestamp
             end of the time range.
         freq : str
             time frequency, available: year/quarter/month/week/day.
@@ -603,11 +604,7 @@ class DatasetProvider(abc.ABC):
         """
         # FIXME: Windows OS or MacOS using spawn: https://docs.python.org/3.8/library/multiprocessing.html?highlight=spawn#contexts-and-start-methods
         # NOTE: This place is compatible with windows, windows multi-process is spawn
-        if not C.registered:
-            C.set_conf_from_C(g_config)
-            if C.logging_config:
-                set_log_with_config(C.logging_config)
-            C.register()
+        C.register_from_C(g_config)
 
         obj = dict()
         for field in column_names:

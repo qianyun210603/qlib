@@ -10,7 +10,7 @@ _build
 build/
 dist/
 
-
+*.log
 *.pkl
 *.hd5
 *.csv
@@ -44,7 +44,5 @@ tags
 *.swp
 
 ./pretrain
-
 .idea/
 
-*.log

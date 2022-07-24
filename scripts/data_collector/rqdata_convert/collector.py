@@ -5,8 +5,9 @@ import sys
 import copy
 import time
 import multiprocessing
+import traceback
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Optional
 from arctic import Arctic
 from arctic.date import DateRange
 from tqdm import tqdm
@@ -125,7 +126,7 @@ class RqdataCollector(BaseCollector):
 
     def get_data(
         self, symbol: str, interval: str, start_datetime: pd.Timestamp, end_datetime: pd.Timestamp
-    ) -> pd.DataFrame:
+    ) -> Optional[pd.DataFrame]:
         if interval not in {'d', '1d', '1m', '1min'}:
             raise ValueError(f"cannot support {interval}")
         # start_datetime = self.convert_datetime(start_datetime, self._timezone)
@@ -137,19 +138,17 @@ class RqdataCollector(BaseCollector):
                                                                       end_datetime.tz_localize(None)))
         try:
             _resultb.set_index('date', inplace=True)
-        except:
-            print(start_datetime, end_datetime, db_symbol, symbol)
-
-        convert_prices = self.convert_price_lib.read(symbol).set_index('effective_date')
-        _resultb = pd.merge_asof(_resultb, convert_prices, left_index=True, right_index=True)
-        stock_symbol =  metadata['stock_code'] + '_' + metadata['stock_exchange']
-        db_stock_symbol = stock_symbol + '_' + interval
-        _results = self.bar_lib.read(
-            db_stock_symbol, chunk_range=DateRange(start_datetime.tz_localize(None), end_datetime.tz_localize(None)))
-        try:
+            convert_prices = self.convert_price_lib.read(symbol).set_index('effective_date')
+            _resultb = pd.merge_asof(_resultb, convert_prices, left_index=True, right_index=True)
+            stock_symbol =  metadata['stock_code'] + '_' + metadata['stock_exchange']
+            db_stock_symbol = stock_symbol + '_' + interval
+            _results = self.bar_lib.read(
+                db_stock_symbol, chunk_range=DateRange(start_datetime.tz_localize(None), end_datetime.tz_localize(None)))
             _results.set_index('date', inplace=True)
-        except:
-            print(start_datetime, end_datetime, db_stock_symbol, stock_symbol, _resultb)
+        except Exception:
+            logger.error(f"{start_datetime}, {end_datetime}, {db_symbol}, {symbol}:\n {sys.exc_info()}")
+            return None
+
         if self.ex_factor_lib.has_symbol(stock_symbol):
             ex_factors = self.ex_factor_lib.read(stock_symbol)
             _results = pd.merge_asof(_results, ex_factors[['ex_cum_factor', 'ex_factor']], left_index=True,
@@ -536,7 +535,6 @@ class Run(BaseRun):
         # normalize data
         self.normalize_data(qlib_data_1d_dir)
 
-
         # dump bin
         qlib_dir = Path(qlib_data_1d_dir).expanduser().resolve()
 
@@ -574,7 +572,7 @@ if __name__ == "__main__":
     runner = Run(
         source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert\source",
         normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert\normalize",
-        max_workers=1
+        max_workers=6
     )
     today =  pd.Timestamp.now().normalize()
 

@@ -198,9 +198,9 @@ class TopkDropoutStrategy(BaseTopkStrategy):
         only_tradable : bool
             will the strategy only consider the tradable stock when buying and selling.
             if only_tradable:
-                strategy will make buy sell decision without checking the tradable state of the stock.
-            else:
                 strategy will make decision with the tradable state of the stock info and avoid buy and sell them.
+            else:
+                strategy will make buy sell decision without checking the tradable state of the stock.
         """
         super().__init__(hold_thresh=hold_thresh, **kwargs)
         self.topk = topk

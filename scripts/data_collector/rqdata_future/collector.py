@@ -1,23 +1,30 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
+import datetime
+import traceback
 
 import pytz
 import sys
 import copy
 import time
 import multiprocessing
+from datetime import time
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Type
 from arctic import Arctic
 from arctic.date import DateRange
 from functools import partial
 from operator import itemgetter
+from pandas_helper.tseries.offsets import CustomBusinessIntradayOffset
+from pandas_helper import resample
+import exchange_calendars as mcal
 
 import fire
 import numpy as np
 import pandas as pd
 from loguru import logger
 
+import docs.conf
 from qlib.utils import code_to_fname
 
 CUR_DIR = Path(__file__).resolve().parent
@@ -32,6 +39,11 @@ from dump_bin import DumpDataUpdate, DumpDataAll
 from data_collector.base import BaseCollector, BaseNormalize, BaseRun, Normalize
 from data_collector.utils import get_calendar_list
 
+def _process(tt):
+    tl, tr = pd.Timestamp(tt[0]) - pd.Timedelta(minutes=1), pd.Timestamp(tt[1])
+    return tl.time() if tl.hour < 17 else (tl - pd.Timedelta(days=1)).time(), tr.time() if tr.hour < 17 else (tr - pd.Timedelta(
+        days=1)).time()
+
 
 class RqdataCollector(BaseCollector):
 
@@ -41,6 +53,7 @@ class RqdataCollector(BaseCollector):
         start=None,
         end=None,
         interval="1d",
+        commod_only=0,
         max_workers=4,
         max_collector_count=2,
         delay=2,
@@ -78,7 +91,11 @@ class RqdataCollector(BaseCollector):
 
         self.limit_lib = self.arctic_store.get_library('future_limit_up_down')
 
-        interval = 'd' if interval.endswith('d') else '1m'
+        self.symbol_dict = None
+
+        self.commod_only = commod_only
+
+        interval = 'd' if interval.endswith('d') else interval
 
         super(RqdataCollector, self).__init__(
             save_dir=save_dir,
@@ -91,7 +108,7 @@ class RqdataCollector(BaseCollector):
             check_data_length=check_data_length,
             limit_nums=limit_nums,
         )
-        if self.interval not in {'d', '1d', '1m', '1min', "15min", "30min", "1h", '1hour'}:
+        if self.interval not in {'d', '1d', '1m', '1min', "5min", "15min", "30min", "1h", '1hour'}:
             raise ValueError(f"interval error: {self.interval}")
 
     @staticmethod
@@ -105,10 +122,10 @@ class RqdataCollector(BaseCollector):
     def get_data(
         self, symbol: str, interval: str, start_datetime: pd.Timestamp, end_datetime: pd.Timestamp
     ) -> pd.DataFrame:
-        if interval not in {'d', '1d', '1m', '1min'}:
+        if interval not in {'d', '1d', '1min', '15min'}:
             raise ValueError(f"cannot support {interval}")
-        interval = 'd' if interval.endswith('d') else '1m'
-        db_symbol = symbol + '_' + interval
+        read_interval = 'd' if interval.endswith('d') else '1m'
+        db_symbol = symbol + '_' + read_interval
         _result = self.bar_lib.read(
             db_symbol, chunk_range=DateRange(start_datetime.tz_localize(None), end_datetime.tz_localize(None))
         )
@@ -123,15 +140,43 @@ class RqdataCollector(BaseCollector):
             columns=['limit_up', 'limit_down', 'settlement']
         )
 
-        if self.interval not in {'d', '1d'}:
+        if interval not in {'d', '1d'}:
             _limits.index = _limits.index - pd.Timedelta('6H')
 
         try:
             _result = pd.merge_asof(_result, _limits, left_index=True, right_index=True)
         except:
+            logger.error(f"merge limits failed for {db_symbol} from {start_datetime} to {end_datetime}: {traceback.format_exc()}")
             raise
 
-        time.sleep(self.delay)
+        if self.commod_only % 2 == 1:
+            day_only = True
+        else:
+            day_only = False
+        if interval in {'15min'}:
+            try:
+                trading_peroids =  [tuple(x.split('-')) for x in self.symbol_dict[symbol]['trading_hours'].split(',')]
+                starts, ends = map(list, zip(*[_process(tt) for tt in trading_peroids]))
+
+                # for financial futures before 2018
+                if _result.index.time.min() == time(9, 15) and starts[0] != time(9,15):
+                    starts[0] = time(9, 15)
+                if _result.index.time.max() == time(15, 14) and ends[-1] != time(15, 15):
+                    ends[-1] = time(15, 15)
+
+                cbi = CustomBusinessIntradayOffset(
+                    n=1, step=pd.Timedelta("15min"), start=starts, end=ends, holidays=mcal.get_calendar("SSE").adhoc_holidays.tolist(), normalize=False,
+                    weekmask='Mon Tue Wed Thu Fri'
+                )
+                _result = resample(_result, rule=cbi).agg(
+                    {'open_price': 'first', "high_price": 'max', 'low_price': 'min', 'close_price': 'last', 'volume': 'sum',
+                     'turnover': 'sum', 'open_interest': 'sum'}).dropna(how='all', subset=['open_price', 'high_price', 'low_price', 'close_price'])
+                if day_only:
+                    _result = _result.between_time("08:00", "17:00")
+            except:
+                logger.error(
+                    f"resampling failed for {db_symbol} from {start_datetime} to {end_datetime}: {traceback.format_exc()}")
+                raise
 
         return pd.DataFrame() if _result is None else _result
 
@@ -141,7 +186,9 @@ class RqdataCollector(BaseCollector):
         # self.download_index_data()
 
     def get_instrument_list(self):
-        def symbol_validation(_, v):
+        def symbol_validation(k, v):
+            if self.commod_only > 1 and v["underlying_symbol"] in {'IF', 'IC', 'IH', 'IM', 'T', 'TS', 'TF'}:
+                return False
             if pd.isna(v['listed_date']):
                 return False
             if pd.isna(v['de_listed_date']):
@@ -149,8 +196,8 @@ class RqdataCollector(BaseCollector):
             return self.start_datetime<=v['de_listed_date'] and v['listed_date'].replace(hour=16) <= min(self.end_datetime, pd.Timestamp.now('Asia/Shanghai')) #- pd.Timedelta(days=1)
 
         logger.info("get china future contracts......")
-        symbol_dict = {x: self.meta_lib.read(x) for x in self.meta_lib.list_symbols()}
-        symbols = [k for k, v in symbol_dict.items() if k!='_exchange_underlying_mapping' and symbol_validation(k, v)]#  and '888' in k]
+        self.symbol_dict = {x: self.meta_lib.read(x) for x in self.meta_lib.list_symbols()}
+        symbols = [k for k, v in self.symbol_dict.items() if k!='_exchange_underlying_mapping' and symbol_validation(k, v)]
         logger.info(f"get {len(symbols)} symbols.")
         return symbols
 
@@ -240,6 +287,7 @@ class RqdataNormalize(BaseNormalize):
     DAILY_FORMAT = "%Y-%m-%d"
 
     def __init__(self, date_field_name: str = "date", symbol_field_name: str = "symbol", **kwargs):
+        self.commod_only = kwargs.get('commod_only', 0)
         super(RqdataNormalize, self).__init__(date_field_name, symbol_field_name, **kwargs)
 
     @staticmethod
@@ -300,18 +348,20 @@ class RqdataNormalize(BaseNormalize):
     def _get_calendar_list(self) -> Iterable[pd.Timestamp]:
         return [x for x in get_calendar_list("ALL")]
 
-class RqdataNormalize1min(RqdataNormalize):
+class RqdataNormalizeIntraday(RqdataNormalize):
 
     def __init__(
-        self, qlib_data_1d_dir: [str, Path], date_field_name: str = "date", symbol_field_name: str = "symbol", **kwargs
+        self, qlib_data_1d_dir: [str, Path], date_field_name: str = "date", symbol_field_name: str = "symbol", interval: str = '1min', **kwargs
     ):
         self.qlib_data_1d_dir = qlib_data_1d_dir
         self.arctic_store = Arctic("127.0.0.1", tz_aware=True, tzinfo=pytz.timezone('Asia/Shanghai'))
         self.meta_lib = self.arctic_store.get_library("future_meta")
-        super(RqdataNormalize1min, self).__init__(date_field_name, symbol_field_name, **kwargs)
+        self.interval = interval
+        super(RqdataNormalizeIntraday, self).__init__(date_field_name, symbol_field_name, **kwargs)
+
 
     def _get_calendar_list(self) -> Iterable[pd.Timestamp]:
-        return self.generate_1min_from_daily(self.calendar_list_1d)
+        return self.generate_intraday_from_daily(self.calendar_list_1d)
 
     def _get_1d_calendar_list(self) -> Iterable[pd.Timestamp]:
         import qlib
@@ -354,14 +404,14 @@ class RqdataNormalize1min(RqdataNormalize):
                     curr_lb, curr_rb = interval
             merged.append((curr_lb, curr_rb))
 
-            return [(lb.time(), rb.time()) for lb, rb in merged]
+            return [(lb.time(), rb.time()) for lb, rb in merged if self.commod_only < 2 or time(8, 0)<lb.time()<time(17, 0) and time(8, 0)<rb.time()<time(17, 0)]
 
         metas = {x: self.meta_lib.read(x) for x in self.meta_lib.list_symbols() if '888' in x}
-        trading_hours = {k: v['trading_hours'] for k, v in metas.items()}
+        trading_hours = {k: v['trading_hours'] for k, v in metas.items() if not self.commod_only > 1 or v['underlying_symbol'] not in {'IF', 'IC', 'IH', 'IM', 'T', 'TS', 'TF'}}
         open_periods_sets = [[tuple(x.split('-')) for x in th.split(',')] for th in trading_hours.values()]
         return _merge_union_interval(open_periods_sets)
 
-    def generate_1min_from_daily(self, calendars: Iterable) -> pd.Index:
+    def generate_intraday_from_daily(self, calendars: Iterable) -> pd.Index:
 
         def _generate_offset_intervals(time_interval):
             left_time_delta = pd.Timedelta(hours=time_interval[0].hour, minutes=time_interval[0].minute, seconds=time_interval[0].second)
@@ -381,7 +431,7 @@ class RqdataNormalize1min(RqdataNormalize):
                     pd.date_range(
                         pd.Timestamp(_day).normalize() + _range[0],
                         pd.Timestamp(_day).normalize() + _range[1],
-                        freq="1 min",
+                        freq=self.interval,
                     )
                 )
 
@@ -389,7 +439,7 @@ class RqdataNormalize1min(RqdataNormalize):
 
 
 class Run(BaseRun):
-    def __init__(self, source_dir=None, normalize_dir=None, max_workers=1, interval="1d"):
+    def __init__(self, source_dir=None, normalize_dir=None, max_workers=1, interval="1d", commod_only=0):
         """
 
         Parameters
@@ -402,8 +452,11 @@ class Run(BaseRun):
             Concurrent number, default is 1; when collecting data, it is recommended that max_workers be set to 1
         interval: str
             freq, value from [1min, 1d], default 1d
+        commod_only: int
+            0=all species, all time; 1=all species, day only; 2=commodity only, all time, 3=commodity only, day only
         """
         self.suffix = 'day' if interval in ('d', '1d') else interval
+        self.commod_only = commod_only
         super().__init__(source_dir, normalize_dir, max_workers, interval)
 
     @property
@@ -414,7 +467,7 @@ class Run(BaseRun):
     def normalize_class_name(self):
         if self.suffix == 'day':
             return f"RqdataNormalize"
-        return f"RqdataNormalize{self.interval}"
+        return f"RqdataNormalizeIntraday"
 
     @property
     def default_base_dir(self) -> [Path, str]:
@@ -457,7 +510,18 @@ class Run(BaseRun):
             # get 1m data
             $ python collector.py download_data --source_dir ~/.qlib/stock_data/source --region CN --start 2020-11-01 --end 2020-11-10 --delay 0.1 --interval 1m
         """
-        super(Run, self).download_data(max_collector_count, 0.5, start, end, check_data_length, limit_nums)
+        RqdataCollector(
+            self.source_dir,
+            max_workers=self.max_workers,
+            max_collector_count=max_collector_count,
+            start=start,
+            end=end,
+            commod_only=self.commod_only,
+            interval=self.interval,
+            check_data_length=check_data_length,
+            limit_nums=limit_nums,
+
+        ).collector_data()
 
     def normalize_data(
         self,
@@ -492,7 +556,9 @@ class Run(BaseRun):
             target_dir=self.normalize_dir,
             normalize_class=_class,
             max_workers=self.max_workers,
-            qlib_data_1d_dir = qlib_data_1d_dir
+            qlib_data_1d_dir = qlib_data_1d_dir,
+            interval=self.interval,
+            commod_only=self.commod_only,
         )
         yc.normalize()
 
@@ -545,7 +611,7 @@ class Run(BaseRun):
             else self.max_workers
         )
         # # download data from Rqdata
-        self.download_data(max_collector_count=1, start=trading_date, end=end_date, check_data_length=check_data_length)
+        # self.download_data(max_collector_count=1, start=trading_date, end=end_date, check_data_length=check_data_length)
         #
         # # normalize data
         self.normalize_data(qlib_data_1d_dir)
@@ -569,13 +635,16 @@ class Run(BaseRun):
             #all_instrument_path = instrument_dir.joinpath(_dump.INSTRUMENTS_FILE_NAME)
             all_instrument_date_range = pd.read_csv(instruments_dir.joinpath(_dump.INSTRUMENTS_FILE_NAME), sep='\t', header=None)
 
-            def check_symbol(symbol, suffix):
+            def check_symbol(symbol, suffix, commod_only):
                 base, _ = symbol.rsplit('_', 1)
-                return base.endswith(suffix) and base[:-len(suffix)].isalpha()
+                und_code = base[:-len(suffix)]
+                if commod_only > 1 and und_code in {'IF', 'IC', 'IH', 'IM', 'T', 'TS', 'TF'}:
+                    return False
+                return base.endswith(suffix) and und_code.isalpha()
 
             for suffix, name in [('88', 'continuous'), ('888', 'cont_prev_close_spread', ), ('889', 'cont_open_spread'), ('890', 'cont_prev_close_ratio', ), ('891', 'cont_open_ratio')]:
                 this_kind_conti = all_instrument_date_range[
-                    all_instrument_date_range.iloc[:, 0].apply(partial(check_symbol, suffix=suffix))
+                    all_instrument_date_range.iloc[:, 0].apply(partial(check_symbol, suffix=suffix, commod_only=self.commod_only))
                 ]
                 this_kind_conti.to_csv(instruments_dir.joinpath(f"{name}.txt"), header=False,
                                                sep=_dump.INSTRUMENTS_SEP, index=False)
@@ -583,11 +652,12 @@ class Run(BaseRun):
 if __name__ == "__main__":
     #fire.Fire(Run)
     runner = Run(
-        source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_1m\source_1m",
-        normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_1m\normalize_1m",
+        source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_commod\source",
+        normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_commod\normalize",
         max_workers=8,
-        interval='1min'
+        interval='15min',
+        commod_only=3,
     )
     # runner.download_data(max_collector_count=1, start=pd.Timestamp('2017-01-01'), end=pd.Timestamp.now().strftime("%Y-%m-%d"))
     # runner.normalize_data(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_1m")
-    runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_1m", trading_date='2022-06-30', end_date=pd.Timestamp.now().strftime("%Y-%m-%d"))
+    runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_commod", trading_date='2017-01-01', end_date=pd.Timestamp.now().strftime("%Y-%m-%d"))

@@ -365,13 +365,8 @@ class SubplotsGraph:
             col = column_map["col"]
 
             _graph_data = getattr(_graph_obj, "data")
-            # for _item in _graph_data:
-            #     _item.pop('xaxis', None)
-            #     _item.pop('yaxis', None)
-
             for _g_obj in _graph_data:
                 self._figure.add_trace(_g_obj, row=row, col=col)
-
         if self._sub_graph_layout is not None:
             for k, v in self._sub_graph_layout.items():
                 self._figure["layout"][k].update(v)
@@ -383,3 +378,39 @@ class SubplotsGraph:
     @property
     def figure(self):
         return self._figure
+
+
+class BoxGraph(BaseGraph):
+    _name = "box"
+
+    def __init__(self, df, data_column: str, category_column: str = None, layout: dict = None,
+                 graph_kwargs: dict = dict()):
+        name_dict = {'y': data_column}
+        graph_kwargs = {'boxmean': 'sd', 'showlegend': False}.update(graph_kwargs)
+        if category_column:
+            df.sort_values(by=category_column, inplace=True)
+            name_dict['x'] = category_column
+        super().__init__(df, layout, graph_kwargs, name_dict)
+
+    def _get_data(self) -> list:
+        """
+        :return:
+        """
+        quantiles = self._df.groupby('group')[self._name_dict['y']].describe(
+            percentiles=[0.001, 0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99, 0.999])
+
+        _data = [
+            self.get_instance_with_graph_parameters(
+                graph_type=self._graph_type,
+                x=quantiles.index,
+                q1=quantiles["25%"],
+                median=quantiles["50%"],
+                q3=quantiles["75%"],
+                lowerfence=quantiles["0.1%"],
+                upperfence=quantiles["99.9%"],
+                mean=quantiles["mean"],
+                sd=quantiles["std"],
+                **self._graph_kwargs
+            )
+        ]
+        return _data

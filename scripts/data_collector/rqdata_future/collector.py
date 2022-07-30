@@ -2,7 +2,7 @@
 # Licensed under the MIT License.
 import datetime
 import traceback
-
+import re
 import pytz
 import sys
 import copy
@@ -34,10 +34,12 @@ INDEXES = {"csi300": "000300", "csi100": "000903", "csi500": "000905", 'csiconve
 
 INDICATOR_COLS = ['remaining_size', 'turnover_rate', "call_status",
                   'convertible_market_cap_ratio', 'conversion_price_reset_status']
+SYMBOL_PATTERN = re.compile(r"([A-Za-z]+)(\d+)_([A-Za-z]+)")
 
 from dump_bin import DumpDataUpdate, DumpDataAll
 from data_collector.base import BaseCollector, BaseNormalize, BaseRun, Normalize
 from data_collector.utils import get_calendar_list
+
 
 def _process(tt):
     tl, tr = pd.Timestamp(tt[0]) - pd.Timedelta(minutes=1), pd.Timestamp(tt[1])
@@ -125,20 +127,57 @@ class RqdataCollector(BaseCollector):
         if interval not in {'d', '1d', '1min', '15min'}:
             raise ValueError(f"cannot support {interval}")
         read_interval = 'd' if interval.endswith('d') else '1m'
+        obj = re.match(SYMBOL_PATTERN, symbol)
+        und_sym, time_code, exch_str = obj.groups()
         db_symbol = symbol + '_' + read_interval
         _result = self.bar_lib.read(
             db_symbol, chunk_range=DateRange(start_datetime.tz_localize(None), end_datetime.tz_localize(None))
         )
-
         try:
             _result = _result.set_index('date').sort_index()
         except:
             print(start_datetime, end_datetime, db_symbol, symbol)
 
+        if exch_str == 'CZCE' and read_interval == '1m' and time_code not in {'888', '889', '890', '891'}:
+            _result['turnover'] = (_result['high_price'] + _result['low_price'] + _result['close_price'])/3.0 * \
+                                  _result['volume'] * self.symbol_dict[symbol]["contract_multiplier"]
+
         _limits = self.limit_lib.read(
             symbol, chunk_range = DateRange(start_datetime.tz_localize(None).normalize(), end_datetime.tz_localize(None)),
             columns=['limit_up', 'limit_down', 'settlement']
         )
+
+        if time_code in {'888', '889', '890', '891'}:
+            unadj_db_symbol = db_symbol.replace(time_code, '88')
+            if exch_str == 'CZCE' and read_interval == '1m':
+                unadjclose = self.bar_lib.read(
+                    unadj_db_symbol, chunk_range=DateRange(start_datetime.tz_localize(None), end_datetime.tz_localize(None)),
+                    columns = ['date', 'close_price', 'high_price', 'low_price', 'turnover', 'volume', 'open_interest'],
+                ).set_index('date').sort_index()
+                unadjclose['turnover'] = (unadjclose['high_price'] + unadjclose['low_price'] + unadjclose['close_price'])/3.0 * \
+                                      unadjclose['volume'] * self.symbol_dict[symbol]["contract_multiplier"]
+            else:
+                unadjclose = self.bar_lib.read(
+                    unadj_db_symbol, chunk_range=DateRange(start_datetime.tz_localize(None), end_datetime.tz_localize(None)),
+                    columns = ['date', 'close_price', 'turnover', 'volume', 'open_interest'],
+                ).set_index('date').sort_index()
+            _result['unadjclose'] = unadjclose['close_price']
+            _result['volume'] = unadjclose['volume']
+            if exch_str == 'CZCE':
+                _result['turnover'] = unadjclose['turnover']
+            else:
+                _result['turnover'] = unadjclose['turnover']
+            _result['open_interest'] = unadjclose['open_interest']
+
+            if time_code in ('888', '889'):
+                _result['factor'] = _result['close_price'] - _result['unadjclose']
+            elif time_code in ('890', '891'):
+                _result['factor'] = _result['close_price'] / _result['unadjclose']
+            else:
+                raise ValueError("unknow time code")
+        else:
+            _result['factor'] = 1.0
+            _result['unadjclose'] = _result['close_price']
 
         if interval not in {'d', '1d'}:
             _limits.index = _limits.index - pd.Timedelta('6H')
@@ -169,14 +208,22 @@ class RqdataCollector(BaseCollector):
                     weekmask='Mon Tue Wed Thu Fri'
                 )
                 _result = resample(_result, rule=cbi).agg(
-                    {'open_price': 'first', "high_price": 'max', 'low_price': 'min', 'close_price': 'last', 'volume': 'sum',
-                     'turnover': 'sum', 'open_interest': 'sum'}).dropna(how='all', subset=['open_price', 'high_price', 'low_price', 'close_price'])
+                    {'open_price': 'first', "high_price": 'max', 'low_price': 'min', 'close_price': 'last', 'unadjclose': 'last', 'volume': 'sum',
+                     'turnover': 'sum', 'open_interest': 'last', 'factor': 'mean'}).dropna(how='all', subset=['open_price', 'high_price', 'low_price', 'close_price'])
                 if day_only:
                     _result = _result.between_time("08:00", "17:00")
             except:
                 logger.error(
                     f"resampling failed for {db_symbol} from {start_datetime} to {end_datetime}: {traceback.format_exc()}")
                 raise
+
+
+        if obj is not None and obj[2] in ('888', '889'):
+            _result['vwap'] = _result['turnover'] / _result['volume'] / self.symbol_dict[symbol]["contract_multiplier"] + _result['factor']
+        else:
+            _result['vwap'] = _result['turnover'] / _result['volume'] / self.symbol_dict[symbol]["contract_multiplier"] * _result['factor']
+
+        _result['vwap'].fillna(_result['close_price'], inplace=True)
 
         return pd.DataFrame() if _result is None else _result
 
@@ -197,7 +244,7 @@ class RqdataCollector(BaseCollector):
 
         logger.info("get china future contracts......")
         self.symbol_dict = {x: self.meta_lib.read(x) for x in self.meta_lib.list_symbols()}
-        symbols = [k for k, v in self.symbol_dict.items() if k!='_exchange_underlying_mapping' and symbol_validation(k, v)]
+        symbols = [k for k, v in self.symbol_dict.items() if k!='_exchange_underlying_mapping' and symbol_validation(k, v)]# if '888' in k or '890' in k]
         logger.info(f"get {len(symbols)} symbols.")
         return symbols
 
@@ -328,10 +375,6 @@ class RqdataNormalize(BaseNormalize):
 
 
         df.sort_index(inplace=True)
-
-        df.loc[(df["volume"] <= 1e-10) | np.isnan(df["volume"]), list(set(df.columns) - {"symbol"})] = np.nan
-
-        _count = 0
 
         df["change"] = RqdataNormalize.calc_change(df, last_close)
 
@@ -611,7 +654,7 @@ class Run(BaseRun):
             else self.max_workers
         )
         # # download data from Rqdata
-        # self.download_data(max_collector_count=1, start=trading_date, end=end_date, check_data_length=check_data_length)
+        self.download_data(max_collector_count=1, start=trading_date, end=end_date, check_data_length=check_data_length)
         #
         # # normalize data
         self.normalize_data(qlib_data_1d_dir)
@@ -651,13 +694,14 @@ class Run(BaseRun):
 
 if __name__ == "__main__":
     #fire.Fire(Run)
+    interval = '15min'
     runner = Run(
-        source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_commod\source",
-        normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_commod\normalize",
+        source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_commod\source" + interval,
+        normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_commod\normalize" + interval,
         max_workers=8,
-        interval='15min',
+        interval=interval,
         commod_only=3,
     )
     # runner.download_data(max_collector_count=1, start=pd.Timestamp('2017-01-01'), end=pd.Timestamp.now().strftime("%Y-%m-%d"))
-    # runner.normalize_data(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_1m")
+    # runner.normalize_data(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_commod")
     runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_commod", trading_date='2017-01-01', end_date=pd.Timestamp.now().strftime("%Y-%m-%d"))

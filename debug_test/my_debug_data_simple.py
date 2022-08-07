@@ -10,8 +10,9 @@ if __name__ == '__main__':
         qlib.init(provider_uri=provider_uri, region=REG_CN)
     else:
         print("data not exist")
+    instruments = D.instruments('csi300')
 
-    fields = ['$close', '$high', '$low', "TrailingStop($close, $high, $low, -20, 1, (0.05, 0.02, 0.08))"]
-    ohlc_data = D.features(["SH000300"], fields, start_time='2021-01-01', end_time='2021-12-31', freq='day')
+    fields = ['$close', '$high', '$low', "ChangeInstrument('SH000300', $close)", "CSRank($close/$high)"]
+    ohlc_data = D.features(instruments, fields, start_time='2021-01-01', end_time='2021-12-31', freq='day')
     print(ohlc_data)
-    ohlc_data.to_csv(r"D:\test_trailing_stoploss_m1.csv")
+    ohlc_data.to_csv(r"D:\test_data.csv")

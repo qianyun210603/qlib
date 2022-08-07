@@ -1525,6 +1525,36 @@ class Cov(PairRolling):
     def __init__(self, feature_left, feature_right, N):
         super(Cov, self).__init__(feature_left, feature_right, N, "cov")
 
+#################### cross section operator ####################
+class XSectionOperator(ElemOperator):
+
+    def __init__(self, feature, population=None):
+        self.feature = feature
+        self.population = population
+
+    def set_population(self, population=None):
+        self.population = population
+
+    def _load_internal(self, instrument, start_index, end_index, *args) -> pd.Series:
+        raise NotImplementedError("This function must be implemented in your newly defined feature")
+
+
+class CSRank(XSectionOperator):
+
+    def _load_internal(self, instrument, start_index, end_index, *args) -> pd.Series:
+        shuffled = np.random.permutation(self.population)
+        serieses = [self.feature.load(inst, start_index, end_index, *args).rename(inst) for inst in shuffled]
+        df = pd.concat(serieses, axis=1)
+        return df.rank(axis=1, pct=True)[instrument]
+
+class CSScale(XSectionOperator):
+
+    def _load_internal(self, instrument, start_index, end_index, *args) -> pd.Series:
+        shuffled = np.random.permutation(self.population)
+        serieses = [self.feature.load(inst, start_index, end_index, *args).rename(inst) for inst in shuffled]
+        df = pd.concat(serieses, axis=1)
+        return df[instrument] / df.abs().sum(axis=1)
+
 
 #################### other kind of operator ####################
 # trailing stop loss
@@ -1686,6 +1716,8 @@ OpsList = [
     Feature,
     PFeature,
     TrailingStop,
+    CSRank,
+    CSScale,
 ] + [TResample]
 
 

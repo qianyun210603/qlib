@@ -37,7 +37,7 @@ from ..utils import (
     get_period_list,
 )
 from ..utils.paral import ParallelExt
-from .ops import Operators  # pylint: disable=W0611  # noqa: F401
+from .ops import Operators, XSectionOperator  # pylint: disable=W0611  # noqa: F401
 
 
 class ProviderBackendMixin:
@@ -45,6 +45,8 @@ class ProviderBackendMixin:
     This helper class tries to make the provider based on storage backend more convenient
     It is not necessary to inherent this class if that provider don't rely on the backend storage
     """
+    def __init__(self, backend={}):
+        self.backend = backend
 
     def get_default_backend(self):
         backend = {}
@@ -62,6 +64,7 @@ class ProviderBackendMixin:
         return init_instance_by_config(backend)
 
 
+# noinspection PyTypeChecker,PyUnresolvedReferences
 class CalendarProvider(abc.ABC):
     """Calendar provider base class
 
@@ -386,6 +389,7 @@ class ExpressionProvider(abc.ABC):
     """
 
     def __init__(self):
+        self.population = []
         self.expression_instance_cache = {}
 
     def get_expression_instance(self, field):
@@ -406,7 +410,7 @@ class ExpressionProvider(abc.ABC):
         return expression
 
     @abc.abstractmethod
-    def expression(self, instrument, field, start_time=None, end_time=None, freq="day") -> pd.Series:
+    def expression(self, instrument, field, start_time=None, end_time=None, freq="day", population=[]) -> pd.Series:
         """Get Expression data.
 
         The responsibility of `expression`
@@ -439,6 +443,7 @@ class ExpressionProvider(abc.ABC):
         raise NotImplementedError("Subclass of ExpressionProvider must implement `Expression` method")
 
 
+# noinspection PyUnresolvedReferences
 class DatasetProvider(abc.ABC):
     """Dataset provider class
 
@@ -564,7 +569,7 @@ class DatasetProvider(abc.ABC):
             inst_l.append(inst)
             task_l.append(
                 delayed(DatasetProvider.inst_calculator)(
-                    inst, start_time, end_time, freq, normalize_column_names, spans, C, inst_processors
+                    inst, start_time, end_time, freq, normalize_column_names, spans, C, inst_processors, list(instruments_d)
                 )
             )
 
@@ -594,7 +599,7 @@ class DatasetProvider(abc.ABC):
         return data
 
     @staticmethod
-    def inst_calculator(inst, start_time, end_time, freq, column_names, spans=None, g_config=None, inst_processors=[]):
+    def inst_calculator(inst, start_time, end_time, freq, column_names, spans=None, g_config=None, inst_processors=[], population=[]):
         """
         Calculate the expressions for **one** instrument, return a df result.
         If the expression has been calculated before, load from cache.
@@ -609,7 +614,7 @@ class DatasetProvider(abc.ABC):
         obj = dict()
         for field in column_names:
             #  The client does not have expression provider, the data will be loaded from cache using static method.
-            obj[field] = ExpressionD.expression(inst, field, start_time, end_time, freq)
+            obj[field] = ExpressionD.expression(inst, field, start_time, end_time, freq, population)
 
         data = pd.DataFrame(obj)
         if not data.empty and not np.issubdtype(data.index.dtype, np.dtype("M")):
@@ -639,8 +644,9 @@ class LocalCalendarProvider(CalendarProvider, ProviderBackendMixin):
 
     def __init__(self, remote=False, backend={}):
         super().__init__()
+        ProviderBackendMixin.__init__(self, backend)
         self.remote = remote
-        self.backend = backend
+        # self.backend = backend
 
     def load_calendar(self, freq, future):
         """Load original calendar timestamp from file.
@@ -672,6 +678,7 @@ class LocalCalendarProvider(CalendarProvider, ProviderBackendMixin):
         return [pd.Timestamp(x) for x in backend_obj]
 
 
+# noinspection PyUnresolvedReferences
 class LocalInstrumentProvider(InstrumentProvider, ProviderBackendMixin):
     """Local instrument data provider class
 
@@ -680,7 +687,8 @@ class LocalInstrumentProvider(InstrumentProvider, ProviderBackendMixin):
 
     def __init__(self, backend={}) -> None:
         super().__init__()
-        self.backend = backend
+        ProviderBackendMixin.__init__(self, backend)
+        # self.backend = backend
 
     def _load_instruments(self, market, freq):
         return self.backend_obj(market=market, freq=freq).data
@@ -729,7 +737,8 @@ class LocalFeatureProvider(FeatureProvider, ProviderBackendMixin):
     def __init__(self, remote=False, backend={}):
         super().__init__()
         self.remote = remote
-        self.backend = backend
+        ProviderBackendMixin.__init__(self, backend)
+        # self.backend = backend
 
     def feature(self, instrument, field, start_index, end_index, freq):
         # validate
@@ -837,8 +846,11 @@ class LocalExpressionProvider(ExpressionProvider):
         super().__init__()
         self.time2idx = time2idx
 
-    def expression(self, instrument, field, start_time=None, end_time=None, freq="day"):
+    def expression(self, instrument, field, start_time=None, end_time=None, freq="day", population=[]):
         expression = self.get_expression_instance(field)
+        if isinstance(expression, XSectionOperator):
+            if expression.population is None:
+                expression.set_population(population)
         start_time = time_to_slc_point(start_time)
         end_time = time_to_slc_point(end_time)
 
@@ -1180,14 +1192,14 @@ class BaseProvider:
         fields = list(fields)  # In case of tuple.
         try:
             return DatasetD.dataset(
-                instruments, fields, start_time, end_time, freq, disk_cache, inst_processors=inst_processors
+                instruments, fields, start_time, end_time, freq, inst_processors=inst_processors
             )
         except TypeError:
             return DatasetD.dataset(instruments, fields, start_time, end_time, freq, inst_processors=inst_processors)
 
 
 class LocalProvider(BaseProvider):
-    def _uri(self, type, **kwargs):
+    def _uri(self, type_, **kwargs):
         """_uri
         The server hope to get the uri of the request. The uri will be decided
         by the dataprovider. For ex, different cache layer has different uri.
@@ -1195,11 +1207,11 @@ class LocalProvider(BaseProvider):
         :param type: The type of resource for the uri
         :param **kwargs:
         """
-        if type == "calendar":
+        if type_ == "calendar":
             return Cal._uri(**kwargs)
-        elif type == "instrument":
+        elif type_ == "instrument":
             return Inst._uri(**kwargs)
-        elif type == "feature":
+        elif type_ == "feature":
             return DatasetD._uri(**kwargs)
 
     def features_uri(self, instruments, fields, start_time, end_time, freq, disk_cache=1):

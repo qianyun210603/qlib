@@ -110,7 +110,7 @@ def _group_return(pred_label: pd.DataFrame = None, reverse: bool = False, N: int
         years = (cum_ret.index[-1] - cum_ret.index[0]) / pd.Timedelta(days=365)
 
         return pd.Series([mean_ret, std_ret, return_series.skew(), return_series.kurt(), cum_ret[-1] / years,
-                          mean_ret / std_ret * np.sqrt(n), max_dd, max_dd / cum_ret[-1]],
+                          mean_ret / std_ret * np.sqrt(n), max_dd, cum_ret[-1]/max_dd ],
                          index=['periodwise return mean', 'return std', 'return skew', 'return kurt', 'annual return',
                                 'Sharp ratio', 'max drawdown', 'Calmar ratio'])
 

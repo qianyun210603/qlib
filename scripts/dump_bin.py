@@ -320,7 +320,7 @@ class DumpDataAll(DumpDataBase):
 
 class DumpDataFix(DumpDataAll):
     def _dump_instruments(self):
-        logger.info("start dump instruments......")
+        logger.info("start fix dump instruments......")
         _fun = partial(self._get_date, is_begin_end=True)
         new_stock_files = sorted(
             filter(

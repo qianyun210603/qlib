@@ -28,7 +28,7 @@ INDEXES = {"csi300": "000300", "csi100": "000903", "csi500": "000905", 'csiconve
 INDICATOR_COLS = ['remaining_size', 'turnover_rate', "call_status",
                   'convertible_market_cap_ratio', 'conversion_price_reset_status']
 
-from dump_bin import DumpDataUpdate, DumpDataAll
+from dump_bin import DumpDataUpdate, DumpDataAll, DumpDataFix
 from data_collector.base import BaseCollector, BaseNormalize, BaseRun, Normalize
 from data_collector.utils import get_calendar_list
 from qlib.data.inst_info import ConvertInstrumentInfo
@@ -486,6 +486,7 @@ class Run(BaseRun):
         trading_date: str = None,
         end_date: str = None,
         check_data_length: bool = False,
+        is_fix: bool = False
     ):
         """update Rqdata data to bin
 
@@ -538,7 +539,7 @@ class Run(BaseRun):
         # dump bin
         qlib_dir = Path(qlib_data_1d_dir).expanduser().resolve()
 
-        DumpClass = DumpDataUpdate if qlib_dir.joinpath(r"calendars\day.txt").exists() else DumpDataAll
+        DumpClass = DumpDataFix if is_fix else DumpDataUpdate if qlib_dir.joinpath(r"calendars\day.txt").exists() else DumpDataAll
         _dump = DumpClass(
             csv_path=self.normalize_dir,
             qlib_dir=qlib_data_1d_dir,

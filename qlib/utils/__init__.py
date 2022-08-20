@@ -66,10 +66,12 @@ def read_bin(file_path: Union[str, Path], start_index, end_index):
 def get_period_list(first: int, last: int, quarterly: bool) -> List[int]:
     """
     This method will be used in PIT database.
-    It return all the possible values between `first` and `end`  (first and end is included)
+    It returns all the possible values between `first` and `end`  (first and end is included)
 
     Parameters
     ----------
+    first: int
+    last: int
     quarterly : bool
         will it return quarterly index or yearly index.
 
@@ -93,7 +95,7 @@ def get_period_list(first: int, last: int, quarterly: bool) -> List[int]:
         return res
 
 
-def get_period_offset(first_year, period, quarterly):
+def get_period_offset(first_year: int, period: int, quarterly: bool):
     if quarterly:
         offset = (period // 100 - first_year) * 4 + period % 100 - 1
     else:
@@ -101,17 +103,21 @@ def get_period_offset(first_year, period, quarterly):
     return offset
 
 
-def read_period_data(index_path, data_path, period, cur_date_int: int, quarterly, last_period_index: int = None):
+def read_period_data(index_path, data_path, period, cur_date_int: int, quarterly: bool, last_period_index: int = None):
     """
     At `cur_date`(e.g. 20190102), read the information at `period`(e.g. 201803).
     Only the updating info before cur_date or at cur_date will be used.
 
     Parameters
     ----------
+    index_path:
+    data_path
     period: int
         date period represented by interger, e.g. 201901 corresponds to the first quarter in 2019
     cur_date_int: int
         date which represented by interger, e.g. 20190102
+    quarterly: bool
+        num quarter instead of num of year
     last_period_index: int
         it is a optional parameter; it is designed to avoid repeatedly access the .index data of PIT database when
         sequentially observing the data (Because the latest index of a specific period of data certainly appear in after the one in last observation).
@@ -794,6 +800,7 @@ def lazy_sort_index(df: pd.DataFrame, axis=0) -> pd.DataFrame:
     Parameters
     ----------
     df : pd.DataFrame
+    axis: index->0, columns->1
 
     Returns
     -------
@@ -957,6 +964,8 @@ def auto_filter_kwargs(func: Callable, warning=True) -> Callable:
     ----------
     func : Callable
         The original function
+    warning: bool
+        warning if keys are ignored
 
     Returns
     -------
@@ -1003,6 +1012,7 @@ def register_wrapper(wrapper, cls_or_obj, module_path=None):
 
     :param wrapper: A wrapper.
     :param cls_or_obj:  A class or class name or object instance.
+    :param module_path:  class path. e.g. "qlib.data"
     """
     if isinstance(cls_or_obj, str):
         module = get_module_by_module_path(module_path)
@@ -1068,4 +1078,5 @@ __all__ = [
     "get_tmp_file_with_buffer",
     "set_log_with_config",
     "init_instance_by_config",
+    "get_callable_kwargs",
 ]

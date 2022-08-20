@@ -848,9 +848,8 @@ class LocalExpressionProvider(ExpressionProvider):
 
     def expression(self, instrument, field, start_time=None, end_time=None, freq="day", population=[]):
         expression = self.get_expression_instance(field)
-        if isinstance(expression, XSectionOperator):
-            if expression.population is None:
-                expression.set_population(population)
+
+        expression.set_population(population)
         start_time = time_to_slc_point(start_time)
         end_time = time_to_slc_point(end_time)
 

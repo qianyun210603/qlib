@@ -256,8 +256,10 @@ class RqdataCollector(BaseCollector):
         ----------
         symbol: str
             instrument code
-        df : pd.DataFrame
+        df: pd.DataFrame
             df.columns must contain "symbol" and "datetime"
+        info:
+            the information of the convert bond
         """
         if df is None or df.empty:
             logger.warning(f"{symbol} is empty")

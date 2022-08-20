@@ -274,3 +274,13 @@ class ExpressionOps(Expression):
     This kind of feature will use operator for feature
     construction on the fly.
     """
+
+    def set_population(self, population):
+        if hasattr(self, 'population') and self.population is None:
+            self.population = population
+
+        for _, member_var in vars(self).items():
+            if isinstance(member_var, ExpressionOps):
+                member_var.set_population(population)
+
+

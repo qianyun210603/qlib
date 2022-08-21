@@ -27,6 +27,11 @@ class Expression(abc.ABC):
     def __repr__(self):
         return str(self)
 
+    def __neg__(self):
+        from .ops import Neg
+
+        return Neg(self)
+
     def __gt__(self, other):
         from .ops import Gt  # pylint: disable=C0415
 
@@ -245,8 +250,9 @@ class Feature(Expression):
     def __str__(self):
         return "$" + self._name
 
-    def _load_internal(self, instrument, start_index, end_index, freq):
+    def _load_internal(self, instrument, start_index, end_index, *args):
         # load
+        freq = args
         from .data import FeatureD  # pylint: disable=C0415
 
         return FeatureD.feature(instrument, str(self), start_index, end_index, freq)
@@ -262,7 +268,9 @@ class PFeature(Feature):
     def __str__(self):
         return "$$" + self._name
 
-    def _load_internal(self, instrument, start_index, end_index, cur_time, period=None):
+    def _load_internal(self, instrument, start_index, end_index, *args):
+        cur_time = args[0]
+        period = args[1] if len(args) > 1 else None
         from .data import PITD  # pylint: disable=C0415
 
         return PITD.period_feature(instrument, str(self), start_index, end_index, cur_time, period)
@@ -282,5 +290,3 @@ class ExpressionOps(Expression):
         for _, member_var in vars(self).items():
             if isinstance(member_var, ExpressionOps):
                 member_var.set_population(population)
-
-

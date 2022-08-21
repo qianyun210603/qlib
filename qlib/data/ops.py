@@ -54,10 +54,6 @@ class ElemOperator(ExpressionOps):
     def __str__(self):
         return "{}({})".format(type(self).__name__, self.feature)
 
-    @abc.abstractmethod
-    def _load_internal(self, instrument, start_index, end_index, *args) -> pd.Series:
-        raise NotImplementedError("This function must be implemented in your newly defined feature")
-
     def get_longest_back_rolling(self):
         return self.feature.get_longest_back_rolling()
 
@@ -96,6 +92,11 @@ class ChangeInstrument(ElemOperator):
 
     def _load_internal(self, instrument, start_index, end_index, *args):
         return self.feature.load(instrument, start_index, end_index, *args)
+
+class Neg(ElemOperator):
+    def _load_internal(self, instrument, start_index, end_index, *args):
+        series = self.feature.load(instrument, start_index, end_index, *args)
+        return -series
 
 
 class NpElemOperator(ElemOperator):
@@ -784,6 +785,41 @@ class Rolling(ExpressionOps):
             lft_etd = max(lft_etd + self.N - 1, lft_etd)
             return lft_etd, rght_etd
 
+class NpRolling(Rolling):
+    """Rolling Operator for some operations which hasn't been implemented in pandas.Rolling,
+    we use raw numpy function in such cases
+
+    Parameters
+    ----------
+    feature : Expression
+        feature instance
+    N : int
+        rolling window size
+
+    Returns
+    ----------
+    Expression
+        a feature instance with rolling Product
+    """
+    def __init__(self, feature, N, func):
+        super().__init__(feature, N, func)
+        self.npfunc = getattr(np, func)
+
+    def _load_internal(self, instrument, start_index, end_index, *args):
+        series = self.feature.load(instrument, start_index, end_index, *args)
+        # NOTE: remove all null check,
+        # now it's user's responsibility to decide whether to use features in null days
+        # isnull = series.isnull() # NOTE: isnull = NaN, inf is not null
+        if isinstance(self.N, int) and self.N == 0:
+            series = series.expanding(min_periods=1).apply(self.npfunc, raw=True)
+        elif isinstance(self.N, float) and 0 < self.N < 1:
+            series = series.ewm(alpha=self.N, min_periods=1).mean()
+        else:
+            series = series.rolling(self.N, min_periods=1).apply(self.npfunc, raw=True)
+            # series.iloc[:self.N-1] = np.nan
+        # series[isnull] = np.nan
+        return series
+
 
 class Ref(Rolling):
     """Feature Reference
@@ -869,6 +905,26 @@ class Sum(Rolling):
 
     def __init__(self, feature, N):
         super(Sum, self).__init__(feature, N, "sum")
+
+
+class Prod(NpRolling):
+    """Rolling Sum
+
+    Parameters
+    ----------
+    feature : Expression
+        feature instance
+    N : int
+        rolling window size
+
+    Returns
+    ----------
+    Expression
+        a feature instance with rolling sum
+    """
+
+    def __init__(self, feature, N):
+        super(Prod, self).__init__(feature, N, "prod")
 
 
 class Std(Rolling):
@@ -1659,11 +1715,13 @@ class TResample(ElemOperator):
 TOpsList = [TResample]
 OpsList = [
     ChangeInstrument,
+    Neg,
     Rolling,
     Ref,
     Max,
     Min,
     Sum,
+    Prod,
     Mean,
     Std,
     Var,

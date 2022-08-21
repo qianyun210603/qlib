@@ -7,6 +7,7 @@ from __future__ import print_function
 
 import numpy as np
 import pandas as pd
+import abc
 
 from typing import Union, List, Type
 from .base import Expression, ExpressionOps, Feature, PFeature
@@ -53,6 +54,10 @@ class ElemOperator(ExpressionOps):
     def __str__(self):
         return "{}({})".format(type(self).__name__, self.feature)
 
+    @abc.abstractmethod
+    def _load_internal(self, instrument, start_index, end_index, *args) -> pd.Series:
+        raise NotImplementedError("This function must be implemented in your newly defined feature")
+
     def get_longest_back_rolling(self):
         return self.feature.get_longest_back_rolling()
 
@@ -80,7 +85,7 @@ class ChangeInstrument(ElemOperator):
 
     def __init__(self, instrument, feature):
         self.instrument = instrument
-        self.feature = feature
+        super().__init__(feature)
 
     def __str__(self):
         return "{}('{}',{})".format(type(self).__name__, self.instrument, self.feature)
@@ -250,6 +255,9 @@ class PairOperator(ExpressionOps):
     def __str__(self):
         return "{}({},{})".format(type(self).__name__, self.feature_left, self.feature_right)
 
+    @abc.abstractmethod
+    def _load_internal(self, instrument, start_index, end_index, *args) -> pd.Series:
+        raise NotImplementedError("This function must be implemented in your newly defined feature")
     def get_longest_back_rolling(self):
         if isinstance(self.feature_left, (Expression,)):
             left_br = self.feature_left.get_longest_back_rolling()
@@ -1513,8 +1521,8 @@ class Cov(PairRolling):
 class XSectionOperator(ElemOperator):
 
     def __init__(self, feature, population=None):
-        self.feature = feature
         self.population = population
+        super().__init__(feature)
 
     def set_population(self, population=None):
         self.population = population
@@ -1544,7 +1552,7 @@ class CSScale(XSectionOperator):
 # trailing stop loss
 class TrailingStop(ExpressionOps):
 
-    def __init__(self, feature_c, feature_h, feature_l, N, stop_loss_mode=0, stop_loss_threshold=0.05):
+    def __init__(self, feature_c, feature_h, feature_l, N, stop_loss_mode=0, stop_loss_threshold=(0.05, 0.02, 0.06)):
         self.feature_c = feature_c
         self.feature_h = feature_h
         self.feature_l = feature_l
@@ -1629,7 +1637,7 @@ class TResample(ElemOperator):
             The method to get the resampled values
             Some expression are high frequently used
         """
-        self.feature = feature
+        super().__init__(feature)
         self.freq = freq
         self.func = func
 

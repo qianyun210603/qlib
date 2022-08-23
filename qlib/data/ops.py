@@ -1580,9 +1580,6 @@ class XSectionOperator(ElemOperator):
         self.population = population
         super().__init__(feature)
 
-    def set_population(self, population=None):
-        self.population = population
-
     def _load_internal(self, instrument, start_index, end_index, *args) -> pd.Series:
         raise NotImplementedError("This function must be implemented in your newly defined feature")
 

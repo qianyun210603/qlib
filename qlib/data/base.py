@@ -192,7 +192,7 @@ class Expression(abc.ABC):
         try:
             series = self._load_internal(instrument, start_index, end_index, *args)
         except Exception as e:
-            get_module_logger("data").debug(
+            get_module_logger("data").error(
                 f"Loading data error: instrument={instrument}, expression={str(self)}, "
                 f"start_index={start_index}, end_index={end_index}, args={args}. "
                 f"error info: {str(e)}"
@@ -252,7 +252,7 @@ class Feature(Expression):
 
     def _load_internal(self, instrument, start_index, end_index, *args):
         # load
-        freq = args
+        freq = args[0]
         from .data import FeatureD  # pylint: disable=C0415
 
         return FeatureD.feature(instrument, str(self), start_index, end_index, freq)

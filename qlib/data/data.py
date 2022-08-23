@@ -37,7 +37,7 @@ from ..utils import (
     get_period_list,
 )
 from ..utils.paral import ParallelExt
-from .ops import Operators, XSectionOperator  # pylint: disable=W0611  # noqa: F401
+from .ops import Operators, ExpressionOps  # pylint: disable=W0611  # noqa: F401
 
 
 class ProviderBackendMixin:
@@ -404,7 +404,7 @@ class ExpressionProvider(abc.ABC):
                 "ERROR: field [%s] contains invalid operator/variable [%s]" % (str(field), str(e).split()[1])
             )
             raise
-        except SyntaxError:
+        except (SyntaxError, TypeError):
             get_module_logger("data").exception("ERROR: field [%s] contains invalid syntax" % str(field))
             raise
         return expression
@@ -848,8 +848,8 @@ class LocalExpressionProvider(ExpressionProvider):
 
     def expression(self, instrument, field, start_time=None, end_time=None, freq="day", population=[]):
         expression = self.get_expression_instance(field)
-
-        expression.set_population(population)
+        if isinstance(expression, ExpressionOps):
+            expression.set_population(population)
         start_time = time_to_slc_point(start_time)
         end_time = time_to_slc_point(end_time)
 

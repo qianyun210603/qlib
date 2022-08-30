@@ -377,7 +377,7 @@ class HashStockFormat(Processor):
 class SymmetricOrthogonalization(Processor):
     """Apply Symmetric Orthogonalization on features to remove collinearity"""
 
-    def __init__(self, fields_group=None):
+    def __init__(self, fields_group='feature'):
         self.fields_group = fields_group
 
     def __call__(self, df: pd.DataFrame):
@@ -385,7 +385,7 @@ class SymmetricOrthogonalization(Processor):
             mat_M = np.dot(df.values.T, df.values)
             eigs, mat_U = np.linalg.eigh(mat_M)
             mat_S = np.dot(np.dot(mat_U, np.diag(1.0/np.sqrt(eigs))), mat_U.T)
-            df.values = np.dot(df.values, mat_S)
+            df = pd.DataFrame(np.dot(df.values, mat_S), columns=df.columns, index=df.index)
             return df
 
         cols = get_group_columns(df, self.fields_group)
@@ -396,10 +396,10 @@ class GramSchmidtOrthogonalization(Processor):
     """Apply Gram-Schmidt Orthogonalization on features to remove collinearity"""
 
     class GramSchmidtHelper(object):
-        def __init__(self, projection_order, orth_cols, label_col=None, eps=1e-15):
+        def __init__(self, projection_order, orth_cols, label_cols=None, eps=1e-15):
             self.orth_cols = orth_cols
             self.projection_order = projection_order
-            self.label_col = label_col
+            self.label_cols = label_cols
             self.processed_cols = []
             self.eps=eps
 
@@ -416,8 +416,7 @@ class GramSchmidtOrthogonalization(Processor):
             return df
 
         def _cal_max_vertical_component(self, df):
-            cos_vector = np.dot(df[self.orth_cols].T, df['LABEL0']) / (np.linalg.norm(df[self.orth_cols].T, axis=1)
-                                                                       * np.linalg.norm(df['LABEL0']))
+            cos_vector = np.dot(df[self.orth_cols].T, df[self.label_cols]) / np.linalg.norm(df[self.label_cols])
             max_col = self.orth_cols.pop(np.abs(cos_vector).argmax())
             self.processed_cols.append(max_col)
 
@@ -429,7 +428,6 @@ class GramSchmidtOrthogonalization(Processor):
                 df[max_remaining_col] = remainings[max_remaining_col] / remaining_norms[max_remaining_col]
                 self.processed_cols.append(max_remaining_col)
                 self.orth_cols.remove(max_remaining_col)
-
             return df
 
         def __call__(self, df: pd.DataFrame):
@@ -437,22 +435,24 @@ class GramSchmidtOrthogonalization(Processor):
                 self.orth_cols = self.processed_cols
                 self.processed_cols = []
 
-            df = df / df.apply(np.linalg.norm, axis=0, raw=True)
-            if self.projection_order == 'raw' or self.label_col not in df.columns or df[self.label_col].isna().all():
+            df[self.orth_cols] = df[self.orth_cols] / df[self.orth_cols].apply(np.linalg.norm, axis=0, raw=True)
+            if self.projection_order == 'raw' or df[self.label_cols].isna().all(axis=None):
                 return self._cal_raw(df)
             if self.projection_order == 'max_vertical_component':
+
                 return self._cal_max_vertical_component(df)
             raise NotImplementedError("Unimplemented Orthogonalization Order.")
 
-    def __init__(self, fields_group=None, projection_order='raw', label_col=None, eps=1e-15):
+    def __init__(self, fields_group='feature', projection_order='raw', label_group='label', eps=1e-15):
         self.fields_group = fields_group
         self.projection_order = projection_order
-        self.label_col = label_col
+        self.label_group = label_group
         self.eps = eps
 
     def __call__(self, df: pd.DataFrame):
-        df = df.sort_index(inplace=True)
+        df.sort_index(inplace=True)
         cols = get_group_columns(df, self.fields_group)
+        label_cols = None if self.projection_order == 'raw' else get_group_columns(df, self.label_group)
         return df.groupby("datetime").apply(GramSchmidtOrthogonalization.GramSchmidtHelper(
-            self.projection_order, orth_cols=cols, label_col=self.label_col, eps=self.eps
+            self.projection_order, orth_cols=list(cols), label_cols=label_cols, eps=self.eps
         ))

@@ -1079,4 +1079,5 @@ __all__ = [
     "set_log_with_config",
     "init_instance_by_config",
     "get_callable_kwargs",
+    "code_to_fname",
 ]

@@ -34,7 +34,6 @@ from data_collector.utils import get_calendar_list
 from qlib.data.inst_info import ConvertInstrumentInfo
 
 
-
 class RqdataCollector(BaseCollector):
 
     def __init__(
@@ -139,7 +138,7 @@ class RqdataCollector(BaseCollector):
         try:
             _resultb.set_index('date', inplace=True)
             convert_prices = self.convert_price_lib.read(symbol).set_index('effective_date')
-            _resultb = pd.merge_asof(_resultb, convert_prices, left_index=True, right_index=True)
+            _resultb = pd.merge_asof(_resultb, convert_prices[['conversion_price']], left_index=True, right_index=True)
             stock_symbol =  metadata['stock_code'] + '_' + metadata['stock_exchange']
             db_stock_symbol = stock_symbol + '_' + interval
             _results = self.bar_lib.read(
@@ -216,7 +215,8 @@ class RqdataCollector(BaseCollector):
         logger.info(f"get {len(symbols)} symbols.")
         return symbols
 
-    def normalize_symbol(self, symbol):
+    @staticmethod
+    def normalize_symbol(symbol):
         symbol_s = symbol.split("_")
         symbol = f"sh{symbol_s[0]}" if symbol_s[-1] == "SSE" else f"sz{symbol_s[0]}"
         return symbol
@@ -374,7 +374,8 @@ class RqdataNormalize(BaseNormalize):
         df = self.normalize_rqdata(df, self._calendar_list)
         return df
 
-    def _get_calendar_list(self) -> Iterable[pd.Timestamp]:
+    @staticmethod
+    def _get_calendar_list() -> Iterable[pd.Timestamp]:
         return [x for x in get_calendar_list("ALL")]
 
 
@@ -559,6 +560,7 @@ class Run(BaseRun):
         logger.info("Copy contract info files done")
 
         logger.info("Exclude indexes from `all` to formulate `convert` population")
+        # noinspection PyProtectedMember
         instruments_dir = _dump._instruments_dir
         #all_instrument_path = instrument_dir.joinpath(_dump.INSTRUMENTS_FILE_NAME)
         all_instrument_w_index = pd.read_csv(
@@ -578,6 +580,10 @@ if __name__ == "__main__":
         max_workers=6
     )
     today =  pd.Timestamp.now().normalize()
+    # runner.update_data_to_bin(
+    #     qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert",
+    #     trading_date=pd.Timestamp("2010-01-01"), end_date=today.strftime("%Y-%m-%d")
+    # )
 
     runner.update_data_to_bin(
         qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert",

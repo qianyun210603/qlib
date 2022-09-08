@@ -362,6 +362,45 @@ class Power(NpPairOperator):
     def __init__(self, feature_left, feature_right):
         super(Power, self).__init__(feature_left, feature_right, "power")
 
+class SignedPower(PairOperator):
+    """Power Operator"""
+
+    def _load_internal(self, instrument, start_index, end_index, *args):
+        assert any(
+            [isinstance(self.feature_left, (Expression,)), self.feature_right, Expression]
+        ), "at least one of two inputs is Expression instance"
+        if isinstance(self.feature_left, (Expression,)):
+            series_left = self.feature_left.load(instrument, start_index, end_index, *args)
+        else:
+            series_left = self.feature_left  # numeric value
+        if isinstance(self.feature_right, (Expression,)):
+            series_right = self.feature_right.load(instrument, start_index, end_index, *args)
+        else:
+            series_right = self.feature_right
+        check_length = isinstance(series_left, (np.ndarray, pd.Series)) and isinstance(
+            series_right, (np.ndarray, pd.Series)
+        )
+        if check_length:
+            warning_info = (
+                f"Loading {instrument}: {str(self)}; signedpower(series_left, series_right), "
+                f"The length of series_left and series_right is different: ({len(series_left)}, {len(series_right)}), "
+                f"series_left is {str(self.feature_left)}, series_right is {str(self.feature_right)}. Please check the data"
+            )
+        else:
+            warning_info = (
+                f"Loading {instrument}: {str(self)}; signedpower(series_left, series_right), "
+                f"series_left is {str(self.feature_left)}, series_right is {str(self.feature_right)}. Please check the data"
+            )
+        try:
+            res = np.power(series_left.abs(), series_right)*np.sign(series_left)
+        except ValueError as e:
+            get_module_logger("ops").debug(warning_info)
+            raise ValueError(f"{str(e)}. \n\t{warning_info}") from e
+        else:
+            if check_length and len(series_left) != len(series_right):
+                get_module_logger("ops").debug(warning_info)
+        return res
+
 
 class Add(NpPairOperator):
     """Add Operator
@@ -760,6 +799,7 @@ class Rolling(ExpressionOps):
             series = getattr(series.rolling(self.N, min_periods=1), self.func)()
             # series.iloc[:self.N-1] = np.nan
         # series[isnull] = np.nan
+        series.loc[series.abs() < 1e-10] = 0
         return series
 
     def get_longest_back_rolling(self):
@@ -818,6 +858,7 @@ class NpRolling(Rolling):
             series = series.rolling(self.N, min_periods=1).apply(self.npfunc, raw=True)
             # series.iloc[:self.N-1] = np.nan
         # series[isnull] = np.nan
+        series.loc[series.abs()<1e-10] = 0
         return series
 
 
@@ -1397,6 +1438,7 @@ class WMA(Rolling):
             series = series.expanding(min_periods=1).apply(weighted_mean, raw=True)
         else:
             series = series.rolling(self.N, min_periods=1).apply(weighted_mean, raw=True)
+        series.loc[series.abs() < 1e-10] = 0
         return series
 
 
@@ -1546,10 +1588,11 @@ class Corr(PairRolling):
         series_left = self.feature_left.load(instrument, start_index, end_index, *args)
         series_right = self.feature_right.load(instrument, start_index, end_index, *args)
         res.loc[
-            np.isclose(series_left.rolling(self.N, min_periods=1).std(), 0, atol=2e-05)
-            | np.isclose(series_right.rolling(self.N, min_periods=1).std(), 0, atol=2e-05)
-        ] = np.nan
-        return res
+            np.isclose(series_left.rolling(self.N, min_periods=1).cov(series_right), 0, atol=1e-6)
+        ] = 0
+        res.loc[np.isclose(res, 1.0, atol=1e-4)] = 1
+        res.loc[np.isclose(res, -1.0, atol=1e-4)] = -1
+        return res.replace([np.inf, -np.inf], 0)
 
 
 class Cov(PairRolling):
@@ -1741,6 +1784,7 @@ OpsList = [
     Sign,
     Log,
     Power,
+    SignedPower,
     Add,
     Sub,
     Mul,

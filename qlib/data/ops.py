@@ -10,6 +10,7 @@ import pandas as pd
 import abc
 
 from typing import Union, List, Type
+from scipy.stats import percentileofscore
 from .base import Expression, ExpressionOps, Feature, PFeature
 from ..log import get_module_logger
 from ..utils import get_callable_kwargs
@@ -1253,14 +1254,23 @@ class Rank(Rolling):
     def __init__(self, feature, N):
         super(Rank, self).__init__(feature, N, "rank")
 
+    # for compatiblity of python 3.7, which doesn't support pandas 1.4.0+ which implements Rolling.rank
     def _load_internal(self, instrument, start_index, end_index, *args):
         series = self.feature.load(instrument, start_index, end_index, *args)
 
-        if self.N == 0:
-            series = series.expanding(min_periods=1).rank(pct=True)
-        else:
-            series = series.rolling(self.N, min_periods=1).rank(pct=True)
-        return series
+        rolling_or_expending = series.expanding(min_periods=1) if self.N == 0 else series.rolling(self.N, min_periods=1)
+        if hasattr(rolling_or_expending, "rank"):
+            return rolling_or_expending.rank(pct=True)
+
+        def rank(x):
+            if np.isnan(x[-1]):
+                return np.nan
+            x1 = x[~np.isnan(x)]
+            if x1.shape[0] == 0:
+                return np.nan
+            return percentileofscore(x1, x1[-1]) / 100
+
+        return rolling_or_expending.apply(rank, raw=True)
 
 
 class Count(Rolling):

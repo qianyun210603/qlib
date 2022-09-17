@@ -391,7 +391,6 @@ class TopkDropout4ConvertStrategy(TopkDropoutStrategy):
         return buy, sell
 
 
-
 class WeightStrategyBase(BaseSignalStrategy):
     # TODO:
     # 1. Supporting leverage the get_range_limit result from the decision

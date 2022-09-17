@@ -180,7 +180,8 @@ class RqdataCollector(BaseCollector):
             indicator['call_announced'] = indicator.call_status.apply(lambda x: 1.0 if x == 3 else 0).ffill()
             indicator['call_satisfied'] = indicator.call_status.apply(lambda x: 1.0 if x >= 2 else 0).ffill()
         except:
-            logger.error(f"no call announced for {db_symbol}")
+            if not _resultb.empty:
+                logger.error(f"no call announced for {db_symbol}")
             return pd.DataFrame()
 
         indicator_cols = copy.deepcopy(INDICATOR_COLS)
@@ -345,6 +346,7 @@ class RqdataNormalize(BaseNormalize):
             df = df.reindex(index_from_cal)
 
         # assign adjclose as close price adjusted by split only
+        # exclude index
         if 'closestock' in df.columns:
             df["adjclosestock"] = df.closestock
             # adjust ohlc by split and dividends
@@ -587,5 +589,5 @@ if __name__ == "__main__":
 
     runner.update_data_to_bin(
         qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert",
-        trading_date=(today - pd.Timedelta(days=7)).strftime("%Y-%m-%d"), end_date=today.strftime("%Y-%m-%d")
+        trading_date=(today - pd.Timedelta(days=17)).strftime("%Y-%m-%d"), end_date=today.strftime("%Y-%m-%d")
     )

@@ -6,7 +6,7 @@ import abc
 import sys
 import datetime
 from io import BytesIO
-from typing import List, Iterable
+from typing import Tuple, Iterable, List
 from pathlib import Path
 from functools import lru_cache
 
@@ -37,7 +37,7 @@ REQ_HEADERS = {
 
 @lru_cache(maxsize=1000)
 @deco_retry
-def retry_request(url: str, method: str = "get", exclude_status: List = None):
+def retry_request(url: str, method: str = "get", exclude_status: Tuple = None):
     if exclude_status is None:
         exclude_status = []
     method_func = getattr(requests, method)
@@ -162,7 +162,8 @@ class CSIIndex(IndexBase):
         return f"SH{symbol}" if symbol.startswith("60") or symbol.startswith("688") else f"SZ{symbol}"
 
     def _parse_excel(self, excel_url: str, add_date: pd.Timestamp, remove_date: pd.Timestamp) -> pd.DataFrame:
-        content = retry_request(excel_url, exclude_status=[404]).content
+        print(excel_url)
+        content = retry_request(excel_url, exclude_status=(404,)).content
         _io = BytesIO(content)
         df_map = pd.read_excel(_io, sheet_name=None)
         with self.cache_dir.joinpath(

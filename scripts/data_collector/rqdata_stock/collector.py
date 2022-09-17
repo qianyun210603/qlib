@@ -13,22 +13,19 @@ from arctic import Arctic
 from arctic.date import DateRange
 
 import fire
-import requests
+import traceback
 import numpy as np
 import pandas as pd
 from loguru import logger
 
 
-from qlib.utils import code_to_fname, fname_to_code, exists_qlib_data
+from qlib.utils import code_to_fname
 CUR_DIR = Path(__file__).resolve().parent
 sys.path.append(str(CUR_DIR.parent.parent))
 
 from dump_bin import DumpDataUpdate, DumpDataAll
 from data_collector.base import BaseCollector, BaseNormalize, BaseRun, Normalize
 from data_collector.utils import get_calendar_list
-
-INDEX_BENCH_URL = "http://push2his.eastmoney.com/api/qt/stock/kline/get?secid=1.{index_code}&fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58&klt=101&fqt=0&beg={begin}&end={end}"
-
 
 class RqdataCollector(BaseCollector):
 
@@ -72,6 +69,7 @@ class RqdataCollector(BaseCollector):
         self.bar_lib = self.arctic_store.get_library('bar_data')
         self.ex_factor_lib = self.arctic_store.get_library("ex_factor")  # 复权因子
         self.split_lib = self.arctic_store.get_library("split")  # 拆分信息
+        self.limit_lib = self.arctic_store.get_library('limit_up_down')
         interval = 'd' if interval.endswith('d') else '1m'
 
         super(RqdataCollector, self).__init__(
@@ -114,10 +112,22 @@ class RqdataCollector(BaseCollector):
         db_symbol = symbol + '_' + interval
         _result = self.bar_lib.read(db_symbol, chunk_range=DateRange(start_datetime.tz_localize(None),
                                                                      end_datetime.tz_localize(None)))
+
         try:
             _result.set_index('date', inplace=True)
         except:
             print(start_datetime, end_datetime, db_symbol, symbol, _result)
+
+        _limits = self.limit_lib.read(
+            symbol, chunk_range = DateRange(start_datetime.tz_localize(None).normalize(), end_datetime.tz_localize(None)),
+            columns=['limit_up', 'limit_down']
+        )
+
+        try:
+            _result = pd.merge_asof(_result, _limits, left_index=True, right_index=True)
+        except:
+            logger.error(f"merge limits failed for {db_symbol} from {start_datetime} to {end_datetime}: {traceback.format_exc()}")
+            raise
 
         if self.ex_factor_lib.has_symbol(symbol):
             ex_factors = self.ex_factor_lib.read(symbol)
@@ -157,7 +167,8 @@ class RqdataCollector(BaseCollector):
         logger.info(f"get {len(symbols)} symbols.")
         return symbols
 
-    def normalize_symbol(self, symbol):
+    @staticmethod
+    def normalize_symbol(symbol):
         symbol_s = symbol.split("_")
         symbol = f"sh{symbol_s[0]}" if symbol_s[-1] == "SSE" else f"sz{symbol_s[0]}"
         return symbol
@@ -263,11 +274,14 @@ class RqdataNormalize(BaseNormalize):
         # assign adjclose as close price adjusted by split only
         df["adjclose"] = df.close
         # adjust ohlc by split and dividends
-        df[["open", "close", "high", "low"]] = df[["open", "close", "high", "low"]].multiply(df.ex_cum_factor, axis=0)
+        if 'limit_up' in df.columns:
+            df[["open", "close", "high", "low", 'limit_up', 'limit_down', ]] = \
+                df[["open", "close", "high", "low", 'limit_up', 'limit_down', ]].multiply(df.ex_cum_factor, axis=0)
+        else:
+            df[["open", "close", "high", "low"]] = df[["open", "close", "high", "low"]].multiply(df.ex_cum_factor, axis=0)
         df['factor'] = df.ex_cum_factor
 
         df.sort_index(inplace=True)
-
 
         df.loc[(df["volume"] <= 1e-10) | np.isnan(df["volume"]), list(set(df.columns) - {"symbol"})] = np.nan
 
@@ -303,7 +317,8 @@ class RqdataNormalize(BaseNormalize):
         df = self.normalize_rqdata(df, self._calendar_list)
         return df
 
-    def _get_calendar_list(self) -> Iterable[pd.Timestamp]:
+    @staticmethod
+    def _get_calendar_list() -> Iterable[pd.Timestamp]:
         return [x for x in get_calendar_list("ALL")]
 
 
@@ -321,8 +336,6 @@ class Run(BaseRun):
             Concurrent number, default is 1; when collecting data, it is recommended that max_workers be set to 1
         interval: str
             freq, value from [1min, 1d], default 1d
-        region: str
-            region, value from ["CN", "US"], default "CN"
         """
         super().__init__(source_dir, normalize_dir, max_workers, interval)
 
@@ -430,10 +443,6 @@ class Run(BaseRun):
             trading days to be updated, by default ``datetime.datetime.now().strftime("%Y-%m-%d")``
         end_date: str
             end datetime, default ``pd.Timestamp(trading_date + pd.Timedelta(days=1))``; open interval(excluding end)
-        check_data_length: int
-            check data length, if not None and greater than 0, each symbol will be considered complete if its data length is greater than or equal to this value, otherwise it will be fetched again, the maximum number of fetches being (max_collector_count). By default None.
-        delay: float
-            time.sleep(delay), default 1
         Notes
         -----
             If the data in qlib_data_dir is incomplete, np.nan will be populated to trading_date for the previous trading day
@@ -464,21 +473,21 @@ class Run(BaseRun):
         )
         # download data from Rqdata
         # NOTE: when downloading data from RqdataFinance, max_workers is recommended to be 1
-        self.download_data(max_collector_count=self.max_workers, start=trading_date, end=end_date)
+        # self.download_data(max_collector_count=self.max_workers, start=trading_date, end=end_date)
 
-        # normalize data
-        self.normalize_data(qlib_data_1d_dir)
-
-        qlib_dir = Path(qlib_data_1d_dir).expanduser().resolve()
-        # dump bin
-        DumpClass = DumpDataUpdate if qlib_dir.joinpath(r"calendars\day.txt").exists() else DumpDataAll
-        _dump = DumpClass(
-            csv_path=self.normalize_dir,
-            qlib_dir=qlib_data_1d_dir,
-            exclude_fields="symbol,date",
-            max_workers=self.max_workers,
-        )
-        _dump.dump()
+        # # normalize data
+        # self.normalize_data(qlib_data_1d_dir)
+        #
+        # qlib_dir = Path(qlib_data_1d_dir).expanduser().resolve()
+        # # dump bin
+        # DumpClass = DumpDataUpdate if qlib_dir.joinpath(r"calendars\day.txt").exists() else DumpDataAll
+        # _dump = DumpClass(
+        #     csv_path=self.normalize_dir,
+        #     qlib_dir=qlib_data_1d_dir,
+        #     exclude_fields="symbol,date",
+        #     max_workers=self.max_workers,
+        # )
+        # _dump.dump()
 
         # parse index
         index_list = ["CSI100", "CSI300", "CSI500"]
@@ -494,8 +503,8 @@ if __name__ == "__main__":
     runner = Run(
         source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata\source",
         normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata\normalize",
-        max_workers=1
+        max_workers=8
     )
     # runner.download_data(max_collector_count=1, start=pd.Timestamp("2014-01-01"), end=pd.Timestamp("2021-12-31"))
     # runner.normalize_data()
-    runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata", trading_date='2022-03-01', end_date="2022-06-11")
+    runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata", trading_date='2010-01-01', end_date="2013-01-01")

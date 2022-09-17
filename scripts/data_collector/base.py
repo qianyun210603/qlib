@@ -379,7 +379,7 @@ class BaseRun(abc.ABC):
         delay=0,
         start=None,
         end=None,
-        check_data_length: int = None,
+        check_data_length: int = 0,
         limit_nums=None,
     ):
         """download data from Internet

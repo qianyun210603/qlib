@@ -415,7 +415,7 @@ class Run(BaseRun):
         max_collector_count=2,
         start=None,
         end=None,
-        check_data_length=None,
+        check_data_length=0,
         limit_nums=None,
     ):
         """download data from Internet
@@ -490,7 +490,7 @@ class Run(BaseRun):
         qlib_data_1d_dir: str,
         trading_date: str = None,
         end_date: str = None,
-        check_data_length: bool = False,
+        check_data_length: int = 0,
         is_fix: bool = False
     ):
         """update Rqdata data to bin
@@ -589,5 +589,6 @@ if __name__ == "__main__":
 
     runner.update_data_to_bin(
         qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert",
-        trading_date=(today - pd.Timedelta(days=17)).strftime("%Y-%m-%d"), end_date=today.strftime("%Y-%m-%d")
+        trading_date=(today - pd.Timedelta(days=7)).strftime("%Y-%m-%d"), end_date=today.strftime("%Y-%m-%d"),
+        check_data_length=2
     )

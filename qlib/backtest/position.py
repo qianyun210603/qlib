@@ -343,6 +343,7 @@ class Position(BasePosition):
         trade_amount = trade_val / trade_price
         if stock_id not in self.position:
             self._init_stock(stock_id=stock_id, amount=trade_amount, price=trade_price)
+            self.position[stock_id]["cost_basis"] = trade_val + cost
         else:
             # exist, add amount
             self.position[stock_id]["amount"] += trade_amount
@@ -363,6 +364,7 @@ class Position(BasePosition):
             else:
                 # decrease the amount of stock
                 self.position[stock_id]["amount"] -= trade_amount
+                self.position[stock_id]["cost_basis"] -= trade_amount - cost
                 # check if to delete
                 if self.position[stock_id]["amount"] < -1e-5:
                     raise ValueError(
@@ -392,11 +394,11 @@ class Position(BasePosition):
             if date in inst_info.cash_flow_schedule:
                 new_cash = self.position[stock_id]['amount'] * inst_info.cash_flow_schedule[date]
                 self.position['cash'] += new_cash
-                print(f"coupon or coupon+repayment for {stock_id}: {inst_info.cash_flow_schedule[date]}*{self.position[stock_id]['amount']}={new_cash} @ {date.isoformat()}")
+                # print(f"coupon or coupon+repayment for {stock_id}: {inst_info.cash_flow_schedule[date]}*{self.position[stock_id]['amount']}={new_cash} @ {date.isoformat()}")
 
             if date >= min(inst_info.maturity_date, inst_info.call_date):
                 self._del_stock(stock_id)
-                print(f"{stock_id}: matured/called @ {date.isoformat()}")
+                # print(f"{stock_id}: matured/called @ {date.isoformat()}")
 
     def update_order(self, order: Order, trade_val: float, cost: float, trade_price: float) -> None:
         # handle order, order is a order class, defined in exchange.py

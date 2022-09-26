@@ -8,7 +8,7 @@ from __future__ import print_function
 import numpy as np
 import pandas as pd
 import abc
-
+from functools import partial, reduce
 from typing import Union, List, Type
 from scipy.stats import percentileofscore
 from .base import Expression, ExpressionOps, Feature, PFeature
@@ -1636,21 +1636,26 @@ class XSectionOperator(ElemOperator):
     def _load_internal(self, instrument, start_index, end_index, *args) -> pd.Series:
         raise NotImplementedError("This function must be implemented in your newly defined feature")
 
+    def _load_all_instruments(self, instrument, start_index, end_index, *args):
+        shuffled = np.random.permutation(self.population)
+        mydf = self.feature.load(instrument, start_index, end_index, *args).to_frame(instrument)
+        for inst in shuffled:
+            if inst != instrument:
+                new_series = self.feature.load(inst, start_index, end_index, *args).rename(inst)
+                mydf = mydf.merge(new_series, left_index=True, right_index=True, how='left')
+        return mydf
+
 
 class CSRank(XSectionOperator):
 
     def _load_internal(self, instrument, start_index, end_index, *args) -> pd.Series:
-        shuffled = np.random.permutation(self.population)
-        serieses = [self.feature.load(inst, start_index, end_index, *args).rename(inst) for inst in shuffled]
-        df = pd.concat(serieses, axis=1)
+        df: pd.DataFrame = self._load_all_instruments(instrument, start_index, end_index, *args)
         return df.rank(axis=1, pct=True)[instrument]
 
 class CSScale(XSectionOperator):
 
     def _load_internal(self, instrument, start_index, end_index, *args) -> pd.Series:
-        shuffled = np.random.permutation(self.population)
-        serieses = [self.feature.load(inst, start_index, end_index, *args).rename(inst) for inst in shuffled]
-        df = pd.concat(serieses, axis=1)
+        df: pd.DataFrame = self._load_all_instruments(instrument, start_index, end_index, *args)
         return df[instrument] / df.abs().sum(axis=1)
 
 

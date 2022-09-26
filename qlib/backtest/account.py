@@ -236,7 +236,7 @@ class Account:
         if not self.current_position.skip_update():
             stock_list = self.current_position.get_stock_list()
             for code in stock_list:
-                # if suspend, no new price to be updated, profit is 0
+                # if suspended, no new price to be updated, profit is 0
                 if not trade_exchange.check_stock_suspended(code, trade_start_time, trade_end_time):
                     bar_close = trade_exchange.get_close(code, trade_start_time, trade_end_time)
                     self.current_position.update_stock_price(stock_id=code, price=bar_close)

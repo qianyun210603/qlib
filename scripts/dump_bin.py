@@ -195,7 +195,7 @@ class DumpDataBase:
     def data_merge_calendar(self, df: pd.DataFrame, calendars_list: List[pd.Timestamp]) -> pd.DataFrame:
         # calendars
         calendars_df = pd.DataFrame(data=calendars_list, columns=[self.date_field_name])
-        calendars_df[self.date_field_name] = calendars_df[self.date_field_name].astype(np.datetime64)
+        calendars_df[self.date_field_name] = calendars_df[self.date_field_name].astype('datetime64[ns]')
         cal_df = calendars_df[
             (calendars_df[self.date_field_name] >= df[self.date_field_name].min())
             & (calendars_df[self.date_field_name] <= df[self.date_field_name].max())

@@ -247,7 +247,7 @@ class Account:
                     )
 
             # update holding day count
-            # NOTE: updating bar_count does not only serve portfolio metrics, it also serve the strategy
+            # NOTE: updating bar_count does not only serve portfolio metrics, it also serves the strategy
             self.current_position.add_count_all(bar=self.freq)
 
     def update_portfolio_metrics(self, trade_start_time: pd.Timestamp, trade_end_time: pd.Timestamp) -> None:

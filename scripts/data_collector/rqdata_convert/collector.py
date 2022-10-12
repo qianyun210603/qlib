@@ -589,6 +589,6 @@ if __name__ == "__main__":
 
     runner.update_data_to_bin(
         qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert",
-        trading_date=(today - pd.Timedelta(days=7)).strftime("%Y-%m-%d"), end_date=today.strftime("%Y-%m-%d"),
+        trading_date=(today - pd.Timedelta(days=14)).strftime("%Y-%m-%d"), end_date=today.strftime("%Y-%m-%d"),
         check_data_length=2
     )

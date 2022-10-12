@@ -36,7 +36,7 @@ INDICATOR_COLS = ['remaining_size', 'turnover_rate', "call_status",
 
 
 def arctic_auth_hook(mongo_host, app, database):
-    logger.info(f"{mongo_host} {app} {database}")
+    # logger.info(f"{mongo_host}({type(mongo_host)}) {app}({type(app)}) {database}({type(database)})")
     return Credential(
         database="arctic",
         user='datauser',
@@ -164,7 +164,7 @@ class RqdataCollector(BaseCollector):
             _results.set_index('date', inplace=True)
         except Exception:
             logger.error(f"{start_datetime}, {end_datetime}, {db_symbol}, {symbol}:\n {sys.exc_info()}")
-            return None
+            return pd.DataFrame()
 
         if self.ex_factor_lib.has_symbol(stock_symbol):
             ex_factors = self.ex_factor_lib.read(stock_symbol)
@@ -227,8 +227,11 @@ class RqdataCollector(BaseCollector):
                 return False
             if pd.isna(v['de_listed_date']):
                 return v['listed_date'] <= self.end_datetime
-            return self.start_datetime <= v['de_listed_date'] and v['listed_date'].replace(hour=16) <= min(
-                self.end_datetime, pd.Timestamp.now('Asia/Shanghai'))  # - pd.Timedelta(days=1)
+            stop_trading_date = v.get('stop_trading_date', None)
+            if stop_trading_date is None:
+                stop_trading_date = v['de_listed_date']
+            return self.start_datetime <=  stop_trading_date and v['listed_date'].replace(hour=16) <= \
+                min(self.end_datetime, pd.Timestamp.now('Asia/Shanghai'))
 
         logger.info("get HS converts symbols......")
         symbol_dict = {x: self.meta_lib.read(x) for x in self.meta_lib.list_symbols()}
@@ -580,7 +583,7 @@ class Run(BaseRun):
         # dump bin
         qlib_dir = Path(qlib_data_1d_dir).expanduser().resolve()
 
-        DumpClass = DumpDataUpdate if qlib_dir.joinpath(r"calendars\day.txt").exists() else DumpDataAll
+        DumpClass = DumpDataUpdate if qlib_dir.joinpath(r"calendars/day.txt").exists() else DumpDataAll
         _dump = DumpClass(
             csv_path=self.normalize_dir,
             qlib_dir=qlib_data_1d_dir,

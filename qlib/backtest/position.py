@@ -394,11 +394,11 @@ class Position(BasePosition):
             if date in inst_info.cash_flow_schedule:
                 new_cash = self.position[stock_id]['amount'] * inst_info.cash_flow_schedule[date]
                 self.position['cash'] += new_cash
-                # print(f"coupon or coupon+repayment for {stock_id}: {inst_info.cash_flow_schedule[date]}*{self.position[stock_id]['amount']}={new_cash} @ {date.isoformat()}")
+                print(f"coupon or coupon+repayment for {stock_id}: {inst_info.cash_flow_schedule[date]}*{self.position[stock_id]['amount']}={new_cash} @ {date.isoformat()}")
 
             if date >= min(inst_info.maturity_date, inst_info.call_date):
                 self._del_stock(stock_id)
-                # print(f"{stock_id}: matured/called @ {date.isoformat()}")
+                print(f"{stock_id}: matured/called @ {date.isoformat()}")
 
     def update_order(self, order: Order, trade_val: float, cost: float, trade_price: float) -> None:
         # handle order, order is a order class, defined in exchange.py

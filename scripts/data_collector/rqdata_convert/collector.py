@@ -6,12 +6,13 @@ import copy
 import time
 import multiprocessing
 from pathlib import Path
-from typing import Iterable, Optional, Union
-from arctic import Arctic
+from typing import Iterable, Optional, Union, cast
 from arctic.date import DateRange
 from arctic.auth import Credential
 from arctic.hooks import register_get_auth_hook
 from tqdm import tqdm
+from vnpy.trader.database import get_database, SETTINGS
+from vnpy_arctic.arctic_database import ArcticDatabase
 
 # import fire
 import numpy as np
@@ -35,13 +36,14 @@ INDICATOR_COLS = ['remaining_size', 'turnover_rate', "call_status",
                   'convertible_market_cap_ratio', 'conversion_price_reset_status']
 
 
-def arctic_auth_hook(mongo_host, app, database):
-    # logger.info(f"{mongo_host}({type(mongo_host)}) {app}({type(app)}) {database}({type(database)})")
-    return Credential(
-        database="arctic",
-        user='datauser',
-        password='datauser06284015',
-    )
+def arctic_auth_hook(*_):
+    if bool(SETTINGS.get("database.password", "")) and bool(SETTINGS.get("database.user", "")):
+        return Credential(
+            database='admin',
+            user=SETTINGS["database.user"],
+            password=SETTINGS["database.password"],
+        )
+    return None
 
 
 register_get_auth_hook(arctic_auth_hook)
@@ -84,10 +86,12 @@ class RqdataCollector(BaseCollector):
         limit_nums: int
             using for debug, by default None
         """
-        from zoneinfo import ZoneInfo
-        self.arctic_store = Arctic(
-            "localhost", tz_aware=True, tzinfo=ZoneInfo('Asia/Shanghai'),
-        )
+        db_mgr = get_database()
+        self.arctic_store = cast(ArcticDatabase, db_mgr).connection
+        # from zoneinfo import ZoneInfo
+        # self.arctic_store = Arctic(
+        #     "localhost", tz_aware=True, tzinfo=ZoneInfo('Asia/Shanghai'),
+        # )
 
         self.meta_lib = self.arctic_store.get_library("convert_meta")
         self.convert_price_lib = self.arctic_store.get_library("convert_convert_price")
@@ -230,7 +234,7 @@ class RqdataCollector(BaseCollector):
             stop_trading_date = v.get('stop_trading_date', None)
             if stop_trading_date is None:
                 stop_trading_date = v['de_listed_date']
-            return self.start_datetime <=  stop_trading_date and v['listed_date'].replace(hour=16) <= \
+            return self.start_datetime <= stop_trading_date and v['listed_date'].replace(hour=16) <= \
                 min(self.end_datetime, pd.Timestamp.now('Asia/Shanghai'))
 
         logger.info("get HS converts symbols......")
@@ -496,12 +500,16 @@ class Run(BaseRun):
                     $ python scripts/data_collector/Rqdata/collector.py update_data_to_bin --qlib_data_1d_dir
                     <qlib_data_1d_dir> --trading_date 2021-06-01
                 or:
-                    download 1d data, reference: https://github.com/microsoft/qlib/tree/main/scripts/data_collector/Rqdata#1d-from-Rqdata
+                    download 1d data, reference:
+                     https://github.com/microsoft/qlib/tree/main/scripts/data_collector/Rqdata#1d-from-Rqdata
 
         Examples
         ---------
-            $ python collector.py normalize_data --source_dir ~/.qlib/stock_data/source --normalize_dir ~/.qlib/stock_data/normalize --region cn --interval 1d
-            $ python collector.py normalize_data --qlib_data_1d_dir ~/.qlib/qlib_data/cn_data --source_dir ~/.qlib/stock_data/source_cn_1min --normalize_dir ~/.qlib/stock_data/normalize_cn_1min --region CN --interval 1min
+            $ python collector.py normalize_data --source_dir ~/.qlib/stock_data/source --normalize_dir \
+                    ~/.qlib/stock_data/normalize --region cn --interval 1d
+            $ python collector.py normalize_data --qlib_data_1d_dir ~/.qlib/qlib_data/cn_data --source_dir \
+                    ~/.qlib/stock_data/source_cn_1min --normalize_dir ~/.qlib/stock_data/normalize_cn_1min \
+                    --region CN --interval 1min
         """
         if self.interval.lower() == "1min":
             if qlib_data_1d_dir is None or not Path(qlib_data_1d_dir).expanduser().exists():
@@ -532,7 +540,8 @@ class Run(BaseRun):
         Parameters
         ----------
         qlib_data_1d_dir: str
-            the qlib data to be updated for Rqdata, usually from: https://github.com/microsoft/qlib/tree/main/scripts#download-cn-data
+            the qlib data to be updated for Rqdata, usually from:
+            https://github.com/microsoft/qlib/tree/main/scripts#download-cn-data
 
         trading_date: [str, pd.Timestamp, datetime.datetime]
             trading days to be updated, by default ``datetime.datetime.now().strftime("%Y-%m-%d")``

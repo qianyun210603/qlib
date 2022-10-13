@@ -110,7 +110,7 @@ class DropnaLabel(DropnaProcessor):
 
 
 class DropCol(Processor):
-    def __init__(self, col_list=[]):
+    def __init__(self, col_list=()):
         self.col_list = col_list
 
     def __call__(self, df):
@@ -125,7 +125,7 @@ class DropCol(Processor):
 
 
 class FilterCol(Processor):
-    def __init__(self, fields_group="feature", col_list=[]):
+    def __init__(self, fields_group="feature", col_list=()):
         self.fields_group = fields_group
         self.col_list = col_list
 
@@ -314,7 +314,7 @@ class CSZScoreNorm(Processor):
             self.fields_group = [self.fields_group]
         for g in self.fields_group:
             cols = get_group_columns(df, g)
-            df.loc[:, cols] = df[cols].groupby("datetime", group_keys=False).apply(self.zscore_func)
+            df.loc[:, cols] = df.loc[:, cols].groupby("datetime", group_keys=False).apply(self.zscore_func)
         return df
 
 
@@ -324,7 +324,8 @@ class CSRankNorm(Processor):
     "Cross Sectional" is often used to describe data operations.
     The operations across different stocks are often called Cross Sectional Operation.
 
-    For example, CSRankNorm is an operation that grouping the data by each day and rank `across` all the stocks in each day.
+    For example, CSRankNorm is an operation that grouping the data by each day and rank `across` all the stocks in each
+    day.
 
     Explanation about 3.46 & 0.5
 
@@ -334,7 +335,8 @@ class CSRankNorm(Processor):
         import pandas as pd
         x = np.random.random(10000)  # for any variable
         x_rank = pd.Series(x).rank(pct=True)  # if it is converted to rank, it will be a uniform distributed
-        x_rank_norm = (x_rank - x_rank.mean()) / x_rank.std()  # Normally, we will normalize it to make it like normal distribution
+        x_rank_norm = (x_rank - x_rank.mean()) / x_rank.std()  # Normally, we will normalize it to make it like normal
+                                                               # distribution
 
         x_rank.mean()   # accounts for 0.5
         1 / x_rank.std()  # accounts for 3.46
@@ -374,6 +376,7 @@ class HashStockFormat(Processor):
 
         return HashingStockStorage.from_df(df)
 
+
 class SymmetricOrthogonalization(Processor):
     """Apply Symmetric Orthogonalization on features to remove collinearity"""
 
@@ -389,8 +392,9 @@ class SymmetricOrthogonalization(Processor):
             return df
 
         cols = get_group_columns(df, self.fields_group)
-        df.loc[:, cols] = df[cols].groupby("datetime").apply(orthogonalize_oneday)
+        df.loc[:, cols] = df.loc[:, cols].groupby("datetime", group_keys=False).apply(orthogonalize_oneday)
         return df
+
 
 class GramSchmidtOrthogonalization(Processor):
     """Apply Gram-Schmidt Orthogonalization on features to remove collinearity"""
@@ -401,16 +405,18 @@ class GramSchmidtOrthogonalization(Processor):
             self.projection_order = projection_order
             self.label_cols = label_cols
             self.processed_cols = []
-            self.eps=eps
+            self.eps = eps
 
         def _cal_raw(self, df):
             n = len(self.orth_cols)
             for i in range(n):
-                projections = np.dot(df[self.orth_cols[:i]], np.dot(df[self.orth_cols[[i]]].T, df[self.orth_cols[:i]]).T)
+                projections = np.dot(
+                    df[self.orth_cols[:i]], np.dot(df[self.orth_cols[[i]]].T, df[self.orth_cols[:i]]).T
+                )
                 # subtract projections
                 df[self.orth_cols[[i]]] -= projections
                 if np.linalg.norm(df[self.orth_cols[[i]]]) < self.eps:
-                    df.loc[df[self.orth_cols[i]]<self.eps, self.orth_cols[i]] = 0.  # set the small entries to 0
+                    df.loc[df[self.orth_cols[i]] < self.eps, self.orth_cols[i]] = 0.  # set the small entries to 0
                 else:
                     df.loc[:, self.orth_cols[i]] /= np.linalg.norm(df.loc[:, self.orth_cols[i]])
             return df

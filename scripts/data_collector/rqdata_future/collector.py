@@ -1,50 +1,56 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
-import datetime
-import traceback
 import re
-import pytz
 import sys
 import copy
-import time
 import multiprocessing
 from datetime import time
 from pathlib import Path
-from typing import Iterable, Type
-from arctic import Arctic
-from arctic.date import DateRange
-from functools import partial
+from typing import Iterable, cast, Type
 from operator import itemgetter
+from functools import partial
 from pandas_helper.tseries.offsets import CustomBusinessIntradayOffset
 from pandas_helper import resample
 import exchange_calendars as mcal
+from arctic.date import DateRange
+from arctic.auth import Credential
+from arctic.hooks import register_get_auth_hook
+from vnpy.trader.database import get_database, SETTINGS
+from vnpy_arctic.arctic_database import ArcticDatabase
 
-import fire
+# import fire
+import traceback
 import numpy as np
 import pandas as pd
 from loguru import logger
 
-import docs.conf
 from qlib.utils import code_to_fname
 
 CUR_DIR = Path(__file__).resolve().parent
 sys.path.append(str(CUR_DIR.parent.parent))
-
-INDEXES = {"csi300": "000300", "csi100": "000903", "csi500": "000905", 'csiconvert': "000832"}
-
-INDICATOR_COLS = ['remaining_size', 'turnover_rate', "call_status",
-                  'convertible_market_cap_ratio', 'conversion_price_reset_status']
-SYMBOL_PATTERN = re.compile(r"([A-Za-z]+)(\d+)_([A-Za-z]+)")
-
 from dump_bin import DumpDataUpdate, DumpDataAll
 from data_collector.base import BaseCollector, BaseNormalize, BaseRun, Normalize
 from data_collector.utils import get_calendar_list
 
+SYMBOL_PATTERN = re.compile(r"([A-Za-z]+)(\d+)_([A-Za-z]+)")
 
 def _process(tt):
     tl, tr = pd.Timestamp(tt[0]) - pd.Timedelta(minutes=1), pd.Timestamp(tt[1])
     return tl.time() if tl.hour < 17 else (tl - pd.Timedelta(days=1)).time(), tr.time() if tr.hour < 17 else (tr - pd.Timedelta(
         days=1)).time()
+
+
+def arctic_auth_hook(*_):
+    if bool(SETTINGS.get("database.password", "")) and bool(SETTINGS.get("database.user", "")):
+        return Credential(
+            database='admin',
+            user=SETTINGS["database.user"],
+            password=SETTINGS["database.password"],
+        )
+    return None
+
+
+register_get_auth_hook(arctic_auth_hook)
 
 
 class RqdataCollector(BaseCollector):
@@ -58,7 +64,7 @@ class RqdataCollector(BaseCollector):
         commod_only=0,
         max_workers=4,
         max_collector_count=2,
-        delay=2,
+        delay=0.5,
         check_data_length: int = None,
         limit_nums: int = None,
     ):
@@ -86,12 +92,13 @@ class RqdataCollector(BaseCollector):
             using for debug, by default None
         """
 
-        self.arctic_store = Arctic("127.0.0.1", tz_aware=True, tzinfo=pytz.timezone('Asia/Shanghai'))
+        db_mgr = get_database()
+        self.arctic_store = cast(ArcticDatabase, db_mgr).connection
         self.meta_lib = self.arctic_store.get_library("future_meta")
-
         self.bar_lib = self.arctic_store.get_library('bar_data')
-
+        self.dom_lib = self.arctic_store.get_library("future_dominant")
         self.limit_lib = self.arctic_store.get_library('future_limit_up_down')
+        self.fut_next_mon_lib = self.arctic_store.get_library('future_next_mon')
 
         self.symbol_dict = None
 
@@ -121,6 +128,31 @@ class RqdataCollector(BaseCollector):
             return dt.tz_localize(timezone)
         return dt.tz_convert(timezone)
 
+    def _cal_rolling_yields(self, und_code, exch, dtrange):
+        def get_days_to_expiry(s):
+            mymeta = self.meta_lib.read(s.contract)
+            return (mymeta['maturity_date'].replace(tzinfo=None) - s.name).days
+
+        doms = self.dom_lib.read(und_code, chunk_range=dtrange)
+        doms['days_to_expiry'] = doms.apply(get_days_to_expiry, axis=1)
+        dom_price_df = self.bar_lib.read(
+            und_code + '88_' + exch + '_d', chunk_range=dtrange,
+            columns=['close_price', 'date']
+        ).set_index('date').sort_index()
+        dom_contract = pd.merge(dom_price_df, doms, left_index=True, right_index=True, how='left')
+        next_mon_df = self.fut_next_mon_lib.read(
+            und_code, chunk_range=dtrange, columns=['date', 'close_price', 'contract']
+        ).set_index('date').sort_index()
+        next_mon_df['days_to_expiry'] = next_mon_df.apply(get_days_to_expiry, axis=1)
+        next_next_mon_df = self.fut_next_mon_lib.read(
+            und_code + '_next', chunk_range=dtrange, columns=['date', 'close_price', 'contract']
+        ).set_index('date').sort_index()
+        next_next_mon_df['days_to_expiry'] = next_next_mon_df.apply(get_days_to_expiry, axis=1)
+        dom_contract.loc[dom_contract.days_to_expiry == next_mon_df.days_to_expiry, :] = \
+            next_next_mon_df.loc[dom_contract.days_to_expiry == next_mon_df.days_to_expiry, :]
+        return (np.log(next_mon_df.close_price / dom_contract.close_price) * 365 /
+               (dom_contract.days_to_expiry - next_mon_df.days_to_expiry)).rename('rolling_yield')
+
     def get_data(
         self, symbol: str, interval: str, start_datetime: pd.Timestamp, end_datetime: pd.Timestamp
     ) -> pd.DataFrame:
@@ -128,39 +160,44 @@ class RqdataCollector(BaseCollector):
             raise ValueError(f"cannot support {interval}")
         read_interval = 'd' if interval.endswith('d') else '1m'
         obj = re.match(SYMBOL_PATTERN, symbol)
+        if obj is None:
+            logger.error(f"wrong sym format {symbol}")
+            return pd.DataFrame()
         und_sym, time_code, exch_str = obj.groups()
+        if und_sym == 'FU': # https://www.shfe.com.cn/news/notice/911330669.html
+            start_datetime=max(start_datetime, pd.Timestamp("2018-07-16", tz='Asia/Shanghai'))
+        if und_sym == 'WR': # https://www.shfe.com.cn/news/notice/911331232.html
+            start_datetime = max(start_datetime, pd.Timestamp("2018-10-16", tz='Asia/Shanghai'))
         db_symbol = symbol + '_' + read_interval
-        _result = self.bar_lib.read(
-            db_symbol, chunk_range=DateRange(start_datetime.tz_localize(None), end_datetime.tz_localize(None))
-        )
+        dt_range = DateRange(start_datetime.tz_localize(None), end_datetime.tz_localize(None))
+        _result = self.bar_lib.read(db_symbol, chunk_range=dt_range)
         try:
             _result = _result.set_index('date').sort_index()
         except:
-            print(start_datetime, end_datetime, db_symbol, symbol)
+            logger.error(f"{start_datetime.strftime('%Y-%m-%d')}, {end_datetime.strftime('%Y-%m-%d')}, {db_symbol}, {symbol}")
+            return pd.DataFrame()
 
         if exch_str == 'CZCE' and read_interval == '1m' and time_code not in {'888', '889', '890', '891'}:
             _result['turnover'] = (_result['high_price'] + _result['low_price'] + _result['close_price'])/3.0 * \
                                   _result['volume'] * self.symbol_dict[symbol]["contract_multiplier"]
 
-        _limits = self.limit_lib.read(
-            symbol, chunk_range = DateRange(start_datetime.tz_localize(None).normalize(), end_datetime.tz_localize(None)),
-            columns=['limit_up', 'limit_down', 'settlement']
-        )
+        _limits = self.limit_lib.read(symbol, chunk_range = dt_range, columns=['limit_up', 'limit_down', 'settlement']).sort_index()
 
         if time_code in {'888', '889', '890', '891'}:
             unadj_db_symbol = db_symbol.replace(time_code, '88')
             if exch_str == 'CZCE' and read_interval == '1m':
                 unadjclose = self.bar_lib.read(
-                    unadj_db_symbol, chunk_range=DateRange(start_datetime.tz_localize(None), end_datetime.tz_localize(None)),
+                    unadj_db_symbol, chunk_range=dt_range,
                     columns = ['date', 'close_price', 'high_price', 'low_price', 'turnover', 'volume', 'open_interest'],
                 ).set_index('date').sort_index()
-                unadjclose['turnover'] = (unadjclose['high_price'] + unadjclose['low_price'] + unadjclose['close_price'])/3.0 * \
-                                      unadjclose['volume'] * self.symbol_dict[symbol]["contract_multiplier"]
+                unadjclose['turnover'] = (unadjclose['high_price'] + unadjclose['low_price']
+                                          + unadjclose['close_price'])/3.0 * unadjclose['volume'] * \
+                                         self.symbol_dict[symbol]["contract_multiplier"]
             else:
                 unadjclose = self.bar_lib.read(
-                    unadj_db_symbol, chunk_range=DateRange(start_datetime.tz_localize(None), end_datetime.tz_localize(None)),
-                    columns = ['date', 'close_price', 'turnover', 'volume', 'open_interest'],
-                ).set_index('date').sort_index()
+                    unadj_db_symbol, chunk_range=dt_range, columns = [
+                        'date', 'close_price', 'turnover', 'volume', 'open_interest'
+                    ]).set_index('date').sort_index()
             _result['unadjclose'] = unadjclose['close_price']
             _result['volume'] = unadjclose['volume']
             if exch_str == 'CZCE':
@@ -181,6 +218,7 @@ class RqdataCollector(BaseCollector):
 
         if interval not in {'d', '1d'}:
             _limits.index = _limits.index - pd.Timedelta('6H')
+
 
         try:
             _result = pd.merge_asof(_result, _limits, left_index=True, right_index=True)
@@ -212,7 +250,7 @@ class RqdataCollector(BaseCollector):
                      'turnover': 'sum', 'open_interest': 'last', 'factor': 'mean'}).dropna(how='all', subset=['open_price', 'high_price', 'low_price', 'close_price'])
                 if day_only:
                     _result = _result.between_time("08:00", "17:00")
-            except:
+            except Exception:
                 logger.error(
                     f"resampling failed for {db_symbol} from {start_datetime} to {end_datetime}: {traceback.format_exc()}")
                 raise
@@ -224,23 +262,24 @@ class RqdataCollector(BaseCollector):
             _result['vwap'] = _result['turnover'] / _result['volume'] / self.symbol_dict[symbol]["contract_multiplier"] * _result['factor']
 
         _result['vwap'].fillna(_result['close_price'], inplace=True)
+        if interval in {'d', '1d'}:
+            _result['rolling_yield'] = self._cal_rolling_yields(und_code=und_sym, exch=exch_str, dtrange=dt_range)
 
         return pd.DataFrame() if _result is None else _result
 
-    def collector_data(self):
-        """collector data"""
-        super(RqdataCollector, self).collector_data()
-        # self.download_index_data()
-
     def get_instrument_list(self):
-        def symbol_validation(k, v):
+        def symbol_validation(_, v):
             if self.commod_only > 1 and v["underlying_symbol"] in {'IF', 'IC', 'IH', 'IM', 'T', 'TS', 'TF'}:
                 return False
             if pd.isna(v['listed_date']):
                 return False
             if pd.isna(v['de_listed_date']):
                 return v['listed_date']<=self.end_datetime
-            return self.start_datetime<=v['de_listed_date'] and v['listed_date'].replace(hour=16) <= min(self.end_datetime, pd.Timestamp.now('Asia/Shanghai')) #- pd.Timedelta(days=1)
+            if v["underlying_symbol"] == 'FU' and v['listed_date'] < pd.Timestamp("2018-07-15 23:00:00", tz='Asia/Shanghai'):
+                return False
+            if v["underlying_symbol"] == 'WR' and v['listed_date'] < pd.Timestamp("2018-10-15 23:00:00", tz='Asia/Shanghai'):
+                return False
+            return self.start_datetime<=v['de_listed_date'] and v['listed_date'].replace(hour=16) <= min(self.end_datetime, pd.Timestamp.now('Asia/Shanghai'))
 
         logger.info("get china future contracts......")
         self.symbol_dict = {x: self.meta_lib.read(x) for x in self.meta_lib.list_symbols()}
@@ -252,7 +291,8 @@ class RqdataCollector(BaseCollector):
     def _timezone(self):
         return "Asia/Shanghai"
 
-    def normalize_symbol(self, symbol: str):
+    @staticmethod
+    def normalize_symbol(symbol: str):
         """normalize symbol"""
         return symbol
 
@@ -301,9 +341,6 @@ class RqdataCollector(BaseCollector):
             _old_df = pd.read_csv(instrument_path, index_col=['date'], parse_dates=['date'])
             df = pd.concat([_old_df[~_old_df.index.isin(df.index)], df], sort=True)
         df.to_csv(instrument_path)
-
-        # info_path = self.save_dir.joinpath(f"{symbol}.pkl")
-        # info.to_pickle(info_path)
 
     def _simple_collector(self, symbol: str):
         """
@@ -397,7 +434,8 @@ class RqdataNormalizeIntraday(RqdataNormalize):
         self, qlib_data_1d_dir: [str, Path], date_field_name: str = "date", symbol_field_name: str = "symbol", interval: str = '1min', **kwargs
     ):
         self.qlib_data_1d_dir = qlib_data_1d_dir
-        self.arctic_store = Arctic("127.0.0.1", tz_aware=True, tzinfo=pytz.timezone('Asia/Shanghai'))
+        db_mgr = get_database()
+        self.arctic_store = cast(ArcticDatabase, db_mgr).connection
         self.meta_lib = self.arctic_store.get_library("future_meta")
         self.interval = interval
         super(RqdataNormalizeIntraday, self).__init__(date_field_name, symbol_field_name, **kwargs)
@@ -521,7 +559,7 @@ class Run(BaseRun):
         max_collector_count=2,
         start=None,
         end=None,
-        check_data_length=None,
+        check_data_length=0,
         limit_nums=None,
     ):
         """download data from Internet
@@ -533,9 +571,12 @@ class Run(BaseRun):
         start: str
             start datetime, default "2000-01-01"; closed interval(including start)
         end: str
-            end datetime, default ``pd.Timestamp(datetime.datetime.now() + pd.Timedelta(days=1))``; open interval(excluding end)
+            end datetime, default ``pd.Timestamp(datetime.datetime.now() + pd.Timedelta(days=1))``;
+            open interval(excluding end)
         check_data_length: int
-            check data length, if not None and greater than 0, each symbol will be considered complete if its data length is greater than or equal to this value, otherwise it will be fetched again, the maximum number of fetches being (max_collector_count). By default None.
+            check data length, if not None and greater than 0, each symbol will be considered complete if its data
+            length is greater than or equal to this value, otherwise it will be fetched again, the maximum number
+             of fetches being (max_collector_count). By default, None.
         limit_nums: int
             using for debug, by default None
 
@@ -553,18 +594,18 @@ class Run(BaseRun):
             # get 1m data
             $ python collector.py download_data --source_dir ~/.qlib/stock_data/source --region CN --start 2020-11-01 --end 2020-11-10 --delay 0.1 --interval 1m
         """
-        RqdataCollector(
+        _class = getattr(self._cur_module, self.collector_class_name)  # type: Type[BaseCollector]
+        _class(
             self.source_dir,
             max_workers=self.max_workers,
             max_collector_count=max_collector_count,
             start=start,
             end=end,
-            commod_only=self.commod_only,
             interval=self.interval,
             check_data_length=check_data_length,
             limit_nums=limit_nums,
-
         ).collector_data()
+        # super(Run, self).download_data(max_collector_count, 0.5, start, end, check_data_length, limit_nums)
 
     def normalize_data(
         self,
@@ -654,7 +695,7 @@ class Run(BaseRun):
             else self.max_workers
         )
         # # download data from Rqdata
-        self.download_data(max_collector_count=1, start=trading_date, end=end_date, check_data_length=check_data_length)
+        self.download_data(max_collector_count=self.max_workers, start=trading_date, end=end_date, check_data_length=check_data_length)
         #
         # # normalize data
         self.normalize_data(qlib_data_1d_dir)
@@ -692,16 +733,17 @@ class Run(BaseRun):
                 this_kind_conti.to_csv(instruments_dir.joinpath(f"{name}.txt"), header=False,
                                                sep=_dump.INSTRUMENTS_SEP, index=False)
 
+
 if __name__ == "__main__":
     #fire.Fire(Run)
-    interval = '15min'
+    interval = 'd'
     runner = Run(
-        source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_commod\source" + interval,
-        normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_commod\normalize" + interval,
-        max_workers=8,
+        source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut\source" + interval,
+        normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut\normalize" + interval,
+        max_workers=6,
         interval=interval,
         commod_only=3,
     )
-    # runner.download_data(max_collector_count=1, start=pd.Timestamp('2017-01-01'), end=pd.Timestamp.now().strftime("%Y-%m-%d"))
+    # runner.download_data(max_collector_count=6, start=pd.Timestamp('2017-01-01'), end=pd.Timestamp.now().strftime("%Y-%m-%d"))
     # runner.normalize_data(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_commod")
-    runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_commod", trading_date='2017-01-01', end_date=pd.Timestamp.now().strftime("%Y-%m-%d"))
+    runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut", trading_date='2012-01-01', end_date=pd.Timestamp.now().strftime("%Y-%m-%d"))

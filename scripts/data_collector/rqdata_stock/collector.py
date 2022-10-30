@@ -8,9 +8,12 @@ import time
 import importlib
 import multiprocessing
 from pathlib import Path
-from typing import Iterable
-from arctic import Arctic
+from typing import Iterable, cast
 from arctic.date import DateRange
+from arctic.auth import Credential
+from arctic.hooks import register_get_auth_hook
+from vnpy.trader.database import get_database, SETTINGS
+from vnpy_arctic.arctic_database import ArcticDatabase
 
 import fire
 import traceback
@@ -26,6 +29,18 @@ sys.path.append(str(CUR_DIR.parent.parent))
 from dump_bin import DumpDataUpdate, DumpDataAll
 from data_collector.base import BaseCollector, BaseNormalize, BaseRun, Normalize
 from data_collector.utils import get_calendar_list
+
+def arctic_auth_hook(*_):
+    if bool(SETTINGS.get("database.password", "")) and bool(SETTINGS.get("database.user", "")):
+        return Credential(
+            database='admin',
+            user=SETTINGS["database.user"],
+            password=SETTINGS["database.password"],
+        )
+    return None
+
+
+register_get_auth_hook(arctic_auth_hook)
 
 class RqdataCollector(BaseCollector):
 
@@ -64,7 +79,8 @@ class RqdataCollector(BaseCollector):
         limit_nums: int
             using for debug, by default None
         """
-        self.arctic_store = Arctic("127.0.0.1", tz_aware=True, tzinfo=pytz.timezone('Asia/Shanghai'))
+        db_mgr = get_database()
+        self.arctic_store = cast(ArcticDatabase, db_mgr).connection
         self.bar_data_infos = self.arctic_store.get_library('data_overview')
         self.bar_lib = self.arctic_store.get_library('bar_data')
         self.ex_factor_lib = self.arctic_store.get_library("ex_factor")  # 复权因子
@@ -473,21 +489,21 @@ class Run(BaseRun):
         )
         # download data from Rqdata
         # NOTE: when downloading data from RqdataFinance, max_workers is recommended to be 1
-        # self.download_data(max_collector_count=self.max_workers, start=trading_date, end=end_date)
+        self.download_data(max_collector_count=self.max_workers, start=trading_date, end=end_date)
 
-        # # normalize data
-        # self.normalize_data(qlib_data_1d_dir)
-        #
-        # qlib_dir = Path(qlib_data_1d_dir).expanduser().resolve()
-        # # dump bin
-        # DumpClass = DumpDataUpdate if qlib_dir.joinpath(r"calendars\day.txt").exists() else DumpDataAll
-        # _dump = DumpClass(
-        #     csv_path=self.normalize_dir,
-        #     qlib_dir=qlib_data_1d_dir,
-        #     exclude_fields="symbol,date",
-        #     max_workers=self.max_workers,
-        # )
-        # _dump.dump()
+        # normalize data
+        self.normalize_data(qlib_data_1d_dir)
+
+        qlib_dir = Path(qlib_data_1d_dir).expanduser().resolve()
+        # dump bin
+        DumpClass = DumpDataUpdate if qlib_dir.joinpath(r"calendars\day.txt").exists() else DumpDataAll
+        _dump = DumpClass(
+            csv_path=self.normalize_dir,
+            qlib_dir=qlib_data_1d_dir,
+            exclude_fields="symbol,date",
+            max_workers=self.max_workers,
+        )
+        _dump.dump()
 
         # parse index
         index_list = ["CSI100", "CSI300", "CSI500"]

@@ -42,7 +42,7 @@ class BaseSignalStrategy(BaseStrategy):
             the decision of the strategy will base on the given signal
         risk_degree : float
             position percentage of total value.
-        trade_exchange : Exchange
+        trade_exchange :
             exchange that provides market info, used to deal order and generate report
             - If `trade_exchange` is None, self.trade_exchange will be set with common_infra
             - It allowes different trade_exchanges is used in different executions.

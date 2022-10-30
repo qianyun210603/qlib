@@ -18,7 +18,7 @@ if __name__ == "__main__":
         "valid": ("2019-01-01", "2020-12-31"),
         "test": ("2020-01-01", "2020-07-01"),
     }
-    features = ['($adjclosestock * 100 / $conversionprice) / $close - 1', '$pure_bond_ytm', "call"]
+    features = ['($adjclosestock * 100 / $conversionprice) / $close - 1', '$pure_bond_ytm']
     feature_labels = ["convertion_premium", 'pure_bond_ytm']
 
     assert len(feature_labels) == len(features), "'features' and its labels must have same length"
@@ -57,7 +57,7 @@ if __name__ == "__main__":
         handler=h, segments=segments
     )
 
-    #dataset.prepare('train', col_set=["feature", "label"], data_key=DataHandlerLP.DK_L)
+    dataset.prepare('train', col_set=["feature", "label"], data_key=DataHandlerLP.DK_L)
     #dataset.prepare('valid', col_set=["feature", "label"], data_key=DataHandlerLP.DK_L)
     # dataset.prepare('test', col_set=["feature", "label"], data_key=DataHandlerLP.DK_I)
     h.fetch()

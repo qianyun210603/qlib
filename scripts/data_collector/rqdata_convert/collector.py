@@ -632,7 +632,7 @@ if __name__ == "__main__":
     )
     today = pd.Timestamp.now().normalize()
     # runner.update_data_to_bin(
-    #     qlib_data_1d_dir=r"/home/booksword/traderesearch/qlib_data/rqdata_convert",
+    #     qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert",
     #     trading_date=pd.Timestamp("2010-01-01"), end_date=today.strftime("%Y-%m-%d")
     # )
 

@@ -397,7 +397,7 @@ class CSI500Index(CSIIndex):
                 type: str, value from ["add", "remove"]
         """
         bs.login()
-        today = pd.datetime.now()
+        today = pd.Timestamp.now()
         date_range = pd.DataFrame(pd.date_range(start="2007-01-15", end=today, freq="7D"))[0].dt.date
         ret_list = []
         col = ["date", "symbol", "code_name"]

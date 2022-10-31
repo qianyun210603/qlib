@@ -274,12 +274,6 @@ class RqdataNormalize(BaseNormalize):
             logger.warning(f"Duplicated record discovered for {symbol}")
             df = df[~duplicated_record]
         if calendar_list is not None:
-            # index_from_cal = pd.DatetimeIndex(
-            #     [x for x in calendar_list if
-            #      df.index.min().replace(hour=0, minute=0, second=0) <= x
-            #      < df.index.max().replace(hour=23, minute=59, second=59)]
-            #     , name='date')
-            # df = df.reindex(index_from_cal)
             tmp_idx_cal = pd.DatetimeIndex(calendar_list, name='date').sort_values()
             index_from_cal = tmp_idx_cal[
                 tmp_idx_cal.searchsorted(df.index.min().replace(hour=0, minute=0, second=0)):
@@ -523,4 +517,4 @@ if __name__ == "__main__":
     )
     # runner.download_data(max_collector_count=1, start=pd.Timestamp("2014-01-01"), end=pd.Timestamp("2021-12-31"))
     # runner.normalize_data()
-    runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata", trading_date='2010-01-01', end_date="2013-01-01")
+    runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata", trading_date='2010-01-01', end_date="2022-10-31")

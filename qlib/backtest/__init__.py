@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Generator, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Generator, List, Optional, Tuple, Union, Dict
 
 import pandas as pd
 
@@ -223,7 +223,7 @@ def backtest(
     account: Union[float, int, dict] = 1e9,
     exchange_kwargs: dict = {},
     pos_type: str = "Position",
-) -> Tuple[PortfolioMetrics, Indicator]:
+) -> Tuple[PortfolioMetrics, Indicator, Dict]:
     """initialize the strategy and executor, then backtest function for the interaction of the outermost strategy and
     executor in the nested decision execution
 
@@ -273,8 +273,8 @@ def backtest(
         exchange_kwargs,
         pos_type=pos_type,
     )
-    portfolio_metrics, indicator = backtest_loop(start_time, end_time, trade_strategy, trade_executor)
-    return portfolio_metrics, indicator
+    portfolio_metrics, indicator, trades = backtest_loop(start_time, end_time, trade_strategy, trade_executor)
+    return portfolio_metrics, indicator, trades
 
 
 def collect_data(

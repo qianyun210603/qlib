@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Generator, Optional, Tuple, Union, cast
+from typing import TYPE_CHECKING, Generator, Optional, Tuple, Union, cast, Dict
 
 import pandas as pd
 
@@ -24,7 +24,7 @@ def backtest_loop(
     end_time: Union[pd.Timestamp, str],
     trade_strategy: BaseStrategy,
     trade_executor: BaseExecutor,
-) -> Tuple[PortfolioMetrics, Indicator]:
+) -> Tuple[PortfolioMetrics, Indicator, Dict]:
     """backtest function for the interaction of the outermost strategy and executor in the nested decision execution
 
     please refer to the docs of `collect_data_loop`
@@ -42,7 +42,8 @@ def backtest_loop(
 
     portfolio_metrics = cast(PortfolioMetrics, return_value.get("portfolio_metrics"))
     indicator = cast(Indicator, return_value.get("indicator"))
-    return portfolio_metrics, indicator
+    trades = return_value.get('execute_result')
+    return portfolio_metrics, indicator, trades
 
 
 def collect_data_loop(
@@ -80,9 +81,12 @@ def collect_data_loop(
 
     with tqdm(total=trade_executor.trade_calendar.get_trade_len(), desc="backtest loop") as bar:
         _execute_result = None
+        # _trade_executed = {}
         while not trade_executor.finished():
             _trade_decision: BaseTradeDecision = trade_strategy.generate_trade_decision(_execute_result)
-            _execute_result = yield from trade_executor.collect_data(_trade_decision, level=0)
+            _execute_result = yield from trade_executor.collect_data(
+                _trade_decision, return_value=return_value, level=0
+            )
             trade_strategy.post_exe_step(_execute_result)
             bar.update(1)
         trade_strategy.post_upper_level_exe_step()
@@ -99,4 +103,6 @@ def collect_data_loop(
             key = "{}{}".format(*Freq.parse(_executor.time_per_step))
             all_indicators[key] = _executor.trade_account.get_trade_indicator().generate_trade_indicators_dataframe()
             all_indicators[key + "_obj"] = _executor.trade_account.get_trade_indicator()
-        return_value.update({"portfolio_metrics": all_portfolio_metrics, "indicator": all_indicators})
+        return_value.update(
+            {"portfolio_metrics": all_portfolio_metrics, "indicator": all_indicators,}
+        )

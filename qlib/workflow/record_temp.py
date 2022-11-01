@@ -516,7 +516,7 @@ class PortAnaRecord(ACRecordTemp):
             self.backtest_config["end_time"] = get_date_by_shift(dt_values.max(), 1)
 
         # custom strategy and get backtest
-        portfolio_metric_dict, indicator_dict = normal_backtest(
+        portfolio_metric_dict, indicator_dict, trades = normal_backtest(
             executor=self.executor_config, strategy=self.strategy_config, **self.backtest_config
         )
         for _freq, (report_normal, positions_normal) in portfolio_metric_dict.items():
@@ -525,6 +525,8 @@ class PortAnaRecord(ACRecordTemp):
 
         for _freq, indicators_normal in indicator_dict.items():
             self.save(**{f"indicators_normal_{_freq}.pkl": indicators_normal})
+
+        self.save(**{"trades.pkl": trades})
 
         for _analysis_freq in self.risk_analysis_freq:
             if _analysis_freq not in portfolio_metric_dict:

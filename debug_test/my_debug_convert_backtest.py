@@ -1,6 +1,6 @@
 import qlib
 from qlib.constant import REG_CN
-from qlib.utils import exists_qlib_data
+from qlib.utils import exists_qlib_data, init_instance_by_config
 from qlib.workflow import R
 from functools import lru_cache
 from qlib.workflow.record_temp import SignalRecord, PortAnaRecord
@@ -9,7 +9,7 @@ from qlib.data.dataset.handler import DataHandlerLP
 from qlib.contrib.data.handler import check_transform_proc
 
 segments = {
-    "train": ("2017-01-01", "2020-01-01"),
+    "train": ("2019-01-01", "2020-01-01"),
     "test": ("2020-01-01", "2020-07-01"),
 }
 
@@ -64,9 +64,19 @@ if __name__ == '__main__':
 
     dataset = _generate_dataset()
 
+    model_config = {
+        "class": "LinearModel",
+        "module_path": "qlib.contrib.model.linear",
+        "kwargs": {
+            "estimator": "ols",
+        },
+    }
+    model = init_instance_by_config(model_config)
+    model.fit(dataset)
+
     with R.start(experiment_name="backtest_analysis", uri='file:D:\\Documents\\TradeResearch\\qlib\\examples\\mlruns'):
-        model_recorder = R.get_recorder(experiment_name="train_model", recorder_id='a0154477e767421e8fcc54c469639ab1')
-        model = model_recorder.load_object("trained_model")
+        # model_recorder = R.get_recorder(experiment_name="train_model", recorder_id='a0154477e767421e8fcc54c469639ab1')
+        # model = model_recorder.load_object("trained_model")
         port_analysis_config = {
             "executor": {
                 "class": "SimulatorExecutor",

@@ -298,7 +298,7 @@ class BaseExecutor:
             self.trade_account.current_position.settle_commit()
 
         if return_value is not None:
-            return_value.update({"execute_result": res})
+            return_value.setdefault("execute_result", {}).update({(trade_start_time, trade_end_time): res})
 
         return res
 

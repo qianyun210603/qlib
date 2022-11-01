@@ -581,10 +581,10 @@ class Run(BaseRun):
             if self.max_workers is None or self.max_workers < 1
             else self.max_workers
         )
-        # download data from Rqdata
-        # NOTE: when downloading data from RqdataFinance, max_workers is recommended to be 1
-        self.download_data(max_collector_count=self.max_workers, start=trading_date, end=end_date,
-                           check_data_length=check_data_length)
+        # # download data from Rqdata
+        # # NOTE: when downloading data from RqdataFinance, max_workers is recommended to be 1
+        # self.download_data(max_collector_count=self.max_workers, start=trading_date, end=end_date,
+        #                    check_data_length=check_data_length)
 
         # normalize data
         self.normalize_data(qlib_data_1d_dir)

@@ -1,7 +1,6 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-import pytz
 import sys
 import copy
 import time
@@ -15,7 +14,7 @@ from arctic.hooks import register_get_auth_hook
 from vnpy.trader.database import get_database, SETTINGS
 from vnpy_arctic.arctic_database import ArcticDatabase
 
-import fire
+# import fire
 import traceback
 import numpy as np
 import pandas as pd
@@ -30,6 +29,7 @@ from dump_bin import DumpDataUpdate, DumpDataAll
 from data_collector.base import BaseCollector, BaseNormalize, BaseRun, Normalize
 from data_collector.utils import get_calendar_list
 
+
 def arctic_auth_hook(*_):
     if bool(SETTINGS.get("database.password", "")) and bool(SETTINGS.get("database.user", "")):
         return Credential(
@@ -42,6 +42,8 @@ def arctic_auth_hook(*_):
 
 register_get_auth_hook(arctic_auth_hook)
 
+
+# noinspection PyTypeChecker
 class RqdataCollector(BaseCollector):
 
     def __init__(
@@ -86,7 +88,7 @@ class RqdataCollector(BaseCollector):
         self.ex_factor_lib = self.arctic_store.get_library("ex_factor")  # 复权因子
         self.split_lib = self.arctic_store.get_library("split")  # 拆分信息
         self.limit_lib = self.arctic_store.get_library('limit_up_down')
-        interval = 'd' if interval.endswith('d') else '1m'
+        interval: str = 'd' if interval.endswith('d') else '1m'
 
         super(RqdataCollector, self).__init__(
             save_dir=save_dir,
@@ -131,18 +133,21 @@ class RqdataCollector(BaseCollector):
 
         try:
             _result.set_index('date', inplace=True)
-        except:
-            print(start_datetime, end_datetime, db_symbol, symbol, _result)
+        except Exception:
+            logger.warning(
+                f"bad for {symbol} from {start_datetime.isoformat()} to {end_datetime.isoformat()}\n{str(_result)}"
+            )
 
         _limits = self.limit_lib.read(
-            symbol, chunk_range = DateRange(start_datetime.tz_localize(None).normalize(), end_datetime.tz_localize(None)),
+            symbol, chunk_range=DateRange(start_datetime.tz_localize(None).normalize(), end_datetime.tz_localize(None)),
             columns=['limit_up', 'limit_down']
         )
 
         try:
             _result = pd.merge_asof(_result, _limits, left_index=True, right_index=True)
-        except:
-            logger.error(f"merge limits failed for {db_symbol} from {start_datetime} to {end_datetime}: {traceback.format_exc()}")
+        except Exception:
+            logger.error(f"merge limits failed for {db_symbol} from {start_datetime} to "
+                         f"{end_datetime}: {traceback.format_exc()}")
             raise
 
         if self.ex_factor_lib.has_symbol(symbol):
@@ -154,8 +159,11 @@ class RqdataCollector(BaseCollector):
 
         if self.split_lib.has_symbol(symbol):
             split_factor = self.split_lib.read(symbol)
-            _result = pd.merge_asof(_result, split_factor[['cum_factor']].rename(columns={'cum_factor': 'split_cum_factor'}),
-                                 left_index=True, right_index=True)
+            _result = pd.merge_asof(
+                _result, split_factor[['cum_factor']].rename(
+                    columns={'cum_factor': 'split_cum_factor'}
+                ), left_index=True, right_index=True
+            )
         else:
             _result['split_cum_factor'] = 1.0
 
@@ -177,8 +185,11 @@ class RqdataCollector(BaseCollector):
                 self.end_datetime, pd.Timestamp.now('Asia/Shanghai'))
 
         logger.info("get HS stock symbols......")
-        symbol_dict = {x.rsplit('_', 1)[0]: self.bar_data_infos.read(x) for x in self.bar_data_infos.list_symbols()  if ('SSE' in x or 'SZSE' in x)
-                   and not x.startswith('INDEX') and not x.startswith("1") and x.endswith(self.interval)}
+        symbol_dict = {
+            x.rsplit('_', 1)[0]: self.bar_data_infos.read(x) for x in self.bar_data_infos.list_symbols() if
+            ('SSE' in x or 'SZSE' in x)
+            and not x.startswith('INDEX') and not x.startswith("1") and x.endswith(self.interval)
+        }
         symbols = [k for k, v in symbol_dict.items() if symbol_validation(k, v)]
         logger.info(f"get {len(symbols)} symbols.")
         return symbols
@@ -267,7 +278,9 @@ class RqdataNormalize(BaseNormalize):
         columns = copy.deepcopy(RqdataNormalize.COLUMNS)
         df['date'] = pd.to_datetime(df.date)
         df.set_index("date", inplace=True)
-        df = df.rename(columns=dict((s, t) for s, t in zip(RqdataNormalize.SOURCE_COLS, RqdataNormalize.COLUMNS))).copy()
+        df = df.rename(
+            columns=dict((s, t) for s, t in zip(RqdataNormalize.SOURCE_COLS, RqdataNormalize.COLUMNS))
+        ).copy()
 
         duplicated_record = df.index.duplicated(keep="first")
         if duplicated_record.any():
@@ -288,7 +301,9 @@ class RqdataNormalize(BaseNormalize):
             df[["open", "close", "high", "low", 'limit_up', 'limit_down', ]] = \
                 df[["open", "close", "high", "low", 'limit_up', 'limit_down', ]].multiply(df.ex_cum_factor, axis=0)
         else:
-            df[["open", "close", "high", "low"]] = df[["open", "close", "high", "low"]].multiply(df.ex_cum_factor, axis=0)
+            df[["open", "close", "high", "low"]] = df[["open", "close", "high", "low"]].multiply(
+                df.ex_cum_factor, axis=0
+            )
         df['factor'] = df.ex_cum_factor
 
         df.sort_index(inplace=True)
@@ -296,7 +311,8 @@ class RqdataNormalize(BaseNormalize):
         df.loc[(df["volume"] <= 1e-10) | np.isnan(df["volume"]), list(set(df.columns) - {"symbol"})] = np.nan
 
         # NOTE: The data obtained by Rqdata finance sometimes has exceptions
-        # WARNING: If it is normal for a `symbol(exchange)` to differ by a factor of *89* to *111* for consecutive trading days,
+        # WARNING: If it is normal for a `symbol(exchange)` to differ by a factor of
+        # *89* to *111* for consecutive trading days,
         # WARNING: the logic in the following line needs to be modified
         _count = 0
         change_series = RqdataNormalize.calc_change(df, last_close)
@@ -311,7 +327,8 @@ class RqdataNormalize(BaseNormalize):
             if _count >= 10:
                 _symbol = df.loc[df["symbol"].first_valid_index()]["symbol"]
                 logger.warning(
-                    f"{_symbol} `change` is abnormal for {_count} consecutive days, please check the specific data file carefully"
+                    f"{_symbol} `change` is abnormal for {_count} consecutive days, "
+                    f"please check the specific data file carefully"
                 )
 
         df["change"] = RqdataNormalize.calc_change(df, last_close)
@@ -339,7 +356,8 @@ class Run(BaseRun):
         Parameters
         ----------
         source_dir: str
-            The directory where the raw data collected from the Internet is saved, default "Path(__file__).parent/source"
+            The directory where the raw data collected from the Internet is saved,
+            default "Path(__file__).parent/source"
         normalize_dir: str
             Directory for normalize data, default "Path(__file__).parent/normalize"
         max_workers: int
@@ -378,9 +396,12 @@ class Run(BaseRun):
         start: str
             start datetime, default "2000-01-01"; closed interval(including start)
         end: str
-            end datetime, default ``pd.Timestamp(datetime.datetime.now() + pd.Timedelta(days=1))``; open interval(excluding end)
+            end datetime, default ``pd.Timestamp(datetime.datetime.now() + pd.Timedelta(days=1))``;
+            open interval(excluding end)
         check_data_length: int
-            check data length, if not None and greater than 0, each symbol will be considered complete if its data length is greater than or equal to this value, otherwise it will be fetched again, the maximum number of fetches being (max_collector_count). By default None.
+            check data length, if not None and greater than 0, each symbol will be considered complete if its data
+            length is greater than or equal to this value, otherwise it will be fetched again,
+            the maximum number of fetches being (max_collector_count). By default None.
         limit_nums: int
             using for debug, by default None
 
@@ -394,9 +415,11 @@ class Run(BaseRun):
         Examples
         ---------
             # get daily data
-            $ python collector.py download_data --source_dir ~/.qlib/stock_data/source --region CN --start 2020-11-01 --end 2020-11-10 --delay 0.1 --interval 1d
+            $ python collector.py download_data --source_dir ~/.qlib/stock_data/source --region CN --start 2020-11-01
+            --end 2020-11-10 --delay 0.1 --interval 1d
             # get 1m data
-            $ python collector.py download_data --source_dir ~/.qlib/stock_data/source --region CN --start 2020-11-01 --end 2020-11-10 --delay 0.1 --interval 1m
+            $ python collector.py download_data --source_dir ~/.qlib/stock_data/source --region CN --start 2020-11-01
+            --end 2020-11-10 --delay 0.1 --interval 1m
         """
         super(Run, self).download_data(max_collector_count, 0.5, start, end, check_data_length, limit_nums)
 
@@ -413,19 +436,27 @@ class Run(BaseRun):
 
                 qlib_data_1d can be obtained like this:
                     $ python scripts/get_data.py qlib_data --target_dir <qlib_data_1d_dir> --interval 1d
-                    $ python scripts/data_collector/Rqdata/collector.py update_data_to_bin --qlib_data_1d_dir <qlib_data_1d_dir> --trading_date 2021-06-01
+                    $ python scripts/data_collector/Rqdata/collector.py update_data_to_bin --qlib_data_1d_dir
+                    <qlib_data_1d_dir> --trading_date 2021-06-01
                 or:
-                    download 1d data, reference: https://github.com/microsoft/qlib/tree/main/scripts/data_collector/Rqdata#1d-from-Rqdata
+                    download 1d data, reference:
+                    https://github.com/microsoft/qlib/tree/main/scripts/data_collector/Rqdata#1d-from-Rqdata
 
         Examples
         ---------
-            $ python collector.py normalize_data --source_dir ~/.qlib/stock_data/source --normalize_dir ~/.qlib/stock_data/normalize --region cn --interval 1d
-            $ python collector.py normalize_data --qlib_data_1d_dir ~/.qlib/qlib_data/cn_data --source_dir ~/.qlib/stock_data/source_cn_1min --normalize_dir ~/.qlib/stock_data/normalize_cn_1min --region CN --interval 1min
+            $ python collector.py normalize_data --source_dir ~/.qlib/stock_data/source
+            --normalize_dir ~/.qlib/stock_data/normalize --region cn --interval 1d
+            $ python collector.py normalize_data --qlib_data_1d_dir ~/.qlib/qlib_data/cn_data
+            --source_dir ~/.qlib/stock_data/source_cn_1min --normalize_dir ~/.qlib/stock_data/normalize_cn_1min
+            --region CN --interval 1min
         """
         if self.interval.lower() == "1min":
             if qlib_data_1d_dir is None or not Path(qlib_data_1d_dir).expanduser().exists():
                 raise ValueError(
-                    "If normalize 1min, the qlib_data_1d_dir parameter must be set: --qlib_data_1d_dir <user qlib 1d data >, Reference: https://github.com/microsoft/qlib/tree/main/scripts/data_collector/Rqdata#automatic-update-of-daily-frequency-datafrom-Rqdata-finance"
+                    "If normalize 1min, the qlib_data_1d_dir parameter must be set: "
+                    "--qlib_data_1d_dir <user qlib 1d data >, "
+                    "Reference: https://github.com/microsoft/qlib/tree/main/scripts/data_collector/"
+                    "Rqdata#automatic-update-of-daily-frequency-datafrom-Rqdata-finance"
                 )
         _class = getattr(self._cur_module, self.normalize_class_name)
         yc = Normalize(
@@ -447,7 +478,8 @@ class Run(BaseRun):
         Parameters
         ----------
         qlib_data_1d_dir: str
-            the qlib data to be updated for Rqdata, usually from: https://github.com/microsoft/qlib/tree/main/scripts#download-cn-data
+            the qlib data to be updated for Rqdata, usually from:
+             https://github.com/microsoft/qlib/tree/main/scripts#download-cn-data
 
         trading_date: str
             trading days to be updated, by default ``datetime.datetime.now().strftime("%Y-%m-%d")``
@@ -455,11 +487,13 @@ class Run(BaseRun):
             end datetime, default ``pd.Timestamp(trading_date + pd.Timedelta(days=1))``; open interval(excluding end)
         Notes
         -----
-            If the data in qlib_data_dir is incomplete, np.nan will be populated to trading_date for the previous trading day
+            If the data in qlib_data_dir is incomplete, np.nan will be populated to trading_date for the previous
+            trading day
 
         Examples
         -------
-            $ python collector.py update_data_to_bin --qlib_data_1d_dir <user data dir> --trading_date <start date> --end_date <end date>
+            $ python collector.py update_data_to_bin --qlib_data_1d_dir <user data dir> --trading_date <start date>
+            --end_date <end date>
             # get 1m data
         """
 
@@ -511,10 +545,13 @@ class Run(BaseRun):
 if __name__ == "__main__":
     # fire.Fire(Run)
     runner = Run(
-        source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata\source",
-        normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata\normalize",
+        source_dir=r"/home/booksword/traderesearch/qlib_data/rqdata/source",
+        normalize_dir=r"/home/booksword/traderesearch/qlib_data/rqdata/normalize",
         max_workers=8
     )
     # runner.download_data(max_collector_count=1, start=pd.Timestamp("2014-01-01"), end=pd.Timestamp("2021-12-31"))
     # runner.normalize_data()
-    runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata", trading_date='2010-01-01', end_date="2022-10-31")
+    runner.update_data_to_bin(
+        qlib_data_1d_dir=r"/home/booksword/traderesearch/qlib_data/rqdata", trading_date='2010-01-01',
+        end_date=pd.Timestamp.now().strftime("%Y-%m-%d")
+    )

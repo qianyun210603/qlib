@@ -583,8 +583,8 @@ class Run(BaseRun):
         )
         # # download data from Rqdata
         # # NOTE: when downloading data from RqdataFinance, max_workers is recommended to be 1
-        # self.download_data(max_collector_count=self.max_workers, start=trading_date, end=end_date,
-        #                    check_data_length=check_data_length)
+        self.download_data(max_collector_count=self.max_workers, start=trading_date, end=end_date,
+                           check_data_length=check_data_length)
 
         # normalize data
         self.normalize_data(qlib_data_1d_dir)
@@ -626,8 +626,8 @@ class Run(BaseRun):
 if __name__ == "__main__":
     # fire.Fire(Run)
     runner = Run(
-        source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert\source",
-        normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert\normalize",
+        source_dir="/home/booksword/traderesearch/qlib_data/rqdata_convert/source",
+        normalize_dir="/home/booksword/traderesearch/qlib_data/rqdata_convert/normalize",
         max_workers=6
     )
     today = pd.Timestamp.now().normalize()
@@ -637,7 +637,7 @@ if __name__ == "__main__":
     # )
 
     runner.update_data_to_bin(
-        qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert",
+        qlib_data_1d_dir="/home/booksword/traderesearch/qlib_data/rqdata_convert",
         trading_date=(today - pd.Timedelta(days=7)).strftime("%Y-%m-%d"), end_date=today.strftime("%Y-%m-%d"),
         check_data_length=2
     )

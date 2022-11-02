@@ -95,10 +95,14 @@ def get_calendar_list(bench_code="CSI300", start_date = pd.Timestamp("2012-01-01
 
                 month_range = pd.date_range(start=pd.Timestamp(start_date), end=pd.Timestamp.now() + pd.Timedelta(days=31), freq="M")
                 calendar = []
-                for _m in month_range:
-                    cal = _get_calendar(_m.strftime("%Y-%m"))
-                    if cal:
-                        calendar += cal
+                with tqdm(total=len(month_range)) as pbar:
+                    for _m in month_range:
+                        _m_str = _m.strftime("%Y-%m")
+                        pbar.set_description(f"Getting {_m_str}")
+                        cal = _get_calendar(_m_str)
+                        if cal:
+                            calendar += cal
+                        pbar.update(1)
                 calendar = list(filter(lambda x: x <= pd.Timestamp.now(), calendar))
             else:
                 calendar = _get_calendar(CALENDAR_BENCH_URL_MAP[bench_code])

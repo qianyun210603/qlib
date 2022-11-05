@@ -341,8 +341,9 @@ class TopkKeepnDropoutStrategy(BaseTopkStrategy):
             axis=1) if self.only_tradable else True
         pred_df['rank'] = list(range(len(pred_df)))
         pred_df['keep'] = pred_df.apply(
-            lambda x: x['current_hold'] and (x['rank'] < self.keepn and x['cum_current_hold'] <= self.topk - self.forcedropnum
-                      or not self.trade_exchange.is_stock_tradable(x.name, trade_start_time, trade_end_time)),
+            lambda x: x['current_hold'] and (
+                    x['rank'] < self.keepn and x['cum_current_hold'] <= self.topk - self.forcedropnum
+                    or not self.trade_exchange.is_stock_tradable(x.name, trade_start_time, trade_end_time)),
             axis=1)
         num_keep = pred_df.keep.sum()
 
@@ -369,25 +370,30 @@ class TopkDropout4ConvertStrategy(TopkDropoutStrategy):
             lambda x: 0 if self.trade_exchange.is_stock_tradable(x.name, trade_start_time, trade_end_time)
             else 1 if x.current_hold else -1, axis=1
         ) if self.only_tradable else 0
-        pred_df.sort_values(by=['tradestatusflag', 'score', 'current_hold'], ascending=False, inplace=True, kind='stable')
+        pred_df.sort_values(
+            by=['tradestatusflag', 'score', 'current_hold'], ascending=False, inplace=True, kind='stable'
+        )
 
         # sell all sellable holdings which annouced force redemption
-        sell = pred_df[pred_df.current_hold & (pred_df.tradestatusflag==0) & pred_df.call_announced].index.tolist()
+        sell = pred_df[pred_df.current_hold & (pred_df.tradestatusflag == 0) & pred_df.call_announced].index.tolist()
 
         # drop items annouced force redemption
         pred_df = pred_df[~pred_df.call_announced]
 
-        pred_df['rank'] = (pred_df['current_hold'] | (0==pred_df['tradestatusflag'])).cumsum()
+        pred_df['rank'] = (pred_df['current_hold'] | (0 == pred_df['tradestatusflag'])).cumsum()
         pred_df['cum_current_hold'] = pred_df['current_hold'].cumsum()
         # sell only contains called ones now
         additional_n_drop = max(0, self.n_drop - len(sell))
 
-        pred_df['keep'] = pred_df['current_hold'] & ((pred_df['rank'] <= self.topk) | (pred_df['cum_current_hold'] <= len(current_stock_list) - additional_n_drop))
+        pred_df['keep'] = pred_df['current_hold'] & (
+            (pred_df['rank'] <= self.topk) |
+            (pred_df['cum_current_hold'] <= len(current_stock_list) - additional_n_drop)
+        )
 
         num_keep = pred_df.keep.sum()
 
-        sell.extend(pred_df[~pred_df.keep & (pred_df.tradestatusflag==0) & pred_df.current_hold].index.tolist())
-        buy = pred_df[~pred_df.current_hold & (pred_df.tradestatusflag==0)].iloc[:self.topk-num_keep].index.tolist()
+        sell.extend(pred_df[~pred_df.keep & (pred_df.tradestatusflag == 0) & pred_df.current_hold].index.tolist())
+        buy = pred_df[~pred_df.current_hold & (pred_df.tradestatusflag == 0)].iloc[:self.topk-num_keep].index.tolist()
 
         return buy, sell
 
@@ -412,7 +418,8 @@ class WeightStrategyBase(BaseSignalStrategy):
             - If `trade_exchange` is None, self.trade_exchange will be set with common_infra
             - It allowes different trade_exchanges is used in different executions.
             - For example:
-                - In daily execution, both daily exchange and minutely are usable, but the daily exchange is recommended because it run faster.
+                - In daily execution, both daily exchange and minutely are usable, but the daily exchange is
+                  recommended because it runs faster.
                 - In minutely execution, the daily exchange is not usable, only the minutely exchange is recommended.
         """
         super().__init__(**kwargs)
@@ -424,13 +431,16 @@ class WeightStrategyBase(BaseSignalStrategy):
 
     def generate_target_weight_position(self, score, current, trade_start_time, trade_end_time):
         """
-        Generate target position from score for this date and the current position.The cash is not considered in the position
+        Generate target position from score for this date and the current position.The cash is not considered in the
+         position
         Parameters
         -----------
         score : pd.Series
             pred score for this trade date, index is stock_id, contain 'score' column.
         current : Position()
             current position.
+        trade_start_time : pd.Timestamp
+        trade_end_time : pd.Timestamp
         """
         raise NotImplementedError()
 

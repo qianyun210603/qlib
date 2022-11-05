@@ -459,7 +459,7 @@ class CSI500Index(CSIIndex):
         bs.login()
         result = self.get_data_from_baostock(today)
         bs.logout()
-        df = result[["date", "symbol"]]
+        df = result[["date", "symbol"]].copy()
         df.columns = [self.END_DATE_FIELD, self.SYMBOL_FIELD_NAME]
         df.loc[:, self.END_DATE_FIELD] = pd.to_datetime(df[self.END_DATE_FIELD].astype(str))
         df[self.START_DATE_FIELD] = self.bench_start_date

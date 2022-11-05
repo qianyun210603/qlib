@@ -6,7 +6,7 @@ import warnings
 import numpy as np
 import pandas as pd
 
-from typing import Dict, List, Text, Tuple, Union
+from typing import Dict, List, Text, Tuple, Union, cast
 
 from qlib.data import D
 from qlib.data.dataset import Dataset
@@ -112,7 +112,7 @@ class BaseTopkStrategy(BaseSignalStrategy):
             if code in sell:
                 # check hold limit
                 time_per_step = self.trade_calendar.get_freq()
-                if current_temp.get_stock_count(code, bar=time_per_step) < self.hold_thresh:
+                if cast(Position, current_temp).get_stock_count(code, bar=time_per_step) < self.hold_thresh:
                     continue
                 # sell order
                 sell_amount = current_temp.get_stock_amount(code=code)
@@ -500,8 +500,8 @@ class EnhancedIndexingStrategy(WeightStrategyBase):
         riskmodel_root,
         market="csi500",
         turn_limit=None,
-        name_mapping={},
-        optimizer_kwargs={},
+        name_mapping=None,
+        optimizer_kwargs=None,
         verbose=False,
         **kwargs,
     ):
@@ -513,11 +513,15 @@ class EnhancedIndexingStrategy(WeightStrategyBase):
         self.market = market
         self.turn_limit = turn_limit
 
+        if name_mapping is None:
+            name_mapping = {}
         self.factor_exp_path = name_mapping.get("factor_exp", self.FACTOR_EXP_NAME)
         self.factor_cov_path = name_mapping.get("factor_cov", self.FACTOR_COV_NAME)
         self.specific_risk_path = name_mapping.get("specific_risk", self.SPECIFIC_RISK_NAME)
         self.blacklist_path = name_mapping.get("blacklist", self.BLACKLIST_NAME)
 
+        if optimizer_kwargs is not None:
+            optimizer_kwargs = {}
         self.optimizer = EnhancedIndexingOptimizer(**optimizer_kwargs)
 
         self.verbose = verbose

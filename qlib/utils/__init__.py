@@ -121,7 +121,8 @@ def read_period_data(index_path, data_path, period, cur_date_int: int, quarterly
         num quarter instead of num of year
     last_period_index: int
         it is a optional parameter; it is designed to avoid repeatedly access the .index data of PIT database when
-        sequentially observing the data (Because the latest index of a specific period of data certainly appear in after the one in last observation).
+        sequentially observing the data (Because the latest index of a specific period of data certainly appear in
+        after the one in last observation).
 
     Returns
     -------
@@ -394,7 +395,7 @@ def init_instance_by_config(
     config: InstConf,
     default_module=None,
     accept_types: Union[type, Tuple[type]] = (),
-    try_kwargs: Dict = {},
+    try_kwargs: Dict = None,
     **kwargs,
 ) -> Any:
     """
@@ -441,6 +442,7 @@ def init_instance_by_config(
     klass, cls_kwargs = get_callable_kwargs(config, default_module=default_module)
 
     try:
+        try_kwargs = {} if try_kwargs is None else try_kwargs
         return klass(**cls_kwargs, **try_kwargs, **kwargs)
     except (TypeError,):
         # TypeError for handling errors like
@@ -581,7 +583,8 @@ def get_date_by_shift(trading_date, shift, future=False, clip_shift=True, freq="
     clip_shift: bool
     align : Optional[str]
         When align is None, this function will raise ValueError if `trading_date` is not a trading date
-        when align is "left"/"right", it will try to align to left/right nearest trading date before shifting when `trading_date` is not a trading date
+        when align is "left"/"right", it will try to align to left/right nearest trading date before shifting when
+        `trading_date` is not a trading date
 
     """
     from qlib.data import D  # pylint: disable=C0415
@@ -891,7 +894,8 @@ def fill_placeholder(config: dict, config_extend: dict):
     The item of dict must be single item(int, str, etc), dict and list. Tuples are not supported.
     There are two type of variables:
     - user-defined variables :
-        e.g. when config_extend is `{"<MODEL>": model, "<DATASET>": dataset}`, "<MODEL>" and "<DATASET>" in `config` will be replaced with `model` `dataset`
+        e.g. when config_extend is `{"<MODEL>": model, "<DATASET>": dataset}`, "<MODEL>" and "<DATASET>" in `config`
+         will be replaced with `model` `dataset`
     - variables extracted from `config` :
         e.g. the variables like "<dataset.kwargs.segments.train.0>" will be replaced with the values from `config`
 
@@ -922,6 +926,8 @@ def fill_placeholder(config: dict, config_extend: dict):
             item_keys = range(len(now_item))
         elif isinstance(now_item, dict):
             item_keys = now_item.keys()
+        else:
+            item_keys = ()
         for key in item_keys:
             if isinstance(now_item[key], (list, dict)):
                 item_queue.append(now_item[key])
@@ -1007,7 +1013,7 @@ def register_wrapper(wrapper, cls_or_obj, module_path=None):
     wrapper.register(obj)
 
 
-def load_dataset(path_or_obj, index_col=[0, 1]):
+def load_dataset(path_or_obj, index_col=(0, 1)):
     """load dataset from multiple file formats"""
     if isinstance(path_or_obj, pd.DataFrame):
         return path_or_obj
@@ -1066,4 +1072,6 @@ __all__ = [
     "init_instance_by_config",
     "get_callable_kwargs",
     "code_to_fname",
+    "get_pre_trading_date",
+    "load_dataset",
 ]

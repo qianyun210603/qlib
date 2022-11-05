@@ -80,7 +80,7 @@ class Recorder:
         ----------
         local_path : str
             if provided, them save the file or directory to the artifact URI.
-        artifact_path=None : str
+        artifact_path : str
             the relative path for the artifact to be stored in the URI.
         """
         raise NotImplementedError(f"Please implement the `save_objects` method.")
@@ -255,7 +255,8 @@ class MLflowRecorder(Recorder):
     - We can provide more convenience to automatically do some extra things and make interface easier. For examples:
         - Automatically logging the uncommitted code
         - Automatically logging part of environment variables
-        - User can control several different runs by just creating different Recorder (in mlflow, you always have to switch artifact_uri and pass in run ids frequently)
+        - User can control several runs by just creating different Recorder (in mlflow, you always have to
+          switch artifact_uri and pass in run ids frequently)
     """
 
     def __init__(self, experiment_id, uri, name=None, mlflow_run=None):
@@ -358,6 +359,8 @@ class MLflowRecorder(Recorder):
         Mlflow only log the commit id of the current repo. But usually, user will have a lot of uncommitted changes.
         So this tries to automatically to log them all.
         """
+        curr_folder = os.getcwd()  # record original folder
+        os.chdir(Path(__file__).parent.parent.parent)  # switch to qlib root folder to run git
         # TODO: the sub-directories maybe git repos.
         # So it will be better if we can walk the sub-directories and log the uncommitted changes.
         for cmd, fname in [
@@ -370,6 +373,7 @@ class MLflowRecorder(Recorder):
                 self.client.log_text(self.id, out.decode(), fname)  # this behaves same as above
             except subprocess.CalledProcessError:
                 logger.info(f"Fail to log the uncommitted code of $CWD when run `{cmd}`")
+        os.chdir(curr_folder)  # cd to original folder
 
     def end_run(self, status: str = Recorder.STATUS_S):
         assert status in [

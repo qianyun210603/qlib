@@ -70,6 +70,7 @@ class BaseSignalStrategy(BaseStrategy):
         # It will use 95% amount of your total value by default
         return self.risk_degree
 
+
 class BaseTopkStrategy(BaseSignalStrategy):
     """
     hold top k instruments with equal amount of market value based on score
@@ -115,10 +116,10 @@ class BaseTopkStrategy(BaseSignalStrategy):
                     continue
                 # sell order
                 sell_amount = current_temp.get_stock_amount(code=code)
-                factor = self.trade_exchange.get_factor(
-                    stock_id=code, start_time=trade_start_time, end_time=trade_end_time
-                )
-                sell_amount = self.trade_exchange.round_amount_by_trade_unit(sell_amount, factor)
+                # factor = self.trade_exchange.get_factor(
+                #     stock_id=code, start_time=trade_start_time, end_time=trade_end_time
+                # )
+                # sell_amount_rounded = self.trade_exchange.round_amount_by_trade_unit(sell_amount, factor)
                 sell_order = Order(
                     stock_id=code,
                     amount=sell_amount,

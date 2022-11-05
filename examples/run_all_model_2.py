@@ -186,22 +186,44 @@ def gen_and_save_md_table(metrics, dataset):
 
 
 # read yaml, remove seed kwargs of model, and then save file in the temp_dir
-def gen_yaml_file_without_seed_kwargs(yaml_path, temp_dir):
+def gen_yaml_files_from_example_templates(
+    yaml_path, temp_dir, provider_uri, train, valid, test
+):
     with open(yaml_path, "r") as fp:
         config = yaml.safe_load(fp)
     try:
         del config["task"]["model"]["kwargs"]["seed"]
     except KeyError:
-        # If the key does not exists, use original yaml
-        # NOTE: it is very important if the model most run in original path(when sys.rel_path is used)
-        return yaml_path
+        pass
+
+    config['qlib_init']['provider_uri'] = provider_uri
+
+    config['task']['dataset']['kwargs']['handler']['kwargs']['start_time'] = train[0]
+    config['task']['dataset']['kwargs']['handler']['kwargs']['end_time'] = test[1]
+    if 'valid' in config['task']['dataset']['kwargs']['segments']:
+        config['task']['dataset']['kwargs']['handler']['kwargs']['fit_start_time'] = train[0]
+        config['task']['dataset']['kwargs']['handler']['kwargs']['fit_end_time'] = train[1]
+        config['task']['dataset']['kwargs']['segments']['train'] = train
+        config['task']['dataset']['kwargs']['segments']['valid'] = valid
+        config['task']['dataset']['kwargs']['segments']['test'] = test
     else:
-        # otherwise, generating a new yaml without random seed
-        file_name = yaml_path.split("/")[-1]
-        temp_path = os.path.join(temp_dir, file_name)
-        with open(temp_path, "w") as fp:
-            yaml.dump(config, fp)
-        return temp_path
+        config['task']['dataset']['kwargs']['handler']['kwargs']['fit_start_time'] = train[0]
+        config['task']['dataset']['kwargs']['handler']['kwargs']['fit_end_time'] = valid[1]
+        config['task']['dataset']['kwargs']['segments']['train'] = [train[0], valid[1]]
+        config['task']['dataset']['kwargs']['segments']['test'] = test
+
+    config['task']['record'][-1]['kwargs']['config']['backtest']['start_time'] = test[0]
+    config['task']['record'][-1]['kwargs']['config']['backtest']['end_time'] = test[1]
+
+    # otherwise, generating a new yaml without random seed
+    file_name = yaml_path.split("/")[-1]
+    if config['market'] not in file_name:
+        basename, extname = os.path.splitext(file_name)
+        file_name = basename + '_' + config['market'] + extname
+    temp_path = os.path.join(temp_dir, file_name)
+    with open(temp_path, "w") as fp:
+        yaml.dump(config, fp)
+    return temp_path
 
 
 class ModelRunner:
@@ -225,8 +247,8 @@ class ModelRunner:
         self,
         times=1,
         models=None,
-        dataset="Alpha360",
-        universe="csi500",
+        dataset="Alpha158",
+        universe="",
         exclude=False,
         exp_folder_name: str = "run_all_model_records",
         wait_before_rm_env: bool = False,
@@ -310,7 +332,7 @@ class ModelRunner:
             sys.stderr.write("Retrieving files...\n")
             yaml_path, req_path = get_all_files(folders[fn], dataset, universe=universe)
             if yaml_path is None:
-                sys.stderr.write(f"There is no {dataset}.yaml file in {folders[fn]}")
+                sys.stderr.write(f"There is no {dataset}.yaml file in {folders[fn]}\n")
                 continue
             sys.stderr.write("\n")
             # create env by anaconda
@@ -318,8 +340,8 @@ class ModelRunner:
 
             # install requirements.txt
             # sys.stderr.write("Installing requirements.txt...\n")
-            with open(req_path) as f:
-                content = f.read()
+            # with open(req_path) as f:
+            #     content = f.read()
             # if "torch" in content:
             #     # automatically install pytorch according to nvidia's version
             #     execute(
@@ -333,9 +355,14 @@ class ModelRunner:
             #     execute(f"{python_path} -m pip install -r {req_path}", wait_when_err=wait_when_err)
             # sys.stderr.write("\n")
             temp_dir = base_folder.joinpath("temp_dir")
+            if not temp_dir.exists():
+                temp_dir.mkdir()
 
             # read yaml, remove seed kwargs of model, and then save file in the temp_dir
-            yaml_path = gen_yaml_file_without_seed_kwargs(yaml_path, temp_dir)
+            yaml_path = gen_yaml_files_from_example_templates(
+                yaml_path, temp_dir, provider_uri='/home/booksword/traderesearch/qlib_data/rqdata',
+                train=['2011-01-01', '2016-12-31'], valid=['2017-01-01', '2018-12-31'], test=['2019-01-01', '2022-10-31']
+            )
             # setup gpu for tft
             # if fn == "TFT":
             #     execute(

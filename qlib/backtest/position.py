@@ -392,9 +392,11 @@ class Position(BasePosition):
     def update_event(self, stock_id, inst_info, date):
         if isinstance(inst_info, ConvertInstrumentInfo):
             if date in inst_info.cash_flow_schedule:
-                new_cash = self.position[stock_id]['amount'] * inst_info.cash_flow_schedule[date]
-                self.position['cash'] += new_cash
-                print(f"coupon or coupon+repayment for {stock_id}: {inst_info.cash_flow_schedule[date]}*{self.position[stock_id]['amount']}={new_cash} @ {date.isoformat()}")
+                new_cash = self.position[stock_id]["amount"] * inst_info.cash_flow_schedule[date]
+                self.position["cash"] += new_cash
+                print(
+                    f"coupon or coupon+repayment for {stock_id}: {inst_info.cash_flow_schedule[date]}*{self.position[stock_id]['amount']}={new_cash} @ {date.isoformat()}"
+                )
 
             if date >= min(inst_info.maturity_date, inst_info.call_date):
                 self._del_stock(stock_id)

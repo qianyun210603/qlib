@@ -94,6 +94,7 @@ class ChangeInstrument(ElemOperator):
     def _load_internal(self, instrument, start_index, end_index, *args):
         return self.feature.load(instrument, start_index, end_index, *args)
 
+
 class Neg(ElemOperator):
     def _load_internal(self, instrument, start_index, end_index, *args):
         series = self.feature.load(instrument, start_index, end_index, *args)
@@ -260,6 +261,7 @@ class PairOperator(ExpressionOps):
     @abc.abstractmethod
     def _load_internal(self, instrument, start_index, end_index, *args) -> pd.Series:
         raise NotImplementedError("This function must be implemented in your newly defined feature")
+
     def get_longest_back_rolling(self):
         if isinstance(self.feature_left, (Expression,)):
             left_br = self.feature_left.get_longest_back_rolling()
@@ -363,6 +365,7 @@ class Power(NpPairOperator):
     def __init__(self, feature_left, feature_right):
         super(Power, self).__init__(feature_left, feature_right, "power")
 
+
 class SignedPower(PairOperator):
     """Power Operator"""
 
@@ -393,7 +396,7 @@ class SignedPower(PairOperator):
                 f"series_left is {str(self.feature_left)}, series_right is {str(self.feature_right)}. Please check the data"
             )
         try:
-            res = np.power(series_left.abs(), series_right)*np.sign(series_left)
+            res = np.power(series_left.abs(), series_right) * np.sign(series_left)
         except ValueError as e:
             get_module_logger("ops").debug(warning_info)
             raise ValueError(f"{str(e)}. \n\t{warning_info}") from e
@@ -826,6 +829,7 @@ class Rolling(ExpressionOps):
             lft_etd = max(lft_etd + self.N - 1, lft_etd)
             return lft_etd, rght_etd
 
+
 class NpRolling(Rolling):
     """Rolling Operator for some operations which hasn't been implemented in pandas.Rolling,
     we use raw numpy function in such cases
@@ -842,6 +846,7 @@ class NpRolling(Rolling):
     Expression
         a feature instance with rolling Product
     """
+
     def __init__(self, feature, N, func):
         super().__init__(feature, N, func)
         self.npfunc = getattr(np, func)
@@ -859,7 +864,7 @@ class NpRolling(Rolling):
             series = series.rolling(self.N, min_periods=1).apply(self.npfunc, raw=True)
             # series.iloc[:self.N-1] = np.nan
         # series[isnull] = np.nan
-        series.loc[series.abs()<1e-10] = 0
+        series.loc[series.abs() < 1e-10] = 0
         return series
 
 
@@ -1597,9 +1602,7 @@ class Corr(PairRolling):
         # NOTE: Load uses MemCache, so calling load again will not cause performance degradation
         series_left = self.feature_left.load(instrument, start_index, end_index, *args)
         series_right = self.feature_right.load(instrument, start_index, end_index, *args)
-        res.loc[
-            np.isclose(series_left.rolling(self.N, min_periods=1).cov(series_right), 0, atol=1e-6)
-        ] = 0
+        res.loc[np.isclose(series_left.rolling(self.N, min_periods=1).cov(series_right), 0, atol=1e-6)] = 0
         res.loc[np.isclose(res, 1.0, atol=1e-4)] = 1
         res.loc[np.isclose(res, -1.0, atol=1e-4)] = -1
         return res.replace([np.inf, -np.inf], 0)
@@ -1626,9 +1629,9 @@ class Cov(PairRolling):
     def __init__(self, feature_left, feature_right, N):
         super(Cov, self).__init__(feature_left, feature_right, N, "cov")
 
+
 #################### cross section operator ####################
 class XSectionOperator(ElemOperator):
-
     def __init__(self, feature, population=None):
         self.population = population
         super().__init__(feature)
@@ -1642,18 +1645,17 @@ class XSectionOperator(ElemOperator):
         for inst in shuffled:
             if inst != instrument:
                 new_series = self.feature.load(inst, start_index, end_index, *args).rename(inst)
-                mydf = mydf.merge(new_series, left_index=True, right_index=True, how='left')
+                mydf = mydf.merge(new_series, left_index=True, right_index=True, how="left")
         return mydf
 
 
 class CSRank(XSectionOperator):
-
     def _load_internal(self, instrument, start_index, end_index, *args) -> pd.Series:
         df: pd.DataFrame = self._load_all_instruments(instrument, start_index, end_index, *args)
         return df.rank(axis=1, pct=True)[instrument]
 
-class CSScale(XSectionOperator):
 
+class CSScale(XSectionOperator):
     def _load_internal(self, instrument, start_index, end_index, *args) -> pd.Series:
         df: pd.DataFrame = self._load_all_instruments(instrument, start_index, end_index, *args)
         return df[instrument] / df.abs().sum(axis=1)
@@ -1662,7 +1664,6 @@ class CSScale(XSectionOperator):
 #################### other kind of operator ####################
 # trailing stop loss
 class TrailingStop(ExpressionOps):
-
     def __init__(self, feature_c, feature_h, feature_l, N, stop_loss_mode=0, stop_loss_threshold=(0.05, 0.02, 0.06)):
         self.feature_c = feature_c
         self.feature_h = feature_h
@@ -1679,24 +1680,30 @@ class TrailingStop(ExpressionOps):
                 return 1 - self.stop_loss_threshold[0]
             if current_ret > self.stop_loss_threshold[2]:
                 return 1 - self.stop_loss_threshold[1]
-            return 1 - ((self.stop_loss_threshold[0] - self.stop_loss_threshold[1]) *
-                        (current_ret/self.stop_loss_threshold[2]-1)**2 + self.stop_loss_threshold[1])
+            return 1 - (
+                (self.stop_loss_threshold[0] - self.stop_loss_threshold[1])
+                * (current_ret / self.stop_loss_threshold[2] - 1) ** 2
+                + self.stop_loss_threshold[1]
+            )
 
     def _load_internal(self, instrument, start_index, end_index, *args):
-        assert isinstance(self.feature_c, Expression) and isinstance(self.feature_h, Expression) and \
-               isinstance(self.feature_l, Expression), "close/high/low must be feature"
+        assert (
+            isinstance(self.feature_c, Expression)
+            and isinstance(self.feature_h, Expression)
+            and isinstance(self.feature_l, Expression)
+        ), "close/high/low must be feature"
         assert isinstance(self.N, int) and self.N < 0, "N must be negative integer (looking forward)"
         series_c = self.feature_c.load(instrument, start_index, end_index, *args)
         series_h = self.feature_h.load(instrument, start_index, end_index, *args)
         series_l = self.feature_l.load(instrument, start_index, end_index, *args)
         series = pd.Series(index=series_c.index)
         if not series.empty:
-            for idx in range(max(series.index.min(), start_index), min(series.index.max(), end_index)+self.N):
+            for idx in range(max(series.index.min(), start_index), min(series.index.max(), end_index) + self.N):
                 try:
                     high_high = series_c.loc[idx]
-                    for jdx in range(idx+1, idx-self.N+1):
+                    for jdx in range(idx + 1, idx - self.N + 1):
                         if high_high < series_h.loc[jdx]:
-                            stop_loss_factor = self._get_stop_loss_factor(high_high/series_c.loc[idx]-1)
+                            stop_loss_factor = self._get_stop_loss_factor(high_high / series_c.loc[idx] - 1)
                             if series_l.loc[jdx] < high_high * stop_loss_factor:
                                 series.loc[idx] = high_high * stop_loss_factor / series_c[idx] - 1
                                 break
@@ -1706,7 +1713,7 @@ class TrailingStop(ExpressionOps):
                             series.loc[idx] = high_high * stop_loss_factor / series_c[idx] - 1
                             break
                     if pd.isna(series.loc[idx]):
-                        series.loc[idx] = series_c.loc[idx-self.N] / series_c.loc[idx] - 1
+                        series.loc[idx] = series_c.loc[idx - self.N] / series_c.loc[idx] - 1
                 except:
                     print(instrument, start_index, end_index)
                     raise

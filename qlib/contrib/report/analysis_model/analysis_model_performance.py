@@ -270,7 +270,7 @@ def model_performance_graph(
     N: int = 5,
     reverse=False,
     rank=False,
-    graph_names: list = ["group_return", "pred_ic", "pred_autocorr", 'pred_turnover'],
+    graph_names: list = ["group_return", "pred_ic", "pred_autocorr", "pred_turnover"],
     show_notebook: bool = True,
     show_nature_day=True,
 ) -> [list, tuple]:

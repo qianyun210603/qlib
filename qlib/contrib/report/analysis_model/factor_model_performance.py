@@ -22,8 +22,8 @@ def guess_plotly_rangebreaks(dt_index: pd.DatetimeIndex):
     gaps_to_break = {}
     for gap, d in zip(gaps, dt_idx[:-1]):
         if gap > min_gap:
-            gaps_to_break.setdefault(gap-min_gap, []).append(d+min_gap)
-    return [dict(values=v, dvalue=int(k.total_seconds()*1000)) for k, v in gaps_to_break.items()]
+            gaps_to_break.setdefault(gap - min_gap, []).append(d + min_gap)
+    return [dict(values=v, dvalue=int(k.total_seconds() * 1000)) for k, v in gaps_to_break.items()]
 
 
 def _group_return(pred_label: pd.DataFrame = None, reverse: bool = False, N: int = 5, **kwargs) -> tuple:
@@ -51,36 +51,49 @@ def _group_return(pred_label: pd.DataFrame = None, reverse: bool = False, N: int
             num_in_each_group[num_groups // 2] += r
         return np.cumsum(num_in_each_group)
 
-    ref_reverse = kwargs.get('ref_reverse', False)
+    ref_reverse = kwargs.get("ref_reverse", False)
 
-    g_datetime = pred_label_drop.groupby(level='datetime')
-    if 'ref' in pred_label.columns:
+    g_datetime = pred_label_drop.groupby(level="datetime")
+    if "ref" in pred_label.columns:
+
         def _groupify(pred_label_day: pd.DataFrame, num_groups: int, reverse=False, ref_reverse=False):
-            pred_label_day = pred_label_day.droplevel(level='datetime').sort_values(by=['score', 'ref'], ascending=(reverse, ref_reverse))
+            pred_label_day = pred_label_day.droplevel(level="datetime").sort_values(
+                by=["score", "ref"], ascending=(reverse, ref_reverse)
+            )
             group_rank_bound = get_rank_cut(len(pred_label_day), num_groups)
-            return pd.Series([f"Group{gidx+1}" for gidx in np.searchsorted(group_rank_bound, np.arange(1, len(pred_label_day) + 1))],
-                             index=pred_label_day.index)
+            return pd.Series(
+                [f"Group{gidx+1}" for gidx in np.searchsorted(group_rank_bound, np.arange(1, len(pred_label_day) + 1))],
+                index=pred_label_day.index,
+            )
 
-        pred_label_drop['group'] = g_datetime.apply(
-            partial(_groupify, num_groups=N, reverse=reverse, ref_reverse=ref_reverse))
+        pred_label_drop["group"] = g_datetime.apply(
+            partial(_groupify, num_groups=N, reverse=reverse, ref_reverse=ref_reverse)
+        )
 
     else:
+
         def _groupify(pred_label_day: pd.DataFrame, num_groups: int, reverse=False):
-            ranks = ((2*float(reverse)-1)*pred_label_day.droplevel(level='datetime')['score']).rank(method='dense').astype(int)
+            ranks = (
+                ((2 * float(reverse) - 1) * pred_label_day.droplevel(level="datetime")["score"])
+                .rank(method="dense")
+                .astype(int)
+            )
             group_rank_bound = get_rank_cut(ranks.max(), num_groups)
-            return pd.Series([f"Group{gidx+1}" for gidx in np.searchsorted(group_rank_bound, ranks)], index=pred_label_day.index)
+            return pd.Series(
+                [f"Group{gidx+1}" for gidx in np.searchsorted(group_rank_bound, ranks)], index=pred_label_day.index
+            )
 
-        pred_label_drop['group'] = g_datetime.apply(partial(_groupify, num_groups=N, reverse=reverse))
+        pred_label_drop["group"] = g_datetime.apply(partial(_groupify, num_groups=N, reverse=reverse))
 
-    t_df = pred_label_drop.pivot_table(values='label', index='datetime', columns='group', aggfunc=np.mean)
+    t_df = pred_label_drop.pivot_table(values="label", index="datetime", columns="group", aggfunc=np.mean)
 
     # Long-benchmark
-    benchmark = kwargs.get('benchmark', 'mean')
+    benchmark = kwargs.get("benchmark", "mean")
     if isinstance(benchmark, str):
         benchmark_name = benchmark
         benchmark = getattr(g_datetime["label"], benchmark_name)()
     elif isinstance(benchmark, pd.Series):
-        benchmark_name = benchmark.name if bool(benchmark.name) else 'benchmark'
+        benchmark_name = benchmark.name if bool(benchmark.name) else "benchmark"
         benchmark = benchmark.reindex(t_df.index)
     else:
         raise TypeError(f"Invalid benchmark type: {type(benchmark)}")
@@ -95,7 +108,7 @@ def _group_return(pred_label: pd.DataFrame = None, reverse: bool = False, N: int
         t_df.cumsum(),
         layout=dict(
             title="Cumulative Return",
-            xaxis=dict(tickangle=45, rangebreaks=kwargs.get('rangebreaks', guess_plotly_rangebreaks(t_df.index)))
+            xaxis=dict(tickangle=45, rangebreaks=kwargs.get("rangebreaks", guess_plotly_rangebreaks(t_df.index))),
         ),
     ).figure
 
@@ -109,22 +122,45 @@ def _group_return(pred_label: pd.DataFrame = None, reverse: bool = False, N: int
         max_dd = (cum_ret.cummax() - cum_ret).max()
         years = (cum_ret.index[-1] - cum_ret.index[0]) / pd.Timedelta(days=365)
 
-        return pd.Series([mean_ret, std_ret, return_series.skew(), return_series.kurt(), cum_ret[-1] / years,
-                          mean_ret / std_ret * np.sqrt(n), max_dd, cum_ret[-1]/max_dd ],
-                         index=['periodwise return mean', 'return std', 'return skew', 'return kurt', 'annual return',
-                                'Sharp ratio', 'max drawdown', 'Calmar ratio'])
+        return pd.Series(
+            [
+                mean_ret,
+                std_ret,
+                return_series.skew(),
+                return_series.kurt(),
+                cum_ret[-1] / years,
+                mean_ret / std_ret * np.sqrt(n),
+                max_dd,
+                cum_ret[-1] / max_dd,
+            ],
+            index=[
+                "periodwise return mean",
+                "return std",
+                "return skew",
+                "return kurt",
+                "annual return",
+                "Sharp ratio",
+                "max drawdown",
+                "Calmar ratio",
+            ],
+        )
 
     stats_df = t_df.agg(_cal_statics)
     stats_table_figure = TableGraph(
         stats_df,
-        graph_kwargs=dict(cell_kwargs=dict(format=[[None]*8]+[[".4%", ".4%", ".4f", ".4f", ".4%", ".4f", '.4%', '.4f']]*(len(stats_df.columns)))),
-        layout=dict(title='Group Return Summary')
+        graph_kwargs=dict(
+            cell_kwargs=dict(
+                format=[[None] * 8]
+                + [[".4%", ".4%", ".4f", ".4f", ".4%", ".4f", ".4%", ".4f"]] * (len(stats_df.columns))
+            )
+        ),
+        layout=dict(title="Group Return Summary"),
     ).figure
 
     t_df = t_df.loc[:, ["long-short", f"long-{benchmark_name}"]]
 
-    pred_label_drop['excess'] = pred_label_drop['label'] - benchmark
-    box_figure = BoxGraph(pred_label_drop, data_column='excess', category_column='group').figure
+    pred_label_drop["excess"] = pred_label_drop["label"] - benchmark
+    box_figure = BoxGraph(pred_label_drop, data_column="excess", category_column="group").figure
 
     _bin_size = float((t_df.std() / 5).min())
     group_hist_figure = SubplotsGraph(
@@ -132,14 +168,14 @@ def _group_return(pred_label: pd.DataFrame = None, reverse: bool = False, N: int
         # kind_map=dict(kind="DistplotGraph", kwargs=dict(bin_size=_bin_size)),
         sub_graph_data=[
             (box_figure, dict(row=1, col=3)),
-            ("long-short", dict(row=1, col=1, kind='DistplotGraph', graph_kwargs=dict(bin_size=_bin_size))),
-            (f"long-{benchmark_name}", dict(row=1, col=2, kind='DistplotGraph', graph_kwargs=dict(bin_size=_bin_size))),
+            ("long-short", dict(row=1, col=1, kind="DistplotGraph", graph_kwargs=dict(bin_size=_bin_size))),
+            (f"long-{benchmark_name}", dict(row=1, col=2, kind="DistplotGraph", graph_kwargs=dict(bin_size=_bin_size))),
         ],
         subplots_kwargs=dict(
             rows=1,
             cols=3,
             print_grid=False,
-            subplot_titles=["long-short", f"long-{benchmark_name}", 'group box plot'],
+            subplot_titles=["long-short", f"long-{benchmark_name}", "group box plot"],
         ),
     ).figure
 
@@ -237,11 +273,13 @@ def _pred_ic(pred_label: pd.DataFrame = None, rank: bool = False, **kwargs) -> t
         skew = s.skew()
         kurt = s.kurt()
         t_stat, p_value = stats.ttest_1samp(s, 0)
-        return pd.Series([mean, std, mean / std, t_stat, p_value, skew, kurt],
-                         index=["IC mean", "IC std", "Risk-adjusted IC", "t-stat(IC)", "p-value(IC)", "IC skew",
-                                "IC kurtosis"])
-    _stats_ic_df = _ic_df.agg(_cal_statistic_ic).rename(columns={'ic': 'stats.'})
-    _stats_ic_table_figure = TableGraph(_stats_ic_df, graph_kwargs=dict(cell_kwargs=dict(format=[None, '.4f']))).figure
+        return pd.Series(
+            [mean, std, mean / std, t_stat, p_value, skew, kurt],
+            index=["IC mean", "IC std", "Risk-adjusted IC", "t-stat(IC)", "p-value(IC)", "IC skew", "IC kurtosis"],
+        )
+
+    _stats_ic_df = _ic_df.agg(_cal_statistic_ic).rename(columns={"ic": "stats."})
+    _stats_ic_table_figure = TableGraph(_stats_ic_df, graph_kwargs=dict(cell_kwargs=dict(format=[None, ".4f"]))).figure
 
     dist = stats.norm
     _qqplot_fig = _plot_qq(ic, dist)
@@ -292,11 +330,14 @@ def _pred_autocorr(pred_label: pd.DataFrame, lag=1, **kwargs) -> tuple:
     pred["score_last"] = pred.groupby(level="instrument")["score"].shift(lag)
     ac = pred.groupby(level="datetime").apply(lambda x: x["score"].rank(pct=True).corr(x["score_last"].rank(pct=True)))
     _df = ac.to_frame("value")
-    #_df.index = _df.index.strftime("%Y-%m-%d")
+    # _df.index = _df.index.strftime("%Y-%m-%d")
 
     ac_figure = ScatterGraph(
         _df,
-        layout=dict(title="Auto Correlation", xaxis=dict(tickangle=45, rangebreaks=kwargs.get('rangebreaks', guess_plotly_rangebreaks(_df.index)))),
+        layout=dict(
+            title="Auto Correlation",
+            xaxis=dict(tickangle=45, rangebreaks=kwargs.get("rangebreaks", guess_plotly_rangebreaks(_df.index))),
+        ),
     ).figure
     return (ac_figure,)
 
@@ -324,7 +365,10 @@ def _pred_turnover(pred_label: pd.DataFrame, N=5, lag=1, **kwargs) -> tuple:
     )
     turnover_figure = ScatterGraph(
         r_df,
-        layout=dict(title="Top-Bottom Turnover", xaxis=dict(tickangle=45, rangebreaks=kwargs.get('rangebreaks', guess_plotly_rangebreaks(r_df.index))))
+        layout=dict(
+            title="Top-Bottom Turnover",
+            xaxis=dict(tickangle=45, rangebreaks=kwargs.get("rangebreaks", guess_plotly_rangebreaks(r_df.index))),
+        ),
     ).figure
     return (turnover_figure,)
 
@@ -344,7 +388,7 @@ def ic_figure(ic_df: pd.DataFrame, show_nature_day=True, **kwargs) -> go.Figure:
         ic_df,
         layout=dict(
             title="Information Coefficient (IC)",
-            xaxis=dict(tickangle=45, rangebreaks=kwargs.get('rangebreaks', guess_plotly_rangebreaks(ic_df.index))),
+            xaxis=dict(tickangle=45, rangebreaks=kwargs.get("rangebreaks", guess_plotly_rangebreaks(ic_df.index))),
         ),
     ).figure
     return ic_bar_figure
@@ -356,10 +400,10 @@ def factor_performance_graph(
     N: int = 5,
     reverse=False,
     rank=False,
-    graph_names: list = ["group_return", "pred_ic", "pred_autocorr", 'pred_turnover'],
+    graph_names: list = ["group_return", "pred_ic", "pred_autocorr", "pred_turnover"],
     show_notebook: bool = True,
     show_nature_day=True,
-    **kwargs
+    **kwargs,
 ) -> [list, tuple]:
     """Factor performance
 
@@ -389,13 +433,7 @@ def factor_performance_graph(
     figure_list = []
     for graph_name in graph_names:
         fun_res = eval(f"_{graph_name}")(
-            pred_label=pred_label,
-            lag=lag,
-            N=N,
-            reverse=reverse,
-            rank=rank,
-            show_nature_day=show_nature_day,
-            **kwargs
+            pred_label=pred_label, lag=lag, N=N, reverse=reverse, rank=rank, show_nature_day=show_nature_day, **kwargs
         )
         figure_list += fun_res
 

@@ -206,7 +206,6 @@ class SignalRecord(RecordTemp):
         return ["pred.pkl", "label.pkl"]
 
 
-
 class SignalSeriesRecord(RecordTemp):
     """
     This is the Signal Record class that generates the signal prediction. This class inherits the ``RecordTemp`` class.

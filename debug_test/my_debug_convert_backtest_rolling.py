@@ -12,11 +12,11 @@ from qlib.data.dataset.handler import DataHandlerLP
 from qlib.contrib.data.handler import check_transform_proc
 from qlib.walkforward.walkforward_handler import WFDataHandler
 
-market = "all"
+market = "converts"
 benchmark = "SH000832"
 
-if __name__ == '__main__':
-    provider_uri = r"D:\Documents\TradeResearch\qlib_test\rqdata_convert"  # target_dir
+if __name__ == "__main__":
+    provider_uri = r"/home/booksword/traderesearch/qlib_data/rqdata_convert/"  # target_dir
     if exists_qlib_data(provider_uri):
         qlib.init(provider_uri=provider_uri, region=REG_CN)
     else:
@@ -24,21 +24,59 @@ if __name__ == '__main__':
 
     wf_segments = [
         {
-            "train": ("2017-01-01", "2019-12-31"),
+            "train": ("2020-06-01", "2022-05-31"),
             # "valid": ("2018-01-01", "2018-12-31"),
-            "test": ("2020-01-01", "2020-06-30"),
+            "test": ("2022-06-01", "2022-06-30"),
         },
         {
-            "train": ("2017-07-01", "2020-06-30"),
+            "train": ("2020-07-01", "2021-06-30"),
             # "valid": ("2018-01-01", "2018-12-31"),
-            "test": ("2020-07-01", "2020-12-31"),
+            "test": ("2022-07-01", "2022-08-31"),
+        },
+        {
+            "train": ("2020-09-01", "2022-08-31"),
+            # "valid": ("2018-01-01", "2018-12-31"),
+            "test": ("2022-09-01", "2022-09-30"),
+        },
+        {
+            "train": ("2020-10-01", "2022-09-30"),
+            # "valid": ("2018-01-01", "2018-12-31"),
+            "test": ("2022-10-01", "2022-10-31"),
+        },
+        {
+            "train": ("2020-11-01", "2022-10-27"),
+            # "valid": ("2018-01-01", "2018-12-31"),
+            "test": ("2022-10-28", "2022-12-31"),
         },
     ]
 
-    features = ['Greater(-0.03, ($adjclosestock * 100 / $conversionprice) / $close - 1)',
-                '$pure_bond_ytm']
-    feature_labels = ["convertion_premium", 'pure_bond_ytm']
+    features = [
+        "($adjclosestock * 100 / $conversionprice) / $close - 1",
+        "$pure_bond_ytm",
+        "$hv60",
+        "$remaining_size",
+        "$turnover_rate",
+        "($closestock-$openstock)/$openstock",
+        "($highstock-$lowstock)/$openstock",
+        "($highstock-Greater($openstock, $closestock))/($highstock-$lowstock+1e-12)",
+        "(2*$closestock-$highstock-$lowstock)/($highstock-$lowstock+1e-12)",
+        "$closestock/Ref($closestock, 1) - 1",
+        "$closestock/Ref($closestock, 5) - 1",
+    ]
 
+    feature_labels = [
+        "convertion_premium",
+        "pure_bond_ytm",
+        "hv60",
+        "remaining_size",
+        "turnover_rate",
+        "SKMID",
+        "SKLEN",
+        "SKUP2",
+        "SKSFT2",
+        "SRET1",
+        "SRET5",
+    ]
     assert len(feature_labels) == len(features), "'features' and its labels must have same length"
 
     data_loader = {
@@ -46,15 +84,15 @@ if __name__ == '__main__':
         "kwargs": {
             "config": {
                 "feature": (features, feature_labels),
-                "label": (["Ref($close, -2)/Ref($close, -1) - 1"], ["LABEL0"]),
+                "label": (["Ref($open, -2)/Ref($open, -1) - 1"], ["LABEL0"]),
             },
         },
     }
 
     pre_handler = DataHandlerLP(
-        instruments="converts",
-        start_time=wf_segments[0]['train'][0],
-        end_time=wf_segments[-1]['test'][-1],
+        instruments=market,
+        start_time=wf_segments[0]["train"][0],
+        end_time=wf_segments[-1]["test"][-1],
         data_loader=data_loader,
         infer_processors=[],
         learn_processors=[],
@@ -73,14 +111,22 @@ if __name__ == '__main__':
     pred_scores = []
 
     for segments in wf_segments:
-        infer_processors = check_transform_proc([
-            {"class": 'RobustZScoreNorm', "kwargs": {"fields_group": "feature", 'clip_outlier': True}},
-            {"class": 'Fillna', "kwargs": {"fields_group": "feature"}}
-        ], segments["train"][0], segments["train"][1])
-        learn_processors = check_transform_proc([
-            {"class": "DropnaLabel"},
-            {"class": "CSZScoreNorm", "kwargs": {"fields_group": "label"}},
-        ], segments["train"][0], segments["train"][1])
+        infer_processors = check_transform_proc(
+            [
+                {"class": "RobustZScoreNorm", "kwargs": {"fields_group": "feature", "clip_outlier": True}},
+                {"class": "Fillna", "kwargs": {"fields_group": "feature"}},
+            ],
+            segments["train"][0],
+            segments["train"][1],
+        )
+        learn_processors = check_transform_proc(
+            [
+                {"class": "DropnaLabel"},
+                {"class": "CSZScoreNorm", "kwargs": {"fields_group": "label"}},
+            ],
+            segments["train"][0],
+            segments["train"][1],
+        )
         h = WFDataHandler(
             start_time=segments["train"][0],
             end_time=segments["test"][1],
@@ -88,11 +134,11 @@ if __name__ == '__main__':
             fit_end_time=segments["train"][1],
             infer_processors=infer_processors,
             learn_processors=learn_processors,
-            data_loader_kwargs={"handler_config": pre_handler, }
+            data_loader_kwargs={
+                "handler_config": pre_handler,
+            },
         )
-        dataset = DatasetH(
-            handler=h, segments=segments
-        )
+        dataset = DatasetH(handler=h, segments=segments)
         datasets.append(dataset)
 
         dataset.prepare("test", col_set="label")
@@ -103,6 +149,8 @@ if __name__ == '__main__':
 
         pred_score = model.predict(dataset)
         pred_scores.append(pred_score)
+
+    scores = pd.concat(pred_scores).sort_index()
 
     port_analysis_config = {
         "executor": {
@@ -117,7 +165,7 @@ if __name__ == '__main__':
             "class": "TopkDropout4ConvertStrategy",  # 4Convert
             "module_path": "qlib.contrib.strategy.signal_strategy",
             "kwargs": {
-                "signal": pd.concat(pred_scores).sort_index(),
+                "signal": scores,
                 "topk": 20,
                 "n_drop": 5,
                 "only_tradable": False
@@ -126,8 +174,11 @@ if __name__ == '__main__':
         },
         "backtest": {
             "start_time": wf_segments[0]["test"][0],
-            "end_time": min(pd.Timestamp.now().replace(hour=0, minute=0, second=0, microsecond=0), pd.Timestamp(wf_segments[-1]["test"][-1])),
-            "account": 100000,
+            "end_time": min(
+                pd.Timestamp.now().replace(hour=0, minute=0, second=0, microsecond=0),
+                pd.Timestamp(wf_segments[-1]["test"][-1]),
+            ),
+            "account": 250000,
             "benchmark": benchmark,
             "exchange_kwargs": {
                 "freq": "day",

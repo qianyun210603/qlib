@@ -380,14 +380,14 @@ class HashStockFormat(Processor):
 class SymmetricOrthogonalization(Processor):
     """Apply Symmetric Orthogonalization on features to remove collinearity"""
 
-    def __init__(self, fields_group='feature'):
+    def __init__(self, fields_group="feature"):
         self.fields_group = fields_group
 
     def __call__(self, df: pd.DataFrame):
         def orthogonalize_oneday(df):
             mat_M = np.dot(df.values.T, df.values)
             eigs, mat_U = np.linalg.eigh(mat_M)
-            mat_S = np.dot(np.dot(mat_U, np.diag(1.0/np.sqrt(eigs))), mat_U.T)
+            mat_S = np.dot(np.dot(mat_U, np.diag(1.0 / np.sqrt(eigs))), mat_U.T)
             df = pd.DataFrame(np.dot(df.values, mat_S), columns=df.columns, index=df.index)
             return df
 
@@ -416,7 +416,7 @@ class GramSchmidtOrthogonalization(Processor):
                 # subtract projections
                 df[self.orth_cols[[i]]] -= projections
                 if np.linalg.norm(df[self.orth_cols[[i]]]) < self.eps:
-                    df.loc[df[self.orth_cols[i]] < self.eps, self.orth_cols[i]] = 0.  # set the small entries to 0
+                    df.loc[df[self.orth_cols[i]] < self.eps, self.orth_cols[i]] = 0.0  # set the small entries to 0
                 else:
                     df.loc[:, self.orth_cols[i]] /= np.linalg.norm(df.loc[:, self.orth_cols[i]])
             return df
@@ -442,14 +442,14 @@ class GramSchmidtOrthogonalization(Processor):
                 self.processed_cols = []
 
             df[self.orth_cols] = df[self.orth_cols] / df[self.orth_cols].apply(np.linalg.norm, axis=0, raw=True)
-            if self.projection_order == 'raw' or df[self.label_cols].isna().all(axis=None):
+            if self.projection_order == "raw" or df[self.label_cols].isna().all(axis=None):
                 return self._cal_raw(df)
-            if self.projection_order == 'max_vertical_component':
+            if self.projection_order == "max_vertical_component":
 
                 return self._cal_max_vertical_component(df)
             raise NotImplementedError("Unimplemented Orthogonalization Order.")
 
-    def __init__(self, fields_group='feature', projection_order='raw', label_group='label', eps=1e-15):
+    def __init__(self, fields_group="feature", projection_order="raw", label_group="label", eps=1e-15):
         self.fields_group = fields_group
         self.projection_order = projection_order
         self.label_group = label_group
@@ -458,7 +458,9 @@ class GramSchmidtOrthogonalization(Processor):
     def __call__(self, df: pd.DataFrame):
         df.sort_index(inplace=True)
         cols = get_group_columns(df, self.fields_group)
-        label_cols = None if self.projection_order == 'raw' else get_group_columns(df, self.label_group)
-        return df.groupby("datetime").apply(GramSchmidtOrthogonalization.GramSchmidtHelper(
-            self.projection_order, orth_cols=list(cols), label_cols=label_cols, eps=self.eps
-        ))
+        label_cols = None if self.projection_order == "raw" else get_group_columns(df, self.label_group)
+        return df.groupby("datetime").apply(
+            GramSchmidtOrthogonalization.GramSchmidtHelper(
+                self.projection_order, orth_cols=list(cols), label_cols=label_cols, eps=self.eps
+            )
+        )

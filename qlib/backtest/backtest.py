@@ -42,7 +42,7 @@ def backtest_loop(
 
     portfolio_metrics = cast(PortfolioMetrics, return_value.get("portfolio_metrics"))
     indicator = cast(Indicator, return_value.get("indicator"))
-    trades = return_value.get('execute_result')
+    trades = return_value.get("execute_result")
     return portfolio_metrics, indicator, trades
 
 
@@ -104,5 +104,8 @@ def collect_data_loop(
             all_indicators[key] = _executor.trade_account.get_trade_indicator().generate_trade_indicators_dataframe()
             all_indicators[key + "_obj"] = _executor.trade_account.get_trade_indicator()
         return_value.update(
-            {"portfolio_metrics": all_portfolio_metrics, "indicator": all_indicators,}
+            {
+                "portfolio_metrics": all_portfolio_metrics,
+                "indicator": all_indicators,
+            }
         )

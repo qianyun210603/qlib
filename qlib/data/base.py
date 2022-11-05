@@ -284,7 +284,7 @@ class ExpressionOps(Expression):
     """
 
     def set_population(self, population):
-        if hasattr(self, 'population') and self.population is None:
+        if hasattr(self, "population") and self.population is None:
             self.population = population
 
         for _, member_var in vars(self).items():

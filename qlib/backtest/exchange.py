@@ -193,10 +193,11 @@ class Exchange:
         if instrument_info_path != "":
             from pathlib import Path
             import pickle
+
             instrument_info_path = Path(instrument_info_path)
-            self.instrument_info.update({
-                p.stem.upper(): pickle.load(open(p, 'rb')) for p in instrument_info_path.glob('*.pkl')
-            })
+            self.instrument_info.update(
+                {p.stem.upper(): pickle.load(open(p, "rb")) for p in instrument_info_path.glob("*.pkl")}
+            )
 
     def get_quote_from_qlib(self) -> None:
         # get stock data from qlib
@@ -723,9 +724,13 @@ class Exchange:
             the end time of trading range
         """
         if self.trade_unit is not None:
-            factor = self._get_factor_or_raise_error(
-                factor=factor, stock_id=stock_id, start_time=start_time, end_time=end_time
-            ) if not self.trade_w_adj_price else 1
+            factor = (
+                self._get_factor_or_raise_error(
+                    factor=factor, stock_id=stock_id, start_time=start_time, end_time=end_time
+                )
+                if not self.trade_w_adj_price
+                else 1
+            )
 
             return self.trade_unit / factor
         else:
@@ -747,9 +752,13 @@ class Exchange:
         """
         if self.trade_unit is not None:
             # the minimal amount is 1. Add 0.1 for solving precision problem.
-            factor = self._get_factor_or_raise_error(
-                factor=factor, stock_id=stock_id, start_time=start_time, end_time=end_time
-            ) if not self.trade_w_adj_price else 1
+            factor = (
+                self._get_factor_or_raise_error(
+                    factor=factor, stock_id=stock_id, start_time=start_time, end_time=end_time
+                )
+                if not self.trade_w_adj_price
+                else 1
+            )
 
             return (deal_amount * factor + 0.1) // self.trade_unit * self.trade_unit / factor
         return deal_amount

@@ -45,6 +45,7 @@ class ProviderBackendMixin:
     This helper class tries to make the provider based on storage backend more convenient
     It is not necessary to inherent this class if that provider don't rely on the backend storage
     """
+
     def __init__(self, backend={}):
         self.backend = backend
 
@@ -569,7 +570,15 @@ class DatasetProvider(abc.ABC):
             inst_l.append(inst)
             task_l.append(
                 delayed(DatasetProvider.inst_calculator)(
-                    inst, start_time, end_time, freq, normalize_column_names, spans, C, inst_processors, list(instruments_d)
+                    inst,
+                    start_time,
+                    end_time,
+                    freq,
+                    normalize_column_names,
+                    spans,
+                    C,
+                    inst_processors,
+                    list(instruments_d),
                 )
             )
 
@@ -599,7 +608,9 @@ class DatasetProvider(abc.ABC):
         return data
 
     @staticmethod
-    def inst_calculator(inst, start_time, end_time, freq, column_names, spans=None, g_config=None, inst_processors=[], population=[]):
+    def inst_calculator(
+        inst, start_time, end_time, freq, column_names, spans=None, g_config=None, inst_processors=[], population=[]
+    ):
         """
         Calculate the expressions for **one** instrument, return a df result.
         If the expression has been calculated before, load from cache.
@@ -1190,9 +1201,7 @@ class BaseProvider:
         disk_cache = C.default_disk_cache if disk_cache is None else disk_cache
         fields = list(fields)  # In case of tuple.
         try:
-            return DatasetD.dataset(
-                instruments, fields, start_time, end_time, freq, inst_processors=inst_processors
-            )
+            return DatasetD.dataset(instruments, fields, start_time, end_time, freq, inst_processors=inst_processors)
         except TypeError:
             return DatasetD.dataset(instruments, fields, start_time, end_time, freq, inst_processors=inst_processors)
 

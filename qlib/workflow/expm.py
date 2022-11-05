@@ -331,7 +331,7 @@ class MLflowExpManager(ExpManager):
         recorder_name: Optional[Text] = None,
         uri: Optional[Text] = None,
         resume: bool = False,
-        **kwargs
+        **kwargs,
     ):
         # Set the tracking uri
         self.set_uri(uri)

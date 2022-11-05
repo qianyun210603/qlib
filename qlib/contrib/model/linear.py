@@ -117,4 +117,3 @@ class LinearModel(Model):
             x_test.values * self.coef_, index=x_test.index, columns=self.factor_names_
         )
         return factor_contribution_df.sum(axis=1) + self.intercept_, factor_contribution_df
-

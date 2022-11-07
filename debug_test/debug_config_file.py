@@ -2,15 +2,16 @@ import ruamel.yaml as yaml
 import qlib
 from qlib.utils import init_instance_by_config, flatten_dict, fill_placeholder
 from qlib.workflow import R
-from qlib.model.trainer import task_train
-from qlib.workflow.cli import workflow
 
 
 if __name__ == '__main__':
     config_path = "/home/booksword/traderesearch/qlib_run_all_models/20221102" \
-                  "/temp_dir/workflow_config_lightgbm_Alpha158_csi300.yaml"
+                   "/temp_dir/workflow_config_localformer_Alpha158_csi300.yaml"
+    config_path = r"../examples/benchmarks/Localformer/workflow_config_localformer_Alpha158.yaml"
     with open(config_path, 'r') as f:
          config = yaml.safe_load(f)
+
+    config['qlib_init']['provider_uri'] = '/home/booksword/traderesearch/qlib_data/rqdata/'
 
     qlib.init(**config['qlib_init'])
 
@@ -20,7 +21,7 @@ if __name__ == '__main__':
         R.log_params(**flatten_dict(task_config))
 
         dataset = init_instance_by_config(task_config['dataset'])
-
+        task_config['model']['kwargs']['batch_size'] = 1024
         model = init_instance_by_config(task_config['model'])
         model.fit(dataset)
         R.save_objects(**{"params.pkl": model})

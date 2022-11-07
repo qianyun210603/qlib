@@ -4,24 +4,26 @@
 import os
 import sys
 import fire
-import time
 import glob
-import yaml
+
+import pandas as pd
+import ruamel.yaml as yaml
 import shutil
 import signal
 import inspect
-import tempfile
 import functools
 import statistics
-import subprocess
 from datetime import datetime
 from pathlib import Path
 from operator import xor
 from pprint import pprint
-
+from loguru import logger
 import qlib
+from qlib.config import C
 from qlib.workflow import R
-from qlib.tests.data import GetData
+
+from qlib.workflow.cli import sys_config
+from qlib.model.trainer import _log_task_info, _exe_task
 
 
 # decorator to check the arguments
@@ -53,47 +55,60 @@ signal.signal(signal.SIGINT, handler)
 def cal_mean_std(results) -> dict:
     mean_std = dict()
     for fn in results:
-        mean_std[fn] = dict()
-        for metric in results[fn]:
-            mean = statistics.mean(results[fn][metric]) if len(results[fn][metric]) > 1 else results[fn][metric][0]
-            std = statistics.stdev(results[fn][metric]) if len(results[fn][metric]) > 1 else 0
-            mean_std[fn][metric] = [mean, std]
+        try:
+            mean_std[fn] = dict()
+            for metric in results[fn]:
+                mean = statistics.mean(results[fn][metric]) if len(results[fn][metric]) > 1 else results[fn][metric][0]
+                std = statistics.stdev(results[fn][metric]) if len(results[fn][metric]) > 1 else 0
+                mean_std[fn][metric] = [mean, std]
+        except Exception:
+            print(fn)
     return mean_std
 
 
-# function to create the environment ofr an anaconda environment
-# def create_env():
-#     # create env
-#     temp_dir = tempfile.mkdtemp()
-#     # env_path = Path(temp_dir).absolute()
-#     # sys.stderr.write(f"Creating Virtual Environment with path: {env_path}...\n")
-#     # execute(f"conda create --prefix {env_path} python=3.7 -y")
-#     python_path = env_path / "bin" / "python"  # TODO: FIX ME!
-#     sys.stderr.write("\n")
-#     # get anaconda activate path
-#     conda_activate = Path(os.environ["CONDA_PREFIX"]) / "bin" / "activate"  # TODO: FIX ME!
-#     return temp_dir, env_path, python_path, conda_activate
+def workflow(config_path, experiment_name="workflow", uri_folder="mlruns", force_rerun=False, target_run_num=1):
+    with open(config_path) as fp:
+        config = yaml.safe_load(fp)
 
+    # config the `sys` section
+    sys_config(config, config_path)
 
-# function to execute the cmd
-def execute(cmd, wait_when_err=False, raise_err=True):
-    print("Running CMD:", cmd)
-    with subprocess.Popen(cmd, stdout=subprocess.PIPE, bufsize=1, universal_newlines=True, shell=True) as p:
-        for line in p.stdout:
-            sys.stdout.write(line.split("\b")[0])
-            if "\b" in line:
-                sys.stdout.flush()
-                time.sleep(0.1)
-                sys.stdout.write("\b" * 10 + "\b".join(line.split("\b")[1:-1]))
-
-    if p.returncode != 0:
-        if wait_when_err:
-            input("Press Enter to Continue")
-        if raise_err:
-            raise RuntimeError(f"Error when executing command: {cmd}")
-        return p.stderr
+    if "exp_manager" in config.get("qlib_init"):
+        qlib.init(**config.get("qlib_init"))
     else:
-        return None
+        exp_manager = C["exp_manager"]
+        exp_manager["kwargs"]["uri"] = "file:" + str(Path(os.getcwd()).resolve() / uri_folder)
+        qlib.init(**config.get("qlib_init"), exp_manager=exp_manager)
+
+    if "experiment_name" in config:
+        experiment_name = config["experiment_name"]
+
+    this_exp = R.get_exp(experiment_name=experiment_name)
+    existing_recorders = this_exp.list_recorders()
+    num_valid_results = 0
+    for rec_id, rec in existing_recorders.items():
+        if force_rerun:
+            this_exp.delete_recorder(recorder_id=rec_id)
+        elif rec.status != 'FINISHED':
+            logger.info(f"delete stale record {rec_id}")
+            this_exp.delete_recorder(recorder_id=rec_id)
+        elif num_valid_results >= target_run_num:
+            logger.info(f"already have enough records, delete {rec_id}")
+            this_exp.delete_recorder(recorder_id=rec_id)
+        else:
+            num_valid_results += 1
+
+    while num_valid_results < target_run_num:
+        with R.start(experiment_name=experiment_name):
+            recorder = R.get_recorder()
+            logger.info(
+                f"Already have {num_valid_results} records, {target_run_num-num_valid_results} to run."
+            )
+            logger.info(f"Record id for this run: {recorder.id}")
+            _log_task_info(config['task'])
+            _exe_task(config['task'])
+            recorder.save_objects(config=config)
+            num_valid_results += 1
 
 
 # function to get all the folders benchmark folder
@@ -191,6 +206,14 @@ def gen_yaml_files_from_example_templates(
 ):
     with open(yaml_path, "r") as fp:
         config = yaml.safe_load(fp)
+    file_name = yaml_path.split("/")[-1]
+    if config['market'] not in file_name:
+        basename, extname = os.path.splitext(file_name)
+        file_name = basename + '_' + config['market'] + extname
+    temp_path = os.path.join(temp_dir, file_name)
+    if os.path.exists(temp_path):
+        return temp_path
+
     try:
         del config["task"]["model"]["kwargs"]["seed"]
     except KeyError:
@@ -212,15 +235,11 @@ def gen_yaml_files_from_example_templates(
         config['task']['dataset']['kwargs']['segments']['train'] = [train[0], valid[1]]
         config['task']['dataset']['kwargs']['segments']['test'] = test
 
-    config['task']['record'][-1]['kwargs']['config']['backtest']['start_time'] = test[0]
+    config['task']['record'][-1]['kwargs']['config']['backtest']['start_time'] = \
+        (pd.Timestamp(test[0]) + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
     config['task']['record'][-1]['kwargs']['config']['backtest']['end_time'] = test[1]
 
     # otherwise, generating a new yaml without random seed
-    file_name = yaml_path.split("/")[-1]
-    if config['market'] not in file_name:
-        basename, extname = os.path.splitext(file_name)
-        file_name = basename + '_' + config['market'] + extname
-    temp_path = os.path.join(temp_dir, file_name)
     with open(temp_path, "w") as fp:
         yaml.dump(config, fp)
     return temp_path
@@ -335,25 +354,7 @@ class ModelRunner:
                 sys.stderr.write(f"There is no {dataset}.yaml file in {folders[fn]}\n")
                 continue
             sys.stderr.write("\n")
-            # create env by anaconda
-            # temp_dir, env_path, python_path, conda_activate = create_env()
 
-            # install requirements.txt
-            # sys.stderr.write("Installing requirements.txt...\n")
-            # with open(req_path) as f:
-            #     content = f.read()
-            # if "torch" in content:
-            #     # automatically install pytorch according to nvidia's version
-            #     execute(
-            #         f"{python_path} -m pip install light-the-torch", wait_when_err=wait_when_err
-            #     )  # for automatically installing torch according to the nvidia driver
-            #     execute(
-            #         f"{env_path / 'bin' / 'ltt'} install --install-cmd '{python_path} -m pip install {{packages}}' -- -r {req_path}",
-            #         wait_when_err=wait_when_err,
-            #     )
-            # else:
-            #     execute(f"{python_path} -m pip install -r {req_path}", wait_when_err=wait_when_err)
-            # sys.stderr.write("\n")
             temp_dir = base_folder.joinpath("temp_dir")
             if not temp_dir.exists():
                 temp_dir.mkdir()
@@ -361,45 +362,17 @@ class ModelRunner:
             # read yaml, remove seed kwargs of model, and then save file in the temp_dir
             yaml_path = gen_yaml_files_from_example_templates(
                 yaml_path, temp_dir, provider_uri='/home/booksword/traderesearch/qlib_data/rqdata',
-                train=['2011-01-01', '2016-12-31'], valid=['2017-01-01', '2018-12-31'], test=['2019-01-01', '2022-10-31']
+                train=['2011-01-01', '2016-12-31'], valid=['2017-01-01', '2018-12-31'], test=['2018-12-31', '2022-10-31']
             )
-            # setup gpu for tft
-            # if fn == "TFT":
-            #     execute(
-            #         f"conda install -y --prefix {env_path} anaconda cudatoolkit=10.0 && conda install -y --prefix {env_path} cudnn",
-            #         wait_when_err=wait_when_err,
-            #     )
-            #     sys.stderr.write("\n")
-            # # install qlib
-            # sys.stderr.write("Installing qlib...\n")
-            # execute(f"{python_path} -m pip install --upgrade pip", wait_when_err=wait_when_err)  # TODO: FIX ME!
-            # execute(f"{python_path} -m pip install --upgrade cython", wait_when_err=wait_when_err)  # TODO: FIX ME!
-            # if fn == "TFT":
-            #     execute(
-            #         f"cd {env_path} && {python_path} -m pip install --upgrade --force-reinstall --ignore-installed PyYAML -e {qlib_uri}",
-            #         wait_when_err=wait_when_err,
-            #     )  # TODO: FIX ME!
-            # else:
-            #     execute(
-            #         f"cd {env_path} && {python_path} -m pip install --upgrade --force-reinstall -e {qlib_uri}",
-            #         wait_when_err=wait_when_err,
-            #     )  # TODO: FIX ME!
-            # sys.stderr.write("\n")
-            # run workflow_by_config for multiple times
+            if fn == 'TFT':
+                continue
             for i in range(times):
                 sys.stderr.write(f"Running the model: {fn} for iteration {i+1}...\n")
-                errs = execute(
-                    f"/home/booksword/anaconda3/bin/qrun {yaml_path} {fn} {exp_folder_name}",
-                    wait_when_err=wait_when_err,
-                )
-                if errs is not None:
-                    _errs = errors.get(fn, {})
-                    _errs.update({i: errs})
-                    errors[fn] = _errs
-                sys.stderr.write("\n")
-        # print errors
-        sys.stderr.write(f"Here are some of the errors of the models...\n")
-        pprint(errors)
+                try:
+                    workflow(config_path=yaml_path, experiment_name=fn, uri_folder=exp_folder_name)
+                except Exception as e:
+                    logger.error(f"Failed run for {fn}: {str(e)}")
+                # sys.stderr.write("\n")
         self._collect_results(exp_folder_name, dataset)
 
     def _collect_results(self, exp_folder_name, dataset):

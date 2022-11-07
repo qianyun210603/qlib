@@ -255,7 +255,6 @@ class RqdataCollector(BaseCollector):
                     f"resampling failed for {db_symbol} from {start_datetime} to {end_datetime}: {traceback.format_exc()}")
                 raise
 
-
         if obj is not None and obj[2] in ('888', '889'):
             _result['vwap'] = _result['turnover'] / _result['volume'] / self.symbol_dict[symbol]["contract_multiplier"] + _result['factor']
         else:

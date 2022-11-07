@@ -137,7 +137,6 @@ class RqdataCollector(BaseCollector):
             logger.warning(
                 f"bad for {symbol} from {start_datetime.isoformat()} to {end_datetime.isoformat()}\n{str(_result)}"
             )
-
         _limits = self.limit_lib.read(
             symbol, chunk_range=DateRange(start_datetime.tz_localize(None).normalize(), end_datetime.tz_localize(None)),
             columns=['limit_up', 'limit_down']
@@ -279,7 +278,7 @@ class RqdataNormalize(BaseNormalize):
         df['date'] = pd.to_datetime(df.date)
         df.set_index("date", inplace=True)
         df = df.rename(
-            columns=dict((s, t) for s, t in zip(RqdataNormalize.SOURCE_COLS, RqdataNormalize.COLUMNS))
+            columns=dict(zip(RqdataNormalize.SOURCE_COLS, RqdataNormalize.COLUMNS))
         ).copy()
 
         duplicated_record = df.index.duplicated(keep="first")
@@ -294,14 +293,15 @@ class RqdataNormalize(BaseNormalize):
             ]
             df = df.reindex(index_from_cal)
 
-        # assign adjclose as close price adjusted by split only
+        # assign adjclose as raw price
         df["adjclose"] = df.close
+        df["vwap"] = df['money'] / df['volume']
         # adjust ohlc by split and dividends
         if 'limit_up' in df.columns:
-            df[["open", "close", "high", "low", 'limit_up', 'limit_down', ]] = \
-                df[["open", "close", "high", "low", 'limit_up', 'limit_down', ]].multiply(df.ex_cum_factor, axis=0)
+            df[["open", "close", "high", "low", 'limit_up', 'limit_down', 'vwap']] = \
+                df[["open", "close", "high", "low", 'limit_up', 'limit_down', 'vwap']].multiply(df.ex_cum_factor, axis=0)
         else:
-            df[["open", "close", "high", "low"]] = df[["open", "close", "high", "low"]].multiply(
+            df[["open", "close", "high", "low", 'vwap']] = df[["open", "close", "high", "low", 'vwap']].multiply(
                 df.ex_cum_factor, axis=0
             )
         df['factor'] = df.ex_cum_factor

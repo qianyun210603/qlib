@@ -44,7 +44,7 @@ def only_allow_defined_args(function_to_decorate):
 
 
 # function to handle ctrl z and ctrl c
-def handler(signum, frame):
+def handler(_, __):
     os.system("kill -9 %d" % os.getpid())
 
 
@@ -77,7 +77,7 @@ def workflow(config_path, experiment_name="workflow", uri_folder="mlruns", force
         qlib.init(**config.get("qlib_init"))
     else:
         exp_manager = C["exp_manager"]
-        exp_manager["kwargs"]["uri"] = "file:" + str(Path(os.getcwd()).resolve() / uri_folder)
+        exp_manager["kwargs"]["uri"] = "file:" + str(Path(config_path).parent.parent.joinpath(uri_folder))
         qlib.init(**config.get("qlib_init"), exp_manager=exp_manager)
 
     if "experiment_name" in config:
@@ -135,14 +135,11 @@ def get_all_folders(models, exclude) -> dict:
 def get_all_files(folder_path, dataset, universe="") -> (str, str):
     if universe != "":
         universe = f"_{universe}"
-    yaml_path = str(Path(f"{folder_path}") / f"*{dataset}{universe}.yaml")
-    req_path = str(Path(f"{folder_path}") / f"*.txt")
-    yaml_file = glob.glob(yaml_path)
-    req_file = glob.glob(req_path)
+    yaml_file = list(Path(f"{folder_path}").glob(f"*{dataset}{universe}.yaml"))
     if len(yaml_file) == 0:
-        return None, None
+        return None
     else:
-        return yaml_file[0], req_file[0]
+        return yaml_file[0]
 
 
 # function to retrieve all the results
@@ -182,7 +179,7 @@ def get_all_results(folders) -> dict:
 
 
 # function to generate and save markdown table
-def gen_and_save_md_table(metrics, dataset):
+def gen_and_save_md_table(metrics, dataset, base_path='.'):
     table = "| Model Name | Dataset | IC | ICIR | Rank IC | Rank ICIR | Annualized Return | Information Ratio | Max Drawdown |\n"
     table += "|---|---|---|---|---|---|---|---|---|\n"
     for fn in metrics:
@@ -195,7 +192,7 @@ def gen_and_save_md_table(metrics, dataset):
         md = metrics[fn]["max_drawdown_with_cost"]
         table += f"| {fn} | {dataset} | {ic[0]:5.4f}±{ic[1]:2.2f} | {icir[0]:5.4f}±{icir[1]:2.2f}| {ric[0]:5.4f}±{ric[1]:2.2f} | {ricir[0]:5.4f}±{ricir[1]:2.2f} | {ar[0]:5.4f}±{ar[1]:2.2f} | {ir[0]:5.4f}±{ir[1]:2.2f}| {md[0]:5.4f}±{md[1]:2.2f} |\n"
     pprint(table)
-    with open("table.md", "w") as f:
+    with open(Path(base_path).resolve().joinpath("table.md"), "w") as f:
         f.write(table)
     return table
 
@@ -204,20 +201,27 @@ def gen_and_save_md_table(metrics, dataset):
 def gen_yaml_files_from_example_templates(
     yaml_path, temp_dir, provider_uri, train, valid, test
 ):
+    yaml_path = Path(yaml_path).expanduser()
     with open(yaml_path, "r") as fp:
         config = yaml.safe_load(fp)
-    file_name = yaml_path.split("/")[-1]
-    if config['market'] not in file_name:
-        basename, extname = os.path.splitext(file_name)
-        file_name = basename + '_' + config['market'] + extname
-    temp_path = os.path.join(temp_dir, file_name)
-    if os.path.exists(temp_path):
+    file_name = yaml_path.name if config['market'] in yaml_path.name else \
+        yaml_path.stem.rstrip("_full") + '_' + config['market'] + yaml_path.suffix
+
+    temp_path = Path(temp_dir).expanduser().joinpath(file_name)
+    if temp_path.exists():
         return temp_path
 
     try:
         del config["task"]["model"]["kwargs"]["seed"]
     except KeyError:
         pass
+
+    if 'sys' in config and 'rel_path' in config['sys']:
+        config['sys'].setdefault('path', []).extend(
+            str((yaml_path.parent / p).resolve().absolute()) for p in config['sys']['rel_path']
+        )
+        del config['sys']['rel_path']
+
 
     config['qlib_init']['provider_uri'] = provider_uri
 
@@ -238,6 +242,22 @@ def gen_yaml_files_from_example_templates(
     config['task']['record'][-1]['kwargs']['config']['backtest']['start_time'] = \
         (pd.Timestamp(test[0]) + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
     config['task']['record'][-1]['kwargs']['config']['backtest']['end_time'] = test[1]
+    if 'infer_processors' in config['task']['dataset']['kwargs']['handler']['kwargs']:
+        config['task']['dataset']['kwargs']['handler']['kwargs']['infer_processors'] = \
+            [
+                p for p in config['task']['dataset']['kwargs']['handler']['kwargs']['infer_processors']
+                if p['class'] != 'FilterCol'
+            ]
+
+    if config['task']['model']['module_path'].endswith('_ts'):
+        config['task']['model']['module_path'] = config['task']['model']['module_path'][:-3]
+        if 'd_feat' in config['task']['model']['kwargs']:
+            config['task']['model']['kwargs']['d_feat'] = 79
+        else:
+            config['task']['model'].setdefault('try_kwargs', {}).update({'d_feat': 79})
+    if config['task']['dataset']['class'] == 'TSDatasetH':
+        config['task']['dataset']['class'] = 'DatasetH'
+
 
     # otherwise, generating a new yaml without random seed
     with open(temp_path, "w") as fp:
@@ -246,7 +266,13 @@ def gen_yaml_files_from_example_templates(
 
 
 class ModelRunner:
-    def _init_qlib(self, exp_folder_name):  #, provider_uri="/home/booksword/traderesearch/qlib_data/rqdata"):
+
+    @staticmethod
+    def _init_qlib(exp_folder_name, basepath=None):  #, provider_uri="/home/booksword/traderesearch/qlib_data/rqdata"):
+        if basepath is None:
+            basepath = Path(os.getcwd()).resolve()
+        else:
+            basepath = Path(basepath)
         # init qlib
         qlib.init(
             # provider_uri=provider_uri,
@@ -254,7 +280,7 @@ class ModelRunner:
                 "class": "MLflowExpManager",
                 "module_path": "qlib.workflow.expm",
                 "kwargs": {
-                    "uri": "file:" + str(Path(os.getcwd()).resolve() / exp_folder_name),
+                    "uri": "file:" + str(basepath / exp_folder_name),
                     "default_exp_name": "Experiment",
                 },
             }
@@ -270,8 +296,6 @@ class ModelRunner:
         universe="",
         exclude=False,
         exp_folder_name: str = "run_all_model_records",
-        wait_before_rm_env: bool = False,
-        wait_when_err: bool = False,
     ):
         """
         Please be aware that this function can only work under Linux. MacOS and Windows will be supported in the future.
@@ -296,10 +320,6 @@ class ModelRunner:
             it could be url on the github or local path (NOTE: the local path must be an absolute path)
         exp_folder_name: str
             the name of the experiment folder
-        wait_before_rm_env : bool
-            wait before remove environment.
-        wait_when_err : bool
-            wait when errors raised when executing commands
 
         Usage:
         -------
@@ -338,18 +358,22 @@ class ModelRunner:
             python run_all_model.py run 3 lightgbm Alpha158 csi500
 
         """
-        base_folder = Path("/home/booksword/traderesearch/qlib_run_all_models/20221102")
-        self._init_qlib(exp_folder_name)
+        base_folder = Path("D:\Documents\TradeResearch\Stock\qlibmodels")
+        self._init_qlib(exp_folder_name, base_folder)
 
         # get all folders
         folders = get_all_folders(models, exclude)
         # init error messages:
-        errors = dict()
         # run all the model for iterations
         for fn in folders:
             # get all files
-            sys.stderr.write("Retrieving files...\n")
-            yaml_path, req_path = get_all_files(folders[fn], dataset, universe=universe)
+            logger.info(f"Retrieving files in {fn} ...")
+            if fn == 'TFT' or \
+                fn == 'GATs': # GATs depends on lstm
+                continue
+            if universe == "" and fn == 'TRA':
+                universe = "full"
+            yaml_path = get_all_files(folders[fn], dataset, universe=universe)
             if yaml_path is None:
                 sys.stderr.write(f"There is no {dataset}.yaml file in {folders[fn]}\n")
                 continue
@@ -361,37 +385,36 @@ class ModelRunner:
 
             # read yaml, remove seed kwargs of model, and then save file in the temp_dir
             yaml_path = gen_yaml_files_from_example_templates(
-                yaml_path, temp_dir, provider_uri='/home/booksword/traderesearch/qlib_data/rqdata',
+                yaml_path, temp_dir, provider_uri=r'D:\Documents\TradeResearch\qlib_test\rqdata',
                 train=['2011-01-01', '2016-12-31'], valid=['2017-01-01', '2018-12-31'], test=['2018-12-31', '2022-10-31']
             )
-            if fn == 'TFT':
-                continue
+
             for i in range(times):
                 sys.stderr.write(f"Running the model: {fn} for iteration {i+1}...\n")
                 try:
                     workflow(config_path=yaml_path, experiment_name=fn, uri_folder=exp_folder_name)
                 except Exception as e:
                     logger.error(f"Failed run for {fn}: {str(e)}")
-                # sys.stderr.write("\n")
-        self._collect_results(exp_folder_name, dataset)
+                    raise
+        self._collect_results(exp_folder_name, dataset, base_folder)
 
-    def _collect_results(self, exp_folder_name, dataset):
+    @staticmethod
+    def _collect_results(exp_folder_name, dataset, base_folder):
         folders = get_all_folders(exp_folder_name, dataset)
         # getting all results
         sys.stderr.write(f"Retrieving results...\n")
         results = get_all_results(folders)
         if len(results) > 0:
             # calculating the mean and std
-            sys.stderr.write(f"Calculating the mean and std of results...\n")
+            logger.info(f"Calculating the mean and std of results...\n")
             results = cal_mean_std(results)
             # generating md table
-            sys.stderr.write(f"Generating markdown table...\n")
-            gen_and_save_md_table(results, dataset)
-            sys.stderr.write("\n")
-        sys.stderr.write("\n")
+            logger.info(f"Generating markdown table...\n")
+            gen_and_save_md_table(results, dataset, base_folder)
+        print("")
         # move results folder
-        shutil.move(exp_folder_name, exp_folder_name + f"_{dataset}_{datetime.now().strftime('%Y-%m-%d_%H:%M:%S')}")
-        shutil.move("table.md", f"table_{dataset}_{datetime.now().strftime('%Y-%m-%d_%H:%M:%S')}.md")
+        shutil.move(base_folder.joinpath(exp_folder_name), base_folder.joinpath(exp_folder_name + f"_{dataset}_{datetime.now().strftime('%Y%m%d%H%M%S')}"))
+        shutil.move(base_folder.joinpath("table.md"), base_folder.joinpath(f"table_{dataset}_{datetime.now().strftime('%Y%m%d%H%M%S')}.md"))
 
 
 if __name__ == "__main__":

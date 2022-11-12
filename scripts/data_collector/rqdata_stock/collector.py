@@ -545,13 +545,13 @@ class Run(BaseRun):
 if __name__ == "__main__":
     # fire.Fire(Run)
     runner = Run(
-        source_dir=r"/home/booksword/traderesearch/qlib_data/rqdata/source",
-        normalize_dir=r"/home/booksword/traderesearch/qlib_data/rqdata/normalize",
+        source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata\source",
+        normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata\normalize",
         max_workers=8
     )
     # runner.download_data(max_collector_count=1, start=pd.Timestamp("2014-01-01"), end=pd.Timestamp("2021-12-31"))
     # runner.normalize_data()
     runner.update_data_to_bin(
-        qlib_data_1d_dir=r"/home/booksword/traderesearch/qlib_data/rqdata", trading_date='2010-01-01',
+        qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata", trading_date='2010-01-01',
         end_date=pd.Timestamp.now().strftime("%Y-%m-%d")
     )

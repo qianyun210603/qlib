@@ -603,8 +603,8 @@ class Run(BaseRun):
         # NOTE: when downloading data from RqdataFinance, max_workers is recommended to be 1
         self.download_data(
             max_collector_count=self.max_workers,
-            start=trading_date.strftime("%Y-%m-%d"),
-            end=end_date.strftime("%Y-%m-%d"),
+            start=trading_date,
+            end=end_date,
             check_data_length=check_data_length
         )
 

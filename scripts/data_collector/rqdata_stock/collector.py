@@ -481,7 +481,7 @@ class Run(BaseRun):
 
     def update_data_to_bin(
         self,
-        qlib_data_1d_dir: str,
+        qlib_data_1d_dir: str = None,
         trading_date: str = None,
         end_date: str = None,
         check_data_length: int = -1,
@@ -542,8 +542,8 @@ class Run(BaseRun):
         # NOTE: when downloading data from RqdataFinance, max_workers is recommended to be 1
         self.download_data(
             max_collector_count=self.max_workers,
-            start=trading_date.strftime("%Y-%m-%d"),
-            end=end_date.strftime("%Y-%m-%d"),
+            start=trading_date,
+            end=end_date,
             check_data_length=check_data_length
         )
 

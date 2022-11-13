@@ -34,8 +34,7 @@ def init(default_conf="client", **kwargs):
     from .config import C  # pylint: disable=C0415
     from .data.cache import H  # pylint: disable=C0415
 
-    # FIXME: this logger ignored the level in config
-    logger = get_module_logger("Initialization", level=logging.INFO)
+    logger = get_module_logger("Initialization", level=kwargs.get('logging_level', C.logging_level))
 
     skip_if_reg = kwargs.pop("skip_if_reg", False)
     if skip_if_reg and C.registered:

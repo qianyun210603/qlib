@@ -6,6 +6,7 @@ import copy
 import time
 import importlib
 import multiprocessing
+import ruamel.yaml as yaml
 from pathlib import Path
 from typing import Iterable, cast
 from arctic.date import DateRange
@@ -14,7 +15,7 @@ from arctic.hooks import register_get_auth_hook
 from vnpy.trader.database import get_database, SETTINGS
 from vnpy_arctic.arctic_database import ArcticDatabase
 
-# import fire
+import fire
 import traceback
 import numpy as np
 import pandas as pd
@@ -350,7 +351,7 @@ class RqdataNormalize(BaseNormalize):
 
 
 class Run(BaseRun):
-    def __init__(self, source_dir=None, normalize_dir=None, max_workers=1, interval="1d"):
+    def __init__(self, source_dir=None, normalize_dir=None, max_workers=None, interval="1d", config_file=None):
         """
 
         Parameters
@@ -364,7 +365,21 @@ class Run(BaseRun):
             Concurrent number, default is 1; when collecting data, it is recommended that max_workers be set to 1
         interval: str
             freq, value from [1min, 1d], default 1d
-        """
+        config_file: Path
+            config file path
+         """
+        self.config = {}
+        if config_file is None:
+            config_file = Path(f'~/.qlib/collector_configs/rqdata_stock_{interval}.yaml').expanduser()
+        else:
+            config_file = Path(config_file).expanduser()
+        if config_file.exists():
+            with open(config_file) as f:
+                self.config.update(yaml.safe_load(f))
+        source_dir = source_dir if source_dir is not None else self.config.get('source_dir', None)
+        normalize_dir = normalize_dir if normalize_dir is not None else self.config.get('normalize_dir', None)
+        max_workers = max_workers if max_workers is not None else self.config.get('max_workers', None)
+
         super().__init__(source_dir, normalize_dir, max_workers, interval)
 
     @property
@@ -377,7 +392,7 @@ class Run(BaseRun):
 
     @property
     def default_base_dir(self) -> [Path, str]:
-        return CUR_DIR
+        return self.config.get('default_base_dir', CUR_DIR)
 
     def download_data(
         self,
@@ -438,9 +453,6 @@ class Run(BaseRun):
                     $ python scripts/get_data.py qlib_data --target_dir <qlib_data_1d_dir> --interval 1d
                     $ python scripts/data_collector/Rqdata/collector.py update_data_to_bin --qlib_data_1d_dir
                     <qlib_data_1d_dir> --trading_date 2021-06-01
-                or:
-                    download 1d data, reference:
-                    https://github.com/microsoft/qlib/tree/main/scripts/data_collector/Rqdata#1d-from-Rqdata
 
         Examples
         ---------
@@ -469,9 +481,10 @@ class Run(BaseRun):
 
     def update_data_to_bin(
         self,
-        qlib_data_1d_dir: str,
+        qlib_data_1d_dir: str = None,
         trading_date: str = None,
         end_date: str = None,
+        check_data_length: int = -1,
     ):
         """update Rqdata data to bin
 
@@ -485,6 +498,10 @@ class Run(BaseRun):
             trading days to be updated, by default ``datetime.datetime.now().strftime("%Y-%m-%d")``
         end_date: str
             end datetime, default ``pd.Timestamp(trading_date + pd.Timedelta(days=1))``; open interval(excluding end)
+        check_data_length: int
+            check data length, if not None and greater than 0, each symbol will be considered complete if its data
+            length is greater than or equal to this value, otherwise it will be fetched again, the maximum number of
+            fetches being (max_collector_count). By default None.
         Notes
         -----
             If the data in qlib_data_dir is incomplete, np.nan will be populated to trading_date for the previous
@@ -497,17 +514,23 @@ class Run(BaseRun):
             # get 1m data
         """
 
+        if qlib_data_1d_dir is None and self.interval.lower() == '1d':
+            qlib_data_1d_dir = self.default_base_dir
+
         if self.interval.lower() != "1d":
             logger.warning(f"currently supports 1d data updates: --interval 1d")
 
         # start/end date
-        if trading_date is None:
-            trading_date = pd.Timestamp.now().strftime("%Y-%m-%d")
-            logger.warning(f"trading_date is None, use the current date: {trading_date}")
-
         if end_date is None:
-            # noinspection PyTypeChecker
-            end_date = (pd.Timestamp(trading_date) + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
+            end_date = (pd.Timestamp.now() + pd.Timedelta(days=1))
+            logger.info(f"end_date not specified, use the tomorrow: {end_date}")
+
+        if trading_date is None:
+            trading_date = (end_date - pd.Timedelta(days=8))
+            logger.info(f"trading_date is None, use the one week before: {trading_date}")
+
+        if check_data_length < 0:
+            check_data_length = self.config.get('check_data_length', 0)
 
         # NOTE: a larger max_workers setting here would be faster
         self.max_workers = (
@@ -517,7 +540,12 @@ class Run(BaseRun):
         )
         # download data from Rqdata
         # NOTE: when downloading data from RqdataFinance, max_workers is recommended to be 1
-        self.download_data(max_collector_count=self.max_workers, start=trading_date, end=end_date)
+        self.download_data(
+            max_collector_count=self.max_workers,
+            start=trading_date,
+            end=end_date,
+            check_data_length=check_data_length
+        )
 
         # normalize data
         self.normalize_data(qlib_data_1d_dir)
@@ -543,15 +571,15 @@ class Run(BaseRun):
 
 
 if __name__ == "__main__":
-    # fire.Fire(Run)
-    runner = Run(
-        source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata\source",
-        normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata\normalize",
-        max_workers=8
-    )
-    # runner.download_data(max_collector_count=1, start=pd.Timestamp("2014-01-01"), end=pd.Timestamp("2021-12-31"))
-    # runner.normalize_data()
-    runner.update_data_to_bin(
-        qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata", trading_date='2010-01-01',
-        end_date=pd.Timestamp.now().strftime("%Y-%m-%d")
-    )
+    fire.Fire(Run)
+    # runner = Run(
+    #     source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata\source",
+    #     normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata\normalize",
+    #     max_workers=8
+    # )
+    # # runner.download_data(max_collector_count=1, start=pd.Timestamp("2014-01-01"), end=pd.Timestamp("2021-12-31"))
+    # # runner.normalize_data()
+    # runner.update_data_to_bin(
+    #     qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata", trading_date='2010-01-01',
+    #     end_date=pd.Timestamp.now().strftime("%Y-%m-%d")
+    # )

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, Union, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, Union, cast, Iterable
 
 from ..utils.index_data import IndexData
 
@@ -33,7 +33,7 @@ class Exchange:
         end_time: Union[pd.Timestamp, str] = None,
         codes: Union[list, str] = "all",
         deal_price: Union[str, Tuple[str, str], List[str]] = None,
-        subscribe_fields: list = [],
+        subscribe_fields: Iterable = (),
         limit_threshold: Union[Tuple[str, str], float, None] = None,
         volume_threshold: Union[tuple, dict] = None,
         open_cost: float = 0.0015,
@@ -57,7 +57,8 @@ class Exchange:
                                 <price> := str
                                 - for example '$close', '$open', '$vwap' ("close" is OK. `Exchange` will help to prepend
                                   "$" to the expression)
-        :param subscribe_fields: list, subscribe fields. This expressions will be added to the query and `self.quote`.
+        :param subscribe_fields: Iterable (convertible to set), subscribe fields. This expressions will be added to the
+                                 query and `self.quote`.
                                  It is useful when users want more fields to be queried
         :param limit_threshold: Union[Tuple[str, str], float, None]
                                 1) `None`: no limitation
@@ -189,15 +190,14 @@ class Exchange:
         self.quote: BaseQuote = self.quote_cls(self.quote_df, freq)
 
         self.instrument_info = {}
-        instrument_info_path = kwargs.pop("instrument_info_path", "")
-        if instrument_info_path != "":
-            from pathlib import Path
-            import pickle
-
-            instrument_info_path = Path(instrument_info_path)
-            self.instrument_info.update(
-                {p.stem.upper(): pickle.load(open(p, "rb")) for p in instrument_info_path.glob("*.pkl")}
-            )
+        dpm_uri = C.dpm.get_data_uri(C.DEFAULT_FREQ)
+        if C.dpm.get_uri_type(dpm_uri) == 'local':
+            instrument_info_path = dpm_uri.joinpath('contract_specs')
+            if instrument_info_path.exists():
+                import pickle
+                self.instrument_info.update(
+                    {p.stem.upper(): pickle.load(open(p, "rb")) for p in instrument_info_path.glob("*.pkl")}
+                )
 
     def get_quote_from_qlib(self) -> None:
         # get stock data from qlib

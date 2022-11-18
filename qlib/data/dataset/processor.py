@@ -94,7 +94,7 @@ class DropnaProcessor(Processor):
         self.fields_group = fields_group
 
     def __call__(self, df):
-        return df.dropna(subset=get_group_columns(df, self.fields_group))
+        return df.dropna(subset=get_group_columns(df, self.fields_group)).copy()
 
     def readonly(self):
         return True

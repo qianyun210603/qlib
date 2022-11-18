@@ -445,11 +445,12 @@ class QlibConfig(Config):
         from .data.data import register_all_wrappers  # pylint: disable=C0415
         from .workflow import R, QlibRecorder  # pylint: disable=C0415
         from .workflow.utils import experiment_exit_handler  # pylint: disable=C0415
+        from .workflow.expm import ExpManager  # pylint: disable=C0415
 
         register_all_ops(self)
         register_all_wrappers(self)
         # set up QlibRecorder
-        exp_manager = init_instance_by_config(self["exp_manager"])
+        exp_manager = init_instance_by_config(self["exp_manager"], accept_types=(ExpManager,))
         qr = QlibRecorder(exp_manager)
         R.register(qr)
         # clean up experiment when python program ends

@@ -413,8 +413,8 @@ class ModelRunner:
             gen_and_save_md_table(results, dataset, base_folder)
         print("")
         # move results folder
-        shutil.move(base_folder.joinpath(exp_folder_name), base_folder.joinpath(exp_folder_name + f"_{dataset}_{datetime.now().strftime('%Y%m%d%H%M%S')}"))
-        shutil.move(base_folder.joinpath("table.md"), base_folder.joinpath(f"table_{dataset}_{datetime.now().strftime('%Y%m%d%H%M%S')}.md"))
+        # shutil.move(base_folder.joinpath(exp_folder_name), base_folder.joinpath(exp_folder_name + f"_{dataset}_{datetime.now().strftime('%Y%m%d%H%M%S')}"))
+        # shutil.move(base_folder.joinpath("table.md"), base_folder.joinpath(f"table_{dataset}_{datetime.now().strftime('%Y%m%d%H%M%S')}.md"))
 
 
 if __name__ == "__main__":

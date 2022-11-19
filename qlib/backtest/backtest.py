@@ -3,12 +3,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Generator, Optional, Tuple, Union, cast, Dict
+from typing import Dict, TYPE_CHECKING, Generator, Optional, Tuple, Union, cast
 
 import pandas as pd
 
 from qlib.backtest.decision import BaseTradeDecision
-from qlib.backtest.report import Indicator, PortfolioMetrics
+from qlib.backtest.report import Indicator
 
 if TYPE_CHECKING:
     from qlib.strategy.base import BaseStrategy
@@ -19,29 +19,33 @@ from tqdm.auto import tqdm
 from ..utils.time import Freq
 
 
+PORT_METRIC = Dict[str, Tuple[pd.DataFrame, dict]]
+INDICATOR_METRIC = Dict[str, Tuple[pd.DataFrame, Indicator]]
+
+
 def backtest_loop(
     start_time: Union[pd.Timestamp, str],
     end_time: Union[pd.Timestamp, str],
     trade_strategy: BaseStrategy,
     trade_executor: BaseExecutor,
-) -> Tuple[PortfolioMetrics, Indicator, Dict]:
+) -> Tuple[PORT_METRIC, INDICATOR_METRIC, Dict]:
     """backtest function for the interaction of the outermost strategy and executor in the nested decision execution
 
     please refer to the docs of `collect_data_loop`
 
     Returns
     -------
-    portfolio_metrics: PortfolioMetrics
+    portfolio_dict: PORT_METRIC
         it records the trading portfolio_metrics information
-    indicator: Indicator
+    indicator_dict: INDICATOR_METRIC
         it computes the trading indicator
     """
     return_value: dict = {}
     for _decision in collect_data_loop(start_time, end_time, trade_strategy, trade_executor, return_value):
         pass
 
-    portfolio_metrics = cast(PortfolioMetrics, return_value.get("portfolio_metrics"))
-    indicator = cast(Indicator, return_value.get("indicator"))
+    portfolio_dict = cast(PORT_METRIC, return_value.get("portfolio_dict"))
+    indicator_dict = cast(INDICATOR_METRIC, return_value.get("indicator_dict"))
     trades = return_value.get("execute_result")
     return portfolio_metrics, indicator, trades
 
@@ -81,7 +85,6 @@ def collect_data_loop(
 
     with tqdm(total=trade_executor.trade_calendar.get_trade_len(), desc="backtest loop") as bar:
         _execute_result = None
-        # _trade_executed = {}
         while not trade_executor.finished():
             _trade_decision: BaseTradeDecision = trade_strategy.generate_trade_decision(_execute_result)
             _execute_result = yield from trade_executor.collect_data(
@@ -93,19 +96,17 @@ def collect_data_loop(
 
     if return_value is not None:
         all_executors = trade_executor.get_all_executors()
-        all_portfolio_metrics = {
-            "{}{}".format(*Freq.parse(_executor.time_per_step)): _executor.trade_account.get_portfolio_metrics()
-            for _executor in all_executors
-            if _executor.trade_account.is_port_metr_enabled()
-        }
-        all_indicators = {}
-        for _executor in all_executors:
-            key = "{}{}".format(*Freq.parse(_executor.time_per_step))
-            all_indicators[key] = _executor.trade_account.get_trade_indicator().generate_trade_indicators_dataframe()
-            all_indicators[key + "_obj"] = _executor.trade_account.get_trade_indicator()
-        return_value.update(
-            {
-                "portfolio_metrics": all_portfolio_metrics,
-                "indicator": all_indicators,
-            }
-        )
+
+        portfolio_dict: PORT_METRIC = {}
+        indicator_dict: INDICATOR_METRIC = {}
+
+        for executor in all_executors:
+            key = "{}{}".format(*Freq.parse(executor.time_per_step))
+            if executor.trade_account.is_port_metr_enabled():
+                portfolio_dict[key] = executor.trade_account.get_portfolio_metrics()
+
+            indicator_df = executor.trade_account.get_trade_indicator().generate_trade_indicators_dataframe()
+            indicator_obj = executor.trade_account.get_trade_indicator()
+            indicator_dict[key] = (indicator_df, indicator_obj)
+
+        return_value.update({"portfolio_dict": portfolio_dict, "indicator_dict": indicator_dict})

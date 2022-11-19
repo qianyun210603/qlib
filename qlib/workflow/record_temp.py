@@ -400,7 +400,9 @@ class PortAnaRecord(ACRecordTemp):
     This is the Portfolio Analysis Record class that generates the analysis results such as those of backtest. This class inherits the ``RecordTemp`` class.
 
     The following files will be stored in recorder
+
     - report_normal.pkl & positions_normal.pkl:
+
         - The return report and detailed positions of the backtest, returned by `qlib/contrib/evaluate.py:backtest`
     - port_analysis.pkl : The risk analysis of your portfolio, returned by `qlib/contrib/evaluate.py:risk_analysis`
     """
@@ -523,7 +525,8 @@ class PortAnaRecord(ACRecordTemp):
             self.save(**{f"positions_normal_{_freq}.pkl": positions_normal})
 
         for _freq, indicators_normal in indicator_dict.items():
-            self.save(**{f"indicators_normal_{_freq}.pkl": indicators_normal})
+            self.save(**{f"indicators_normal_{_freq}.pkl": indicators_normal[0]})
+            self.save(**{f"indicators_normal_{_freq}_obj.pkl": indicators_normal[1]})
 
         self.save(**{"trades.pkl": trades})
 
@@ -563,7 +566,7 @@ class PortAnaRecord(ACRecordTemp):
             if _analysis_freq not in indicator_dict:
                 warnings.warn(f"the freq {_analysis_freq} indicator is not found")
             else:
-                indicators_normal = indicator_dict.get(_analysis_freq)
+                indicators_normal = indicator_dict.get(_analysis_freq)[0]
                 if self.indicator_analysis_method is None:
                     analysis_df = indicator_analysis(indicators_normal)
                 else:

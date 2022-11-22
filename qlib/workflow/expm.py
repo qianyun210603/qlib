@@ -188,7 +188,7 @@ class ExpManager:
         experiment_name : str
             name of the experiment to return.
         create : boolean
-            create the experiment it if hasn't been created before.
+            create the experiment if it hasn't been created before.
         start : boolean
             start the new experiment if one is created.
 
@@ -200,7 +200,7 @@ class ExpManager:
         if experiment_id is None and experiment_name is None:
             if self.active_experiment is not None:
                 return self.active_experiment
-            # User don't want get active code now.
+            # User don't want to get active code now.
             experiment_name = self._default_exp_name
 
         if create:
@@ -234,7 +234,7 @@ class ExpManager:
             if pr.scheme == "file":
                 with FileLock(os.path.join(pr.netloc, pr.path, "filelock")):  # pylint: disable=E0110
                     return self.create_exp(experiment_name), True
-            # NOTE: for other schemes like http, we double check to avoid create exp conflicts
+            # NOTE: for other schemes like http, we double-check to avoid create exp conflicts
             try:
                 return self.create_exp(experiment_name), True
             except ExpAlreadyExistError:
@@ -344,7 +344,7 @@ class MLflowExpManager(ExpManager):
 
         return self.active_experiment
 
-    def _end_exp(self, recorder_status: Text = Recorder.STATUS_S):
+    def _end_exp(self, recorder_status: Text = Recorder.STATUS_S, **kwargs):
         if self.active_experiment is not None:
             self.active_experiment.end(recorder_status)
             self.active_experiment = None

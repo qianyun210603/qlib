@@ -413,7 +413,8 @@ class CSI500Index(CSIIndex):
         bs.logout()
         return pd.concat(ret_list, sort=False)
 
-    def get_data_from_baostock(self, date) -> pd.DataFrame:
+    @staticmethod
+    def get_data_from_baostock(date) -> pd.DataFrame:
         """
         Data source: http://baostock.com/baostock/index.php/%E4%B8%AD%E8%AF%81500%E6%88%90%E5%88%86%E8%82%A1
         Avoid a large number of parallel data acquisition,
@@ -455,13 +456,13 @@ class CSI500Index(CSIIndex):
                 end_date: pd.Timestamp
         """
         logger.info("get new companies......")
-        today = datetime.date.today()
+        today = pd.Timestamp.now().normalize()
         bs.login()
-        result = self.get_data_from_baostock(today)
+        result = self.get_data_from_baostock(today.strftime("%Y-%m-%d"))
         bs.logout()
         df = result[["date", "symbol"]].copy()
         df.columns = [self.END_DATE_FIELD, self.SYMBOL_FIELD_NAME]
-        df.loc[:, self.END_DATE_FIELD] = pd.to_datetime(df[self.END_DATE_FIELD].astype(str))
+        df[self.END_DATE_FIELD] = today
         df[self.START_DATE_FIELD] = self.bench_start_date
         logger.info("end of get new companies.")
         return df

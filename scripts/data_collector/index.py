@@ -175,6 +175,7 @@ class IndexBase:
         last_code = []
         result_df_list = []
         _columns = [self.DATE_FIELD_NAME, self.SYMBOL_FIELD_NAME, self.CHANGE_TYPE_FIELD]
+        calendar_list = self.calendar_list
         for _trading_date in tqdm(sorted(history_companies[self.DATE_FIELD_NAME].unique(), reverse=True)):
             _currenet_code = history_companies[history_companies[self.DATE_FIELD_NAME] == _trading_date][
                 self.SYMBOL_FIELD_NAME
@@ -185,14 +186,14 @@ class IndexBase:
                 for _code in add_code:
                     result_df_list.append(
                         pd.DataFrame(
-                            [[get_trading_date_by_shift(self.calendar_list, _trading_date, 1), _code, self.ADD]],
+                            [[get_trading_date_by_shift(calendar_list, _trading_date, 1), _code, self.ADD]],
                             columns=_columns,
                         )
                     )
                 for _code in remote_code:
                     result_df_list.append(
                         pd.DataFrame(
-                            [[get_trading_date_by_shift(self.calendar_list, _trading_date, 0), _code, self.REMOVE]],
+                            [[get_trading_date_by_shift(calendar_list, _trading_date, 0), _code, self.REMOVE]],
                             columns=_columns,
                         )
                     )

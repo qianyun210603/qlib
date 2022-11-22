@@ -47,7 +47,7 @@ def backtest_loop(
     portfolio_dict = cast(PORT_METRIC, return_value.get("portfolio_dict"))
     indicator_dict = cast(INDICATOR_METRIC, return_value.get("indicator_dict"))
     trades = return_value.get("execute_result")
-    return portfolio_metrics, indicator, trades
+    return portfolio_dict, indicator_dict, trades
 
 
 def collect_data_loop(

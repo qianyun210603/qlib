@@ -90,10 +90,6 @@ class RqdataCollector(BaseCollector):
         """
         db_mgr = get_database()
         self.arctic_store = cast(ArcticDatabase, db_mgr).connection
-        # from zoneinfo import ZoneInfo
-        # self.arctic_store = Arctic(
-        #     "localhost", tz_aware=True, tzinfo=ZoneInfo('Asia/Shanghai'),
-        # )
 
         self.meta_lib = self.arctic_store.get_library("convert_meta")
         self.convert_price_lib = self.arctic_store.get_library("convert_convert_price")
@@ -438,6 +434,7 @@ class Run(BaseRun):
         if config_file.exists():
             with open(config_file) as f:
                 self.config.update(yaml.safe_load(f))
+
         source_dir = source_dir if source_dir is not None else self.config.get('source_dir', None)
         normalize_dir = normalize_dir if normalize_dir is not None else self.config.get('normalize_dir', None)
         max_workers = max_workers if max_workers is not None else self.config.get('max_workers', None)
@@ -634,15 +631,23 @@ class Run(BaseRun):
         logger.info("Exclude indexes from `all` to formulate `convert` population")
         # noinspection PyProtectedMember
         instruments_dir = _dump._instruments_dir
-        # all_instrument_path = instrument_dir.joinpath(_dump.INSTRUMENTS_FILE_NAME)
         all_instrument_w_index = pd.read_csv(
             instruments_dir.joinpath(_dump.INSTRUMENTS_FILE_NAME),
             sep='\t', header=None
         )
         indexes = ['SH' + x for x in INDEXES.values()]
         all_instrument_wo_index = all_instrument_w_index[~all_instrument_w_index.iloc[:, 0].isin(indexes)]
-        all_instrument_wo_index.to_csv(instruments_dir.joinpath("converts.txt"), header=False,
+        all_instrument_wo_index.to_csv(instruments_dir.joinpath("converts_and_exchangables.txt"), header=False,
                                        sep=_dump.INSTRUMENTS_SEP, index=False)
+
+        all_converts = all_instrument_wo_index[
+            ~all_instrument_wo_index.iloc(axis=1)[0].str.startswith('SH132') &
+            ~all_instrument_wo_index.iloc(axis=1)[0].str.startswith('SZ120')
+            ]
+        all_converts.to_csv(
+            instruments_dir.joinpath("converts.txt"), header=False, sep=_dump.INSTRUMENTS_SEP, index=False
+        )
+
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ import yaml
 import logging
 import platform
 import subprocess
-from .log import get_module_logger, set_global_logger_level
+from .log import get_module_logger
 
 
 # init qlib
@@ -34,7 +34,7 @@ def init(default_conf="client", **kwargs):
     from .config import C  # pylint: disable=C0415
     from .data.cache import H  # pylint: disable=C0415
 
-    logger = get_module_logger("Initialization", level=kwargs.get('logging_level', C.logging_level))
+    logger = get_module_logger("Initialization")
 
     skip_if_reg = kwargs.pop("skip_if_reg", False)
     if skip_if_reg and C.registered:
@@ -47,9 +47,7 @@ def init(default_conf="client", **kwargs):
     if clear_mem_cache:
         H.clear()
     C.set(default_conf, **kwargs)
-    # some loggers are created as class variable, which are initialized before config gets updated.
-    # so use `set_global_logger_level` here to update their levels.
-    set_global_logger_level(C.logging_level)
+    get_module_logger.setLevel(C.logging_level)
 
     # mount nfs
     for _freq, provider_uri in C.provider_uri.items():

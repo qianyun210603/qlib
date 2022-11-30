@@ -412,7 +412,7 @@ class DataHandlerLP(DataHandler):
         process_type: str
             PTYPE_I = 'independent'
 
-            - self._infer will processed by infer_processors
+            - self._infer will be processed by infer_processors
 
             - self._learn will be processed by learn_processors
 
@@ -671,7 +671,7 @@ class DataHandlerLP(DataHandler):
     def cast(cls, handler: "DataHandlerLP") -> "DataHandlerLP":
         """
         Motivation
-        - A user create a datahandler in his customized package. Then he wants to share the processed handler to
+        - A user creates a datahandler in his customized package. Then he wants to share the processed handler to
           other users without introduce the package dependency and complicated data processing logic.
         - This class make it possible by casting the class to DataHandlerLP and only keep the processed data
 

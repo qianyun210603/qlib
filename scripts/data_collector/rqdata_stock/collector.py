@@ -89,6 +89,7 @@ class RqdataCollector(BaseCollector):
         self.ex_factor_lib = self.arctic_store.get_library("ex_factor")  # 复权因子
         self.split_lib = self.arctic_store.get_library("split")  # 拆分信息
         self.limit_lib = self.arctic_store.get_library('limit_up_down')
+        self.index_weight_lib = self.arctic_store.get_library('index_weights')
         interval: str = 'd' if interval.endswith('d') else '1m'
 
         super(RqdataCollector, self).__init__(
@@ -125,12 +126,12 @@ class RqdataCollector(BaseCollector):
     ) -> pd.DataFrame:
         if interval not in {'d', '1d', '1m', '1min'}:
             raise ValueError(f"cannot support {interval}")
-        # start_datetime = self.convert_datetime(start_datetime, self._timezone)
-        # end_datetime = self.convert_datetime(end_datetime, self._timezone)
+
         interval = 'd' if interval.endswith('d') else '1m'
         db_symbol = symbol + '_' + interval
-        _result = self.bar_lib.read(db_symbol, chunk_range=DateRange(start_datetime.tz_localize(None),
-                                                                     end_datetime.tz_localize(None)))
+        _result = self.bar_lib.read(
+            db_symbol, chunk_range=DateRange(start_datetime.tz_localize(None), end_datetime.tz_localize(None))
+        )
 
         try:
             _result.set_index('date', inplace=True)
@@ -146,30 +147,41 @@ class RqdataCollector(BaseCollector):
         try:
             _result = pd.merge_asof(_result, _limits, left_index=True, right_index=True)
         except Exception:
-            logger.error(f"merge limits failed for {db_symbol} from {start_datetime} to "
-                         f"{end_datetime}: {traceback.format_exc()}")
+            logger.error(
+                f"merge limits failed for {db_symbol} from {start_datetime} to {end_datetime}: {traceback.format_exc()}"
+            )
             raise
 
         if self.ex_factor_lib.has_symbol(symbol):
             ex_factors = self.ex_factor_lib.read(symbol)
-            _result = pd.merge_asof(_result, ex_factors[['ex_cum_factor', 'ex_factor']], left_index=True,
-                                    right_index=True)
+            _result = pd.merge_asof(
+                _result, ex_factors[['ex_cum_factor', 'ex_factor']], left_index=True, right_index=True
+            )
+            _result.fillna()
         else:
             _result[['ex_cum_factor', 'ex_factor']] = 1.0
 
         if self.split_lib.has_symbol(symbol):
             split_factor = self.split_lib.read(symbol)
             _result = pd.merge_asof(
-                _result, split_factor[['cum_factor']].rename(
-                    columns={'cum_factor': 'split_cum_factor'}
-                ), left_index=True, right_index=True
+                _result, split_factor[['cum_factor']].rename(columns={'cum_factor': 'split_cum_factor'}),
+                left_index=True, right_index=True
             )
         else:
             _result['split_cum_factor'] = 1.0
 
-        time.sleep(self.delay)
+        _result[['ex_cum_factor', 'ex_factor', 'split_cum_factor', ]] = \
+            _result[['ex_cum_factor', 'ex_factor', 'split_cum_factor', ]].fillna(1.0)
 
-        # _result = _result.tz_localize(self._timezone)
+        if self.index_weight_lib.has_symbol(symbol):
+            weights = self.index_weight_lib.read(
+                symbol,
+                chunk_range=DateRange(start_datetime.tz_localize(None).normalize(), end_datetime.tz_localize(None))
+            )
+            if weights is not None and not weights.empty:
+                _result = _result.merge(weights, left_index=True, right_index=True, how='left')
+
+        time.sleep(self.delay)
 
         return pd.DataFrame() if _result is None else _result
 
@@ -192,7 +204,7 @@ class RqdataCollector(BaseCollector):
         }
         symbols = [k for k, v in symbol_dict.items() if symbol_validation(k, v)]
         logger.info(f"get {len(symbols)} symbols.")
-        return symbols
+        return ['688032_SSE']#symbols
 
     @staticmethod
     def normalize_symbol(symbol):
@@ -416,7 +428,7 @@ class Run(BaseRun):
         check_data_length: int
             check data length, if not None and greater than 0, each symbol will be considered complete if its data
             length is greater than or equal to this value, otherwise it will be fetched again,
-            the maximum number of fetches being (max_collector_count). By default None.
+            the maximum number of fetches being (max_collector_count). By default, None.
         limit_nums: int
             using for debug, by default None
 
@@ -572,18 +584,16 @@ class Run(BaseRun):
 
 if __name__ == "__main__":
     # fire.Fire(Run)
-    # runner = Run(
-    #     source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata\source",
-    #     normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata\normalize",
-    #     max_workers=8
-    # )
-    # # runner.download_data(max_collector_count=1, start=pd.Timestamp("2014-01-01"), end=pd.Timestamp("2021-12-31"))
-    # # runner.normalize_data()
-    # runner.update_data_to_bin(
-    #     qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata", trading_date='2010-01-01',
-    #     end_date=pd.Timestamp.now().strftime("%Y-%m-%d")
-    # )
-    get_instruments = getattr(
-        importlib.import_module(f"data_collector.cn_index.collector"), "get_instruments"
+    runner = Run(
+        source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_stock\source",
+        normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_stock\normalize",
+        max_workers=8
     )
-    get_instruments(r"D:\Documents\TradeResearch\qlib_test\rqdata", 'CSI500')
+    runner.download_data(max_collector_count=1, start=pd.Timestamp("2011-12-31"), end=pd.Timestamp("2022-12-03"))
+    runner.normalize_data()
+    # runner.normalize_data()
+    # runner.update_data_to_bin(
+    #     qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_stock", trading_date='2011-12-31',
+    #     end_date='2022-12-03'  #pd.Timestamp.now().strftime("%Y-%m-%d")
+    # )
+

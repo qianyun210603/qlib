@@ -182,6 +182,8 @@ class RqdataCollector(BaseCollector):
                 left_index=True, right_index=True)
         else:
             _results['split_cum_factor'] = 1.0
+        _results[['ex_cum_factor', 'ex_factor', 'split_cum_factor', ]] = \
+            _results[['ex_cum_factor', 'ex_factor', 'split_cum_factor', ]].fillna(1.0)
 
         _result = pd.merge(
             _resultb, _results.rename(columns={c: c + '_stock' for c in _results.columns}), left_index=True,

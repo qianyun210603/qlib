@@ -157,7 +157,6 @@ class RqdataCollector(BaseCollector):
             _result = pd.merge_asof(
                 _result, ex_factors[['ex_cum_factor', 'ex_factor']], left_index=True, right_index=True
             )
-            _result.fillna()
         else:
             _result[['ex_cum_factor', 'ex_factor']] = 1.0
 
@@ -204,7 +203,7 @@ class RqdataCollector(BaseCollector):
         }
         symbols = [k for k, v in symbol_dict.items() if symbol_validation(k, v)]
         logger.info(f"get {len(symbols)} symbols.")
-        return ['688032_SSE']#symbols
+        return symbols
 
     @staticmethod
     def normalize_symbol(symbol):
@@ -589,11 +588,10 @@ if __name__ == "__main__":
         normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_stock\normalize",
         max_workers=8
     )
-    runner.download_data(max_collector_count=1, start=pd.Timestamp("2011-12-31"), end=pd.Timestamp("2022-12-03"))
-    runner.normalize_data()
+    # runner.download_data(max_collector_count=1, start=pd.Timestamp("2011-12-31"), end=pd.Timestamp("2022-12-03"))
     # runner.normalize_data()
-    # runner.update_data_to_bin(
-    #     qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_stock", trading_date='2011-12-31',
-    #     end_date='2022-12-03'  #pd.Timestamp.now().strftime("%Y-%m-%d")
-    # )
+    runner.update_data_to_bin(
+        qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_stock", trading_date='2010-01-01',
+        end_date='2022-12-03'  #pd.Timestamp.now().strftime("%Y-%m-%d")
+    )
 

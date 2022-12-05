@@ -52,7 +52,7 @@ _CALENDAR_MAP = {}
 MINIMUM_SYMBOLS_NUM = 3900
 
 
-def get_calendar_list(bench_code="CSI300", start_date = pd.Timestamp("2012-01-01")) -> List[pd.Timestamp]:
+def get_calendar_list(bench_code="CSI300", start_date = pd.Timestamp("2005-01-01")) -> List[pd.Timestamp]:
     """get SH/SZ history calendar list
 
     Parameters

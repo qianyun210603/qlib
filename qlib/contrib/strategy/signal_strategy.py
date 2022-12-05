@@ -42,7 +42,7 @@ class BaseSignalStrategy(BaseStrategy):
             the decision of the strategy will base on the given signal
         risk_degree : float
             position percentage of total value.
-        trade_exchange :
+        trade_exchange : Exchange
             exchange that provides market info, used to deal order and generate report
             - If `trade_exchange` is None, self.trade_exchange will be set with common_infra
             - It allowes different trade_exchanges is used in different executions.
@@ -199,9 +199,13 @@ class TopkDropoutStrategy(BaseTopkStrategy):
             before sell stock , will check current.get_stock_count(order.stock_id) >= self.hold_thresh.
         only_tradable : bool
             will the strategy only consider the tradable stock when buying and selling.
+
             if only_tradable:
+
                 strategy will make decision with the tradable state of the stock info and avoid buy and sell them.
+
             else:
+
                 strategy will make buy sell decision without checking the tradable state of the stock.
         """
         super().__init__(hold_thresh=hold_thresh, **kwargs)
@@ -209,6 +213,7 @@ class TopkDropoutStrategy(BaseTopkStrategy):
         self.n_drop = n_drop
         self.method_sell = method_sell
         self.method_buy = method_buy
+        self.hold_thresh = hold_thresh
         self.only_tradable = only_tradable
 
     def _generate_buy_sell_list(self, pred_score, trade_start_time, trade_end_time):
@@ -439,11 +444,12 @@ class WeightStrategyBase(BaseSignalStrategy):
             the decision of the strategy will base on the given signal
         trade_exchange : Exchange
             exchange that provides market info, used to deal order and generate report
+
             - If `trade_exchange` is None, self.trade_exchange will be set with common_infra
             - It allowes different trade_exchanges is used in different executions.
             - For example:
-                - In daily execution, both daily exchange and minutely are usable, but the daily exchange is
-                  recommended because it runs faster.
+
+                - In daily execution, both daily exchange and minutely are usable, but the daily exchange is recommended because it run faster.
                 - In minutely execution, the daily exchange is not usable, only the minutely exchange is recommended.
         """
         super().__init__(**kwargs)
@@ -455,16 +461,17 @@ class WeightStrategyBase(BaseSignalStrategy):
 
     def generate_target_weight_position(self, score, current, trade_start_time, trade_end_time):
         """
-        Generate target position from score for this date and the current position.The cash is not considered in the
-         position
+        Generate target position from score for this date and the current position.The cash is not considered in the position
+
         Parameters
         -----------
         score : pd.Series
             pred score for this trade date, index is stock_id, contain 'score' column.
         current : Position()
             current position.
-        trade_start_time : pd.Timestamp
-        trade_end_time : pd.Timestamp
+        trade_exchange : Exchange()
+        trade_date : pd.Timestamp
+            trade date.
         """
         raise NotImplementedError()
 
@@ -508,12 +515,14 @@ class EnhancedIndexingStrategy(WeightStrategyBase):
 
     Users need to prepare their risk model data like below:
 
-    ├── /path/to/riskmodel
-    ├──── 20210101
-    ├────── factor_exp.{csv|pkl|h5}
-    ├────── factor_cov.{csv|pkl|h5}
-    ├────── specific_risk.{csv|pkl|h5}
-    ├────── blacklist.{csv|pkl|h5}  # optional
+    .. code-block:: text
+
+        ├── /path/to/riskmodel
+        ├──── 20210101
+        ├────── factor_exp.{csv|pkl|h5}
+        ├────── factor_cov.{csv|pkl|h5}
+        ├────── specific_risk.{csv|pkl|h5}
+        ├────── blacklist.{csv|pkl|h5}  # optional
 
     The risk model data can be obtained from risk data provider. You can also use
     `qlib.model.riskmodel.structured.StructuredCovEstimator` to prepare these data.
@@ -534,8 +543,8 @@ class EnhancedIndexingStrategy(WeightStrategyBase):
         riskmodel_root,
         market="csi500",
         turn_limit=None,
-        name_mapping=None,
-        optimizer_kwargs=None,
+        name_mapping={},
+        optimizer_kwargs={},
         verbose=False,
         **kwargs,
     ):
@@ -547,15 +556,11 @@ class EnhancedIndexingStrategy(WeightStrategyBase):
         self.market = market
         self.turn_limit = turn_limit
 
-        if name_mapping is None:
-            name_mapping = {}
         self.factor_exp_path = name_mapping.get("factor_exp", self.FACTOR_EXP_NAME)
         self.factor_cov_path = name_mapping.get("factor_cov", self.FACTOR_COV_NAME)
         self.specific_risk_path = name_mapping.get("specific_risk", self.SPECIFIC_RISK_NAME)
         self.blacklist_path = name_mapping.get("blacklist", self.BLACKLIST_NAME)
 
-        if optimizer_kwargs is not None:
-            optimizer_kwargs = {}
         self.optimizer = EnhancedIndexingOptimizer(**optimizer_kwargs)
 
         self.verbose = verbose

@@ -100,7 +100,7 @@ class Experiment:
         """
         raise NotImplementedError(f"Please implement the `search_records` method.")
 
-    def delete_recorder(self, recorder_id):
+    def delete_recorder(self, recorder_id=None, recorder_name=None):
         """
         Create a recorder for each experiment.
 
@@ -108,6 +108,8 @@ class Experiment:
         ----------
         recorder_id : str
             the id of the recorder to be deleted.
+        recorder_name : str
+            the name of the recorder to be deleted.
         """
         raise NotImplementedError(f"Please implement the `delete_recorder` method.")
 
@@ -328,6 +330,11 @@ class MLflowExperiment(Experiment):
         ), "Please input a valid recorder id or name before deleting."
         try:
             if recorder_id is not None:
+                if recorder_name is not None and self._get_recorder(recorder_id).name != recorder_name:
+                    raise ValueError(
+                        f"Conflict parameters: the name of recorder with id {recorder_id} is "
+                        f"{self._get_recorder(recorder_id).name}."
+                    )
                 self._client.delete_run(recorder_id)
             else:
                 recorder = self._get_recorder(recorder_name=recorder_name)

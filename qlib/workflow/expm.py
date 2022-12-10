@@ -375,6 +375,8 @@ class MLflowExpManager(ExpManager):
                 # NOTE: the mlflow's experiment_id must be str type...
                 # https://www.mlflow.org/docs/latest/python_api/mlflow.tracking.html#mlflow.tracking.MlflowClient.get_experiment
                 exp = self.client.get_experiment(experiment_id)
+                if experiment_name is not None and experiment_name != exp.name:
+                    raise ValueError(f"Conflict parameters: the exp with id {experiment_id} is {exp.name}.")
                 if exp.lifecycle_stage.upper() == "DELETED":
                     raise MlflowException("No valid experiment has been found.")
                 experiment = MLflowExperiment(exp.experiment_id, exp.name, self.uri)
@@ -408,6 +410,10 @@ class MLflowExpManager(ExpManager):
         ), "Please input a valid experiment id or name before deleting."
         try:
             if experiment_id is not None:
+                if experiment_name is not None and experiment_name != self._get_exp(experiment_id).name:
+                    raise ValueError(
+                        f"Conflict parameters: the exp with id {experiment_id} is {self._get_exp(experiment_id).name}."
+                    )
                 self.client.delete_experiment(experiment_id)
             else:
                 experiment = self.client.get_experiment_by_name(experiment_name)

@@ -282,7 +282,7 @@ class RqdataCollector(BaseCollector):
 
         logger.info("get china future contracts......")
         self.symbol_dict = {x: self.meta_lib.read(x) for x in self.meta_lib.list_symbols()}
-        symbols = [k for k, v in self.symbol_dict.items() if k!='_exchange_underlying_mapping' and symbol_validation(k, v)]# if '888' in k or '890' in k]
+        symbols = [k for k, v in self.symbol_dict.items() if k!='_exchange_underlying_mapping' and symbol_validation(k, v)]
         logger.info(f"get {len(symbols)} symbols.")
         return symbols
 
@@ -695,7 +695,7 @@ class Run(BaseRun):
         )
         # # download data from Rqdata
         self.download_data(max_collector_count=self.max_workers, start=trading_date, end=end_date, check_data_length=check_data_length)
-        #
+
         # # normalize data
         self.normalize_data(qlib_data_1d_dir)
 

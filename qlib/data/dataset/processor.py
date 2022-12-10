@@ -335,8 +335,7 @@ class CSRankNorm(Processor):
         import pandas as pd
         x = np.random.random(10000)  # for any variable
         x_rank = pd.Series(x).rank(pct=True)  # if it is converted to rank, it will be a uniform distributed
-        x_rank_norm = (x_rank - x_rank.mean()) / x_rank.std()  # Normally, we will normalize it to make it like normal
-                                                               # distribution
+        x_rank_norm = (x_rank - x_rank.mean()) / x_rank.std()  # Normally, we will normalize it to make it like normal distribution
 
         x_rank.mean()   # accounts for 0.5
         1 / x_rank.std()  # accounts for 3.46

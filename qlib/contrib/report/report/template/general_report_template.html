@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{title}}</title>
+</head>
+<body>
+{% macro print_section(m_level, m_content_items) -%}
+{% for content_item in m_content_items %}
+{% if 'header' in content_item %}
+<{{"h%d"|format(m_level)}}>{{content_item.header}}</{{"h%d"|format(m_level)}}>
+{%- endif %}
+{% if content_item.type == "html" %}
+{{content_item.content}}
+{% elif content_item.type == "base64image" %}
+<img src="{{content_item.content}}"  alt="Red dot" />
+{% elif content_item.type == "base64imagelist" %}
+{% for base64image in content_item.content %}
+<img src="{{base64image}}"  alt="Red dot" />
+{%- endfor %}
+{% elif content_item.type == "subsections" %}
+{{print_section(m_level+1, content_item.content)}}
+{% elif content_item.type == "itemlist" %}
+<ul>
+{% for dk, dv in content_item.content.items() %}
+<li><b>{{dk}}:</b> {{dv}}</li>
+{%- endfor %}
+</ul>
+{%- endif %}
+{%- endfor %}
+{%- endmacro -%}
+
+{{print_section(1, component_list)}}
+
+</body>
+</html>

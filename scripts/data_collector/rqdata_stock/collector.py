@@ -199,7 +199,7 @@ class RqdataCollector(BaseCollector):
         symbol_dict = {
             x.rsplit('_', 1)[0]: self.bar_data_infos.read(x) for x in self.bar_data_infos.list_symbols() if
             ('SSE' in x or 'SZSE' in x)
-            and not x.startswith('INDEX') and not x.startswith("1") and x.endswith(self.interval)
+            and not x.startswith('INDEX') and x[0] not in {'1', '5'} and x.endswith(self.interval)
         }
         symbols = [k for k, v in symbol_dict.items() if symbol_validation(k, v)]
         logger.info(f"get {len(symbols)} symbols.")
@@ -591,7 +591,7 @@ if __name__ == "__main__":
     # runner.download_data(max_collector_count=1, start=pd.Timestamp("2011-12-31"), end=pd.Timestamp("2022-12-03"))
     # runner.normalize_data()
     runner.update_data_to_bin(
-        qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_stock", trading_date='2010-01-01',
-        end_date='2022-12-03'  #pd.Timestamp.now().strftime("%Y-%m-%d")
+        qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_stock", trading_date='2022-12-01',
+        end_date=pd.Timestamp.now().strftime("%Y-%m-%d")
     )
 

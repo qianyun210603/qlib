@@ -265,6 +265,7 @@ def gen_yaml_files_from_example_templates(
     return temp_path
 
 
+# noinspection GrazieInspection
 class ModelRunner:
 
     @staticmethod

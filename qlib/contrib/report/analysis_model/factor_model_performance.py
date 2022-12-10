@@ -13,17 +13,7 @@ import matplotlib.pyplot as plt
 from scipy import stats
 
 from ..graph import ScatterGraph, SubplotsGraph, BarGraph, HeatmapGraph, BoxGraph, TableGraph
-
-
-def guess_plotly_rangebreaks(dt_index: pd.DatetimeIndex):
-    dt_idx = dt_index.sort_values()
-    gaps = dt_idx[1:] - dt_idx[:-1]
-    min_gap = gaps.min()
-    gaps_to_break = {}
-    for gap, d in zip(gaps, dt_idx[:-1]):
-        if gap > min_gap:
-            gaps_to_break.setdefault(gap - min_gap, []).append(d + min_gap)
-    return [dict(values=v, dvalue=int(k.total_seconds() * 1000)) for k, v in gaps_to_break.items()]
+from ..utils import guess_plotly_rangebreaks
 
 
 def _group_return(pred_label: pd.DataFrame = None, reverse: bool = False, N: int = 5, **kwargs) -> tuple:
@@ -114,7 +104,6 @@ def _group_return(pred_label: pd.DataFrame = None, reverse: bool = False, N: int
 
     # statistics of returns of groups and long-short and long-bench
     def _cal_statics(return_series):
-        periods_per_day = len(np.unique(t_df.index.time))
         n = len(return_series)
         mean_ret = return_series.mean()
         std_ret = return_series.std()
@@ -339,7 +328,7 @@ def _pred_autocorr(pred_label: pd.DataFrame, lag=1, **kwargs) -> tuple:
             xaxis=dict(tickangle=45, rangebreaks=kwargs.get("rangebreaks", guess_plotly_rangebreaks(_df.index))),
         ),
     ).figure
-    return (ac_figure,)
+    return ac_figure,
 
 
 def _pred_turnover(pred_label: pd.DataFrame, N=5, lag=1, **kwargs) -> tuple:
@@ -370,7 +359,7 @@ def _pred_turnover(pred_label: pd.DataFrame, N=5, lag=1, **kwargs) -> tuple:
             xaxis=dict(tickangle=45, rangebreaks=kwargs.get("rangebreaks", guess_plotly_rangebreaks(r_df.index))),
         ),
     ).figure
-    return (turnover_figure,)
+    return turnover_figure,
 
 
 def ic_figure(ic_df: pd.DataFrame, show_nature_day=True, **kwargs) -> go.Figure:

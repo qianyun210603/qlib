@@ -227,7 +227,7 @@ class ExpManager:
         except ValueError:
             if experiment_name is None:
                 experiment_name = self._default_exp_name
-            logger.warning(f"No valid experiment found. Create a new experiment with name {experiment_name}.")
+            logger.info(f"No valid experiment found. Create a new experiment with name {experiment_name}.")
 
             # NOTE: mlflow doesn't consider the lock for recording multiple runs
             # So we supported it in the interface wrapper

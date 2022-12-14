@@ -28,7 +28,7 @@ class Serializable:
     default_dump_all = False  # if dump all things
     config_attr = ["_include", "_exclude"]
     exclude_attr = []  # exclude_attr have lower priorities than `self._exclude`
-    include_attr = []  # include_attr have lower priorities then `self._include`
+    include_attr = []  # include_attr have lower priorities than `self._include`
     FLAG_KEY = "_qlib_serial_flag"
 
     def __init__(self):

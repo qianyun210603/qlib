@@ -20,7 +20,7 @@ class Expression(abc.ABC):
     - feature
     - time:  it  could be observation time or period time.
 
-        - period time is designed for Point-in-time database.  For example, the period time maybe 2014Q4, its value can observed for multiple times(different value may be observed at different time due to amendment).
+        - period time is designed for Point-in-time database.  For example, the period time maybe 2014Q4, its value can observe for multiple times(different value may be observed at different time due to amendment).
     """
 
     def __str__(self):
@@ -170,7 +170,7 @@ class Expression(abc.ABC):
             feature end  index  [in calendar].
 
         *args may contain following information:
-        1) if it is used in basic expression engine data, it contains following arguments
+        1) if it is used in basic expression engine data, it contains following arguments:
             freq: str
                 feature frequency.
 
@@ -219,7 +219,7 @@ class Expression(abc.ABC):
         the features in specific range at first.  However, situations like
         Ref(Ref($close, -1), 1) can not be handled rightly.
 
-        So this will only used for detecting the length of historical data needed.
+        So this will only be used for detecting the length of historical data needed.
         """
         # TODO: forward operator like Ref($close, -1) is not supported yet.
         raise NotImplementedError("This function must be implemented in your newly defined feature")

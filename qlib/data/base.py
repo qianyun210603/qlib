@@ -209,12 +209,15 @@ class Expression(abc.ABC):
         # cache
         cache_key = str(self), instrument, start_index, end_index, *args
         if cache_key in H["f"]:
-            # get_module_logger('data').info(f'cache hit for {str(cache_key)}')
+            # get_module_logger('data').info(f'cache hit in f for {str(cache_key)}')
             return H["f"][cache_key]
+        if H.has_shared_cache() and cache_key in H["fs"]:
+            # get_module_logger('data').info(f'cache hit in fs for {str(cache_key)}')
+            return H["fs"][cache_key]
         if start_index is not None and end_index is not None and start_index > end_index:
             raise ValueError("Invalid index range: {} {}".format(start_index, end_index))
         try:
-            # get_module_logger('data').info(f'recalculate for {str(cache_key)}')
+            # get_module_logger('data').info(f're-calculate for {str(cache_key)}')
             series = self._load_internal(instrument, start_index, end_index, *args)
         except Exception as e:
             get_module_logger("data").error(

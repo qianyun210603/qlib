@@ -14,6 +14,8 @@ from scipy.stats import percentileofscore
 from .base import Expression, ExpressionOps, Feature, PFeature
 from ..log import get_module_logger
 from ..utils import get_callable_kwargs
+from multiprocessing import Condition
+from qlib.config import C
 
 try:
     from ._libs.rolling import rolling_slope, rolling_rsquare, rolling_resi
@@ -1644,22 +1646,39 @@ class Cov(PairRolling):
 
 #################### cross section operator ####################
 class XSectionOperator(ElemOperator):
+
+    lock = Condition()
+
     def __init__(self, feature, population=None):
         self.population = population
         super().__init__(feature)
 
-    def _load_internal(self, instrument, start_index, end_index, *args) -> pd.Series:
+    def _process_df(self, df, **_) -> pd.DataFrame:
         raise NotImplementedError("This function must be implemented in your newly defined feature")
 
-    def _load_all_instruments(self, instrument, start_index, end_index, *args):
-        #shuffled = self.population
-        # mydf = self.feature.load(instrument, start_index, end_index, *args).to_frame(instrument)
-        # for inst in shuffled:
-        #     if inst != instrument:
-        #         new_series = self.feature.load(inst, start_index, end_index, *args).rename(inst)
-        #         mydf = mydf.merge(new_series, left_index=True, right_index=True, how="left")
+    def _load_internal(self, instrument, start_index, end_index, *args) -> pd.Series:
+        from .cache import H  # pylint: disable=C0415
+        if not str(self) in H["fs"]:
+            cond_status = H["fs"].cond.acquire(block=False)
+            if cond_status:
+                get_module_logger('data').info(f"calculating calculation: {str(self)}")
+                df = self._load_all_instruments(start_index, end_index, *args)
+                H["fs"][str(self)] = self._process_df(df)
+                H["fs"].cond.notify_all()
+                H["fs"].cond.release()
+            else:
+                # get_module_logger('data').info(f"waiting for calculation: {str(self)}")
+                H["fs"].cond.wait()
+        # else:
+            # get_module_logger('data').info(f"cache hit: {str(self)}")
+        mydf = H["fs"][str(self)]
+        return mydf.loc[start_index:end_index, instrument]
+
+
+    def _load_all_instruments(self, start_index, end_index, *args) -> pd.DataFrame:
         mydf = pd.concat(
-            [self.feature.load(instrument, start_index, end_index, *args).rename(instrument)], axis=1, join='outer'
+            [self.feature.load(inst, start_index, end_index, *args).rename(inst) for inst in self.population],
+            axis=1, join='outer'
         )
         return mydf
 
@@ -1677,17 +1696,14 @@ class XSectionOperator(ElemOperator):
     def require_cs_info(self):
         return True
 
-
 class CSRank(XSectionOperator):
-    def _load_internal(self, instrument, start_index, end_index, *args) -> pd.Series:
-        df: pd.DataFrame = self._load_all_instruments(instrument, start_index, end_index, *args)
-        return df.rank(axis=1, pct=True)[instrument]
+    def _process_df(self, df, **_) -> pd.DataFrame:
+        return df.rank(axis=1, pct=True)
 
 
 class CSScale(XSectionOperator):
-    def _load_internal(self, instrument, start_index, end_index, *args) -> pd.Series:
-        df: pd.DataFrame = self._load_all_instruments(instrument, start_index, end_index, *args)
-        return df[instrument] / df.abs().sum(axis=1)
+    def _process_df(self, df, **_) -> pd.DataFrame:
+        return df.div(df.abs().sum(axis=1))
 
 
 #################### other kind of operator ####################

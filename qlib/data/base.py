@@ -7,6 +7,7 @@ from __future__ import print_function
 
 import abc
 import pandas as pd
+from collections import OrderedDict
 from ..log import get_module_logger
 
 
@@ -22,6 +23,23 @@ class Expression(abc.ABC):
 
         - period time is designed for Point-in-time database.  For example, the period time maybe 2014Q4, its value can observe for multiple times(different value may be observed at different time due to amendment).
     """
+    def __init__(self):
+        self.__cs_dependant_level = -1
+
+    @property
+    def require_cs_info(self):
+        return False
+
+    @property
+    def cs_dependent_level(self):
+        self.__cs_dependant_level = 0
+        return self.__cs_dependant_level
+
+    def get_cs_dependants(self) -> list:
+        return list()
+
+    def get_direct_dependents(self) -> list:
+        return list()
 
     def __str__(self):
         return type(self).__name__
@@ -191,10 +209,12 @@ class Expression(abc.ABC):
         # cache
         cache_key = str(self), instrument, start_index, end_index, *args
         if cache_key in H["f"]:
+            # get_module_logger('data').info(f'cache hit for {str(cache_key)}')
             return H["f"][cache_key]
         if start_index is not None and end_index is not None and start_index > end_index:
             raise ValueError("Invalid index range: {} {}".format(start_index, end_index))
         try:
+            # get_module_logger('data').info(f'recalculate for {str(cache_key)}')
             series = self._load_internal(instrument, start_index, end_index, *args)
         except Exception as e:
             get_module_logger("data").error(
@@ -295,3 +315,19 @@ class ExpressionOps(Expression):
         for _, member_var in vars(self).items():
             if isinstance(member_var, ExpressionOps):
                 member_var.set_population(population)
+
+    def get_cs_dependants(self) -> dict:
+        deps = list()
+        for v in self.__dict__.values():
+            if isinstance(v, ExpressionOps):
+                for d in v.get_cs_dependants():
+                    if d not in deps:
+                        deps.append(d)
+        return deps
+
+    def get_direct_dependents(self) -> list:
+        deps = list()
+        for v in self.__dict__.values():
+            if isinstance(v, Expression):
+                deps.append(v)
+        return deps

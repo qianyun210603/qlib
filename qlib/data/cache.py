@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 from typing import Union, Iterable
 from collections import OrderedDict
+from multiprocessing import Lock
 
 from ..config import C
 from ..utils import (
@@ -43,10 +44,10 @@ class QlibCacheException(RuntimeError):
 class MemCacheUnit(abc.ABC):
     """Memory Cache Unit."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, cache_data=None, *args, **kwargs):
         self.size_limit = kwargs.pop("size_limit", 0)
         self._size = 0
-        self.od = OrderedDict()
+        self.od = OrderedDict() if cache_data is None else cache_data
 
     def __setitem__(self, key, value):
         # TODO: thread safe?__setitem__ failure might cause inconsistent size?
@@ -112,22 +113,26 @@ class MemCacheUnit(abc.ABC):
 
         self._size += self._get_value_size(value)
 
+    @property
+    def internal_data(self):
+        return self.od
+
+    def update(self, data):
+        self.od.update(data)
+        self._size += sum(self._get_value_size(v) for v in data.values())
+
     @abc.abstractmethod
     def _get_value_size(self, value):
         raise NotImplementedError
 
 
 class MemCacheLengthUnit(MemCacheUnit):
-    def __init__(self, size_limit=0):
-        super().__init__(size_limit=size_limit)
 
     def _get_value_size(self, value):
         return 1
 
 
 class MemCacheSizeofUnit(MemCacheUnit):
-    def __init__(self, size_limit=0):
-        super().__init__(size_limit=size_limit)
 
     def _get_value_size(self, value):
         return sys.getsizeof(value)
@@ -136,7 +141,7 @@ class MemCacheSizeofUnit(MemCacheUnit):
 class MemCache:
     """Memory cache."""
 
-    def __init__(self, mem_cache_size_limit=None, limit_type="length"):
+    def __init__(self):
         """
 
         Parameters
@@ -146,20 +151,11 @@ class MemCache:
         limit_type:
             length or sizeof; length(call fun: len), size(call fun: sys.getsizeof).
         """
-
-        size_limit = C.mem_cache_size_limit if mem_cache_size_limit is None else mem_cache_size_limit
-        limit_type = C.mem_cache_limit_type if limit_type is None else limit_type
-
-        if limit_type == "length":
-            klass = MemCacheLengthUnit
-        elif limit_type == "sizeof":
-            klass = MemCacheSizeofUnit
-        else:
-            raise ValueError(f"limit_type must be length or sizeof, your limit_type is {limit_type}")
-
-        self.__calendar_mem_cache = klass(size_limit)
-        self.__instrument_mem_cache = klass(size_limit)
-        self.__feature_mem_cache = klass(size_limit)
+        self.initialized = False
+        self.__calendar_mem_cache = None
+        self.__instrument_mem_cache = None
+        self.__feature_mem_cache = None
+        self.__feature_share_mem_cache = None
 
     def __getitem__(self, key):
         if key == "c":
@@ -168,13 +164,40 @@ class MemCache:
             return self.__instrument_mem_cache
         elif key == "f":
             return self.__feature_mem_cache
+        elif key == "fs":
+            return self.__feature_share_mem_cache
         else:
             raise KeyError("Unknown memcache unit")
 
+    def init_kernel(self, size_limit=None, limit_type=None):
+        if self.initialized:
+            raise RuntimeWarning("Kernel re-inited, previous kernel abandoned.")
+        if size_limit is None:
+            size_limit = C.mem_cache_size_limit
+        if limit_type is None:
+            limit_type = C.mem_cache_limit_type
+
+        if limit_type == "length":
+            klass = MemCacheLengthUnit
+        elif limit_type == "sizeof":
+            klass = MemCacheSizeofUnit
+        else:
+            raise ValueError(f"limit_type must be length or sizeof, your limit_type is {limit_type}")
+        self.__calendar_mem_cache = klass(size_limit=size_limit)
+        self.__instrument_mem_cache = klass(size_limit=size_limit)
+        self.__feature_mem_cache = klass(size_limit=size_limit)
+        if "shared_memory_cache" in C:
+            self.__feature_share_mem_cache = klass(cache_data=C["shared_memory_cache"], size_limit=size_limit)
+        else:
+            self.__feature_share_mem_cache = self.__feature_mem_cache
+        self.initialized = True
+
     def clear(self):
-        self.__calendar_mem_cache.clear()
-        self.__instrument_mem_cache.clear()
-        self.__feature_mem_cache.clear()
+        if self.initialized:
+            self.__calendar_mem_cache.clear()
+            self.__instrument_mem_cache.clear()
+            self.__feature_mem_cache.clear()
+            self.__feature_share_mem_cache.clear()
 
 
 class MemCacheExpire:
@@ -334,15 +357,15 @@ class ExpressionCache(BaseProviderCache):
     .. note:: Override the `_uri` and `_expression` method to create your own expression cache mechanism.
     """
 
-    def expression(self, instrument, field, start_time, end_time, freq):
+    def expression(self, instrument, expression, start_time, end_time, freq):
         """Get expression data.
 
         .. note:: Same interface as `expression` method in expression provider
         """
         try:
-            return self._expression(instrument, field, start_time, end_time, freq)
+            return self._expression(instrument, expression, start_time, end_time, freq)
         except NotImplementedError:
-            return self.provider.expression(instrument, field, start_time, end_time, freq)
+            return self.provider.expression(instrument, expression, start_time, end_time, freq)
 
     def _uri(self, instrument, field, start_time, end_time, freq):
         """Get expression cache file uri.
@@ -359,7 +382,7 @@ class ExpressionCache(BaseProviderCache):
         raise NotImplementedError("Implement this method if you want to use expression cache")
 
     def update(self, cache_uri: Union[str, Path], freq: str = "day"):
-        """Update expression cache to latest calendar.
+        """Update expression cache to the latest calendar.
 
         Override this method to define how to update expression cache corresponding to users' own cache mechanism.
 
@@ -445,7 +468,7 @@ class DatasetCache(BaseProviderCache):
         )
 
     def update(self, cache_uri: Union[str, Path], freq: str = "day"):
-        """Update dataset cache to latest calendar.
+        """Update dataset cache to the latest calendar.
 
         Override this method to define how to update dataset cache corresponding to users' own cache mechanism.
 
@@ -626,7 +649,7 @@ class DiskExpressionCache(ExpressionCache):
                 lft_etd, rght_etd = expr.get_extended_window_size()
                 # The expression used the future data after rght_etd days.
                 # So the last rght_etd data should be removed.
-                # There are most `ele_n` period of data can be remove
+                # There are most `ele_n` period of data can be removed
                 remove_n = min(rght_etd, ele_n)
                 assert new_calendar[1] == whole_calendar[current_index]
                 data = self.provider.expression(
@@ -881,7 +904,7 @@ class DiskDatasetCache(DatasetCache):
             - Each line contains two element <start_index, end_index> with a timestamp as its index.
             - It indicates the `start_index` (included) and `end_index` (excluded) of the data for `timestamp`
 
-        - meta data: cache/d41366901e25de3ec47297f12e2ba11d.meta
+        - metadata: cache/d41366901e25de3ec47297f12e2ba11d.meta
 
         - data     : cache/d41366901e25de3ec47297f12e2ba11d
 
@@ -945,7 +968,7 @@ class DiskDatasetCache(DatasetCache):
         im.update(index_data)
 
         # rename the file after the cache has been generated
-        # this doesn't work well on windows, but our server won't use windows
+        # this doesn't work well on Windows, but our server won't use windows
         # temporarily
         cache_path.with_suffix(".data").rename(cache_path)
         # the fields of the cached features are converted to the original fields

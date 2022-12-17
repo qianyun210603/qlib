@@ -94,6 +94,19 @@ class ChangeInstrument(ElemOperator):
     def _load_internal(self, instrument, start_index, end_index, *args):
         return self.feature.load(instrument, start_index, end_index, *args)
 
+    @property
+    def cs_dependent_level(self):
+        if self.__cs_dependent_devel < 0:
+            self.__cs_dependent_devel = self.feature.cs_dependent_level + 1
+        return self.__cs_dependent_devel
+
+    def get_cs_dependants(self) -> dict:
+        deps = self.feature.get_cs_dependants() + [self.feature]
+        return deps
+
+    @property
+    def require_cs_info(self):
+        return True
 
 class Neg(ElemOperator):
     def _load_internal(self, instrument, start_index, end_index, *args):
@@ -793,7 +806,7 @@ class Rolling(ExpressionOps):
     def _load_internal(self, instrument, start_index, end_index, *args):
         series = self.feature.load(instrument, start_index, end_index, *args)
         # NOTE: remove all null check,
-        # now it's user's responsibility to decide whether use features in null days
+        # now it's user's responsibility to decide whether to use features in null days
         # isnull = series.isnull() # NOTE: isnull = NaN, inf is not null
         if isinstance(self.N, int) and self.N == 0:
             series = getattr(series.expanding(min_periods=1), self.func)()
@@ -815,8 +828,7 @@ class Rolling(ExpressionOps):
 
     def get_extended_window_size(self):
         if self.N == 0:
-            # FIXME: How to make this accurate and efficiently? Or  should we
-            # remove such support for N == 0?
+            # FIXME: How to make this accurate and efficiently? Or should we remove such support for N == 0?
             get_module_logger(self.__class__.__name__).warning("The Rolling(ATTR, 0) will not be accurately calculated")
             return self.feature.get_extended_window_size()
         elif 0 < self.N < 1:
@@ -1640,13 +1652,30 @@ class XSectionOperator(ElemOperator):
         raise NotImplementedError("This function must be implemented in your newly defined feature")
 
     def _load_all_instruments(self, instrument, start_index, end_index, *args):
-        shuffled = np.random.permutation(self.population)
-        mydf = self.feature.load(instrument, start_index, end_index, *args).to_frame(instrument)
-        for inst in shuffled:
-            if inst != instrument:
-                new_series = self.feature.load(inst, start_index, end_index, *args).rename(inst)
-                mydf = mydf.merge(new_series, left_index=True, right_index=True, how="left")
+        #shuffled = self.population
+        # mydf = self.feature.load(instrument, start_index, end_index, *args).to_frame(instrument)
+        # for inst in shuffled:
+        #     if inst != instrument:
+        #         new_series = self.feature.load(inst, start_index, end_index, *args).rename(inst)
+        #         mydf = mydf.merge(new_series, left_index=True, right_index=True, how="left")
+        mydf = pd.concat(
+            [self.feature.load(instrument, start_index, end_index, *args).rename(instrument)], axis=1, join='outer'
+        )
         return mydf
+
+    @property
+    def cs_dependent_level(self):
+        if self.__cs_dependant_level < 0:
+            self.__cs_dependant_level = self.feature.__cs_dependant_level + 1
+        return self.__cs_dependant_level
+
+    def get_cs_dependants(self) -> dict:
+        deps = self.feature.get_cs_dependants() + [self.feature]
+        return deps
+
+    @property
+    def require_cs_info(self):
+        return True
 
 
 class CSRank(XSectionOperator):

@@ -12,6 +12,7 @@ import queue
 import bisect
 import numpy as np
 import pandas as pd
+from collections import deque, OrderedDict
 from typing import List, Union, Optional
 
 # For supporting multiprocessing in outer code, joblib is used
@@ -179,7 +180,8 @@ class CalendarProvider(abc.ABC):
             H["c"][flag] = _calendar, _calendar_index
         return H["c"][flag]
 
-    def _uri(self, start_time, end_time, freq, future=False):
+    @staticmethod
+    def _uri(start_time, end_time, freq, future=False):
         """Get the uri of calendar generation task."""
         return hash_args(start_time, end_time, freq, future)
 
@@ -289,7 +291,8 @@ class InstrumentProvider(abc.ABC):
         """
         raise NotImplementedError("Subclass of InstrumentProvider must implement `list_instruments` method")
 
-    def _uri(self, instruments, start_time=None, end_time=None, freq="day", as_list=False):
+    @staticmethod
+    def _uri(instruments, start_time=None, end_time=None, freq="day", as_list=False):
         return hash_args(instruments, start_time, end_time, freq, as_list)
 
     # instruments type
@@ -481,8 +484,8 @@ class DatasetProvider(abc.ABC):
         """
         raise NotImplementedError("Subclass of DatasetProvider must implement `Dataset` method")
 
+    @staticmethod
     def _uri(
-        self,
         instruments,
         fields,
         start_time=None,
@@ -490,7 +493,7 @@ class DatasetProvider(abc.ABC):
         freq="day",
         disk_cache=1,
         inst_processors=[],
-        **kwargs,
+        **_,
     ):
         """Get task uri, used when generating rabbitmq task in qlib_server
 
@@ -552,13 +555,43 @@ class DatasetProvider(abc.ABC):
         return [ExpressionD.get_expression_instance(f) for f in fields]
 
     @staticmethod
+    def _analysis_features(column_names):
+        normalize_column_names = normalize_cache_fields(column_names)
+        feature_queue = deque([field, ExpressionD.get_expression_instance(field), 0] for field in reversed(normalize_column_names))
+        all_sub_features = {}
+        cs_level_summary = {}
+        while len(feature_queue)>0:
+            this_feature_name, this_feature, this_cs_level = feature_queue.pop()
+            cs_level_summary.setdefault(this_cs_level, {})[this_feature_name] = this_feature
+            all_sub_features.setdefault(str(this_feature), set()).add(this_cs_level)
+            next_cs_level = this_cs_level + 1 if this_feature.require_cs_info else this_cs_level
+            for next_feature in this_feature.get_direct_dependents():
+                feature_queue.append([str(next_feature), next_feature, next_cs_level])
+
+        level_shared_features = {}
+        for feature, levels in all_sub_features.items():
+            if len(levels) > 1:
+                level_shared_features.setdefault(max(levels), set()).add(feature)
+
+        return normalize_column_names, cs_level_summary, level_shared_features
+
+
+    @staticmethod
     def dataset_processor(instruments_d, column_names, start_time, end_time, freq, inst_processors=[]):
         """
         Load and process the data, return the data set.
         - default using multi-kernel method.
 
         """
-        normalize_column_names = normalize_cache_fields(column_names)
+        # normalize_column_names = normalize_cache_fields(column_names)
+        # expression_instances_in_level = {}
+        # for col_name in normalize_column_names:
+        #     root_expression = ExpressionD.get_expression_instance(col_name)
+        #     for expression in root_expression.get_cs_dependants():
+        #         expression_instances_in_level.setdefault(expression.cs_dependent_level, {})[str(expression)] = expression
+        get_module_logger('data').info("start")
+        normalize_column_names, cs_level_summary, level_shared_features = DatasetProvider._analysis_features(column_names)
+        get_module_logger('data').info("analysis feature done")
         # One process for one task, so that the memory will be freed quicker.
         workers = max(min(C.get_kernels(freq), len(instruments_d)), 1)
 
@@ -568,23 +601,37 @@ class DatasetProvider(abc.ABC):
         else:
             it = zip(instruments_d, [None] * len(instruments_d))
 
-        inst_l = []
-        task_l = []
-        for inst, spans in it:
-            inst_l.append(inst)
-            task_l.append(
+        cs_cache = {}
+        ts_cache = {}
+        for dep_level in sorted(cs_level_summary, reverse=True)[:-1]:
+            expressions = cs_level_summary[dep_level]
+            level_shared_feature = level_shared_features.get(dep_level, set())
+            cache_task_l = [delayed(DatasetProvider.load_cache)(
+                inst, start_time=start_time, end_time=end_time, freq=freq, expressions=expressions, g_config=C,
+                population=list(instruments_d), cache_data={**ts_cache.get(inst, {}), **cs_cache}
+            ) for inst, _ in it]
+            cs_cache.clear()
+            result = ParallelExt(
+                n_jobs=workers, backend=C.joblib_backend, maxtasksperchild=C.maxtasksperchild
+            )(cache_task_l)
+            for inst_cache in result:
+                for k, v in inst_cache.items():
+                    if k[0] in expressions:
+                        cs_cache[k] = v
+                    elif k[0] in level_shared_feature:
+                        ts_cache.setdefault(k[1], {})[k[0]] = v
+
+        get_module_logger('data').info("prepare cache done")
+        inst_l, task_l = zip(
+            *list((
+                inst,
                 delayed(DatasetProvider.inst_calculator)(
-                    inst,
-                    start_time,
-                    end_time,
-                    freq,
-                    normalize_column_names,
-                    spans,
-                    C,
-                    inst_processors,
-                    list(instruments_d),
+                    inst, start_time=start_time, end_time=end_time, freq=freq, column_names=normalize_column_names,
+                    expressions=cs_level_summary[0], spans=spans, g_config=C, inst_processors=inst_processors, population=list(instruments_d),
+                    cache_data={**ts_cache.get(inst, {}), **cs_cache}
                 )
-            )
+            ) for inst, spans in it)
+        )
 
         data = dict(
             zip(
@@ -592,6 +639,7 @@ class DatasetProvider(abc.ABC):
                 ParallelExt(n_jobs=workers, backend=C.joblib_backend, maxtasksperchild=C.maxtasksperchild)(task_l),
             )
         )
+        get_module_logger('data').info("inst_cal cache done")
 
         new_data = dict()
         for inst in sorted(data.keys()):
@@ -608,12 +656,32 @@ class DatasetProvider(abc.ABC):
                 columns=column_names,
                 dtype=np.float32,
             )
+        get_module_logger('data').info("processing done")
 
         return data
 
     @staticmethod
+    def load_cache(
+        inst, start_time, end_time, freq, expressions, g_config=None, population=(), shared_features=set(), cache_data=None
+    ):
+
+        C.register_from_C(g_config)
+        if cache_data is not None:
+            H["f"].update(cache_data)
+        for field, expression in expressions.items():
+            #  The client does not have expression provider, the data will be loaded from cache using static method.
+            ExpressionD.expression(inst, expression, start_time, end_time, freq, population)
+
+        obj = {}
+        for k, v in H["f"].internal_data.items():
+            if k[1] in inst and (k[0] in expressions or k[0] in shared_features):
+                obj[k] = v
+        return obj
+
+    @staticmethod
     def inst_calculator(
-        inst, start_time, end_time, freq, column_names, spans=None, g_config=None, inst_processors=[], population=[]
+        inst, start_time, end_time, freq, column_names, expressions, spans=None, g_config=None, inst_processors=(), population=(),
+        cache_data=None
     ):
         """
         Calculate the expressions for **one** instrument, return a df result.
@@ -625,11 +693,13 @@ class DatasetProvider(abc.ABC):
         # FIXME: Windows OS or MacOS using spawn: https://docs.python.org/3.8/library/multiprocessing.html?highlight=spawn#contexts-and-start-methods
         # NOTE: This place is compatible with windows, windows multi-process is spawn
         C.register_from_C(g_config)
+        if cache_data:
+            H['f'].update(cache_data)
 
         obj = dict()
         for field in column_names:
             #  The client does not have expression provider, the data will be loaded from cache using static method.
-            obj[field] = ExpressionD.expression(inst, field, start_time, end_time, freq, population)
+            obj[field] = ExpressionD.expression(inst, expressions[field], start_time, end_time, freq, population)
 
         data = pd.DataFrame(obj)
         if not data.empty and not np.issubdtype(data.index.dtype, np.dtype("M")):
@@ -861,8 +931,9 @@ class LocalExpressionProvider(ExpressionProvider):
         super().__init__()
         self.time2idx = time2idx
 
-    def expression(self, instrument, field, start_time=None, end_time=None, freq="day", population=[]):
-        expression = self.get_expression_instance(field)
+    def expression(self, instrument, expression, start_time=None, end_time=None, freq="day", population=[]):
+        if isinstance(expression, str):
+            expression = self.get_expression_instance(expression)
         if isinstance(expression, ExpressionOps):
             expression.set_population(population)
         start_time = time_to_slc_point(start_time)
@@ -883,7 +954,8 @@ class LocalExpressionProvider(ExpressionProvider):
         except Exception as e:
             get_module_logger("data").debug(
                 f"Loading expression error: "
-                f"instrument={instrument}, field=({field}), start_time={start_time}, end_time={end_time}, freq={freq}. "
+                f"instrument={instrument}, expression=({str(expression)}), start_time={start_time}, end_time={end_time},"
+                f" freq={freq}. "
                 f"error info: {str(e)}"
             )
             raise
@@ -915,7 +987,7 @@ class LocalDatasetProvider(DatasetProvider):
         align_time : bool
             Will we align the time to calendar
             the frequency is flexible in some dataset and can't be aligned.
-            For the data with fixed frequency with a shared calendar, the align data to the calendar will provides following benefits
+            For the data with fixed frequency with a shared calendar, the aligned data to the calendar will provide following benefits
 
             - Align queries to the same parameters, so the cache can be shared.
         """
@@ -1169,10 +1241,12 @@ class BaseProvider:
     To keep compatible with old qlib provider.
     """
 
-    def calendar(self, start_time=None, end_time=None, freq="day", future=False):
+    @staticmethod
+    def calendar(start_time=None, end_time=None, freq="day", future=False):
         return Cal.calendar(start_time, end_time, freq, future=future)
 
-    def instruments(self, market="all", filter_pipe=None, start_time=None, end_time=None):
+    @staticmethod
+    def instruments(market="all", filter_pipe=None, start_time=None, end_time=None):
         if start_time is not None or end_time is not None:
             get_module_logger("Provider").warning(
                 "The instruments corresponds to a stock pool. "
@@ -1180,11 +1254,12 @@ class BaseProvider:
             )
         return InstrumentProvider.instruments(market, filter_pipe)
 
-    def list_instruments(self, instruments, start_time=None, end_time=None, freq="day", as_list=False):
+    @staticmethod
+    def list_instruments(instruments, start_time=None, end_time=None, freq="day", as_list=False):
         return Inst.list_instruments(instruments, start_time, end_time, freq, as_list)
 
+    @staticmethod
     def features(
-        self,
         instruments,
         fields,
         start_time=None,
@@ -1213,7 +1288,9 @@ class BaseProvider:
 
 
 class LocalProvider(BaseProvider):
-    def _uri(self, type_, **kwargs):
+
+    @staticmethod
+    def _uri(type_, **kwargs):
         """_uri
         The server hope to get the uri of the request. The uri will be decided
         by the dataprovider. For ex, different cache layer has different uri.
@@ -1228,7 +1305,8 @@ class LocalProvider(BaseProvider):
         elif type_ == "feature":
             return DatasetD._uri(**kwargs)
 
-    def features_uri(self, instruments, fields, start_time, end_time, freq, disk_cache=1):
+    @staticmethod
+    def features_uri(instruments, fields, start_time, end_time, freq, disk_cache=1):
         """features_uri
 
         Return the uri of the generated cache of features/dataset

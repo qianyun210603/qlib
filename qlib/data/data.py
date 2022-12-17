@@ -5,6 +5,7 @@
 from __future__ import division
 from __future__ import print_function
 
+import multiprocessing
 import re
 import abc
 import copy
@@ -601,23 +602,34 @@ class DatasetProvider(abc.ABC):
         else:
             it = zip(instruments_d, [None] * len(instruments_d))
 
-        cs_cache = {}
+        shared_data_cache = {}
         ts_cache = {}
+        cs_cache = {}
+        shared_mgr = None
+        if C['joblib_backend'] == "multiprocessing":
+            shared_mgr = multiprocessing.Manager()
+            shared_data_cache = shared_mgr.dict()
+
         for dep_level in sorted(cs_level_summary, reverse=True)[:-1]:
             expressions = cs_level_summary[dep_level]
             level_shared_feature = level_shared_features.get(dep_level, set())
             cache_task_l = [delayed(DatasetProvider.load_cache)(
                 inst, start_time=start_time, end_time=end_time, freq=freq, expressions=expressions, g_config=C,
-                population=list(instruments_d), cache_data={**ts_cache.get(inst, {}), **cs_cache}
+                population=list(instruments_d), cache_data={**ts_cache.get(inst, {}), **cs_cache},
+                shared_cache = shared_data_cache
             ) for inst, _ in it]
             cs_cache.clear()
+            shared_data_cache.clear()
             result = ParallelExt(
                 n_jobs=workers, backend=C.joblib_backend, maxtasksperchild=C.maxtasksperchild
             )(cache_task_l)
             for inst_cache in result:
                 for k, v in inst_cache.items():
                     if k[0] in expressions:
-                        cs_cache[k] = v
+                        if C['joblib_backend'] == "multiprocessing":
+                            shared_data_cache[k] = v
+                        else:
+                            cs_cache[k] = v
                     elif k[0] in level_shared_feature:
                         ts_cache.setdefault(k[1], {})[k[0]] = v
 
@@ -628,7 +640,7 @@ class DatasetProvider(abc.ABC):
                 delayed(DatasetProvider.inst_calculator)(
                     inst, start_time=start_time, end_time=end_time, freq=freq, column_names=normalize_column_names,
                     expressions=cs_level_summary[0], spans=spans, g_config=C, inst_processors=inst_processors, population=list(instruments_d),
-                    cache_data={**ts_cache.get(inst, {}), **cs_cache}
+                    cache_data={**ts_cache.get(inst, {}), **cs_cache}, shared_cache = shared_data_cache
                 )
             ) for inst, spans in it)
         )
@@ -640,6 +652,9 @@ class DatasetProvider(abc.ABC):
             )
         )
         get_module_logger('data').info("inst_cal cache done")
+
+        if C['joblib_backend'] == "multiprocessing":
+            shared_mgr.shutdown()
 
         new_data = dict()
         for inst in sorted(data.keys()):
@@ -662,12 +677,15 @@ class DatasetProvider(abc.ABC):
 
     @staticmethod
     def load_cache(
-        inst, start_time, end_time, freq, expressions, g_config=None, population=(), shared_features=set(), cache_data=None
+        inst, start_time, end_time, freq, expressions, g_config=None, population=(), shared_features=set(),
+            cache_data=None, shared_cache=None
     ):
 
         C.register_from_C(g_config)
         if cache_data is not None:
             H["f"].update(cache_data)
+        if shared_cache:
+            H.create_shared_cache(shared_cache)
         for field, expression in expressions.items():
             #  The client does not have expression provider, the data will be loaded from cache using static method.
             ExpressionD.expression(inst, expression, start_time, end_time, freq, population)
@@ -680,8 +698,8 @@ class DatasetProvider(abc.ABC):
 
     @staticmethod
     def inst_calculator(
-        inst, start_time, end_time, freq, column_names, expressions, spans=None, g_config=None, inst_processors=(), population=(),
-        cache_data=None
+        inst, start_time, end_time, freq, column_names, expressions, spans=None, g_config=None, inst_processors=(),
+        population=(), cache_data=None, shared_cache=None
     ):
         """
         Calculate the expressions for **one** instrument, return a df result.
@@ -695,6 +713,9 @@ class DatasetProvider(abc.ABC):
         C.register_from_C(g_config)
         if cache_data:
             H['f'].update(cache_data)
+
+        if shared_cache:
+            H.create_shared_cache(shared_cache)
 
         obj = dict()
         for field in column_names:

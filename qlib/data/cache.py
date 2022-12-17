@@ -5,6 +5,7 @@
 from __future__ import division
 from __future__ import print_function
 
+import multiprocessing
 import os
 import sys
 import stat
@@ -44,10 +45,10 @@ class QlibCacheException(RuntimeError):
 class MemCacheUnit(abc.ABC):
     """Memory Cache Unit."""
 
-    def __init__(self, cache_data=None, *args, **kwargs):
+    def __init__(self, *_, **kwargs):
         self.size_limit = kwargs.pop("size_limit", 0)
         self._size = 0
-        self.od = OrderedDict() if cache_data is None else cache_data
+        self.od = OrderedDict()
 
     def __setitem__(self, key, value):
         # TODO: thread safe?__setitem__ failure might cause inconsistent size?
@@ -58,16 +59,18 @@ class MemCacheUnit(abc.ABC):
         self.od.__setitem__(key, value)
 
         # move the key to end,make it latest
-        self.od.move_to_end(key)
+        if isinstance(self.od, OrderedDict):
+            self.od.move_to_end(key)
 
-        if self.limited:
-            # pop the oldest items beyond size limit
-            while self._size > self.size_limit:
-                self.popitem(last=False)
+            if self.limited:
+                # pop the oldest items beyond size limit
+                while self._size > self.size_limit:
+                    self.popitem(last=False)
 
     def __getitem__(self, key):
         v = self.od.__getitem__(key)
-        self.od.move_to_end(key)
+        if isinstance(self.od, OrderedDict):
+            self.od.move_to_end(key)
         return v
 
     def __contains__(self, key):
@@ -138,6 +141,31 @@ class MemCacheSizeofUnit(MemCacheUnit):
         return sys.getsizeof(value)
 
 
+class SharedMemMeta(type):
+    def __init__(cls, name, bases, dct):
+        super().__init__(name, bases, dct)
+        cls.cond = multiprocessing.Condition()
+
+class SharedMemCacheUnit(metaclass=SharedMemMeta):
+
+    def __init__(self, shared_cache_data):
+        self.od = shared_cache_data
+
+    def __setitem__(self, key, value):
+        self.od[key] = value
+
+    def __getitem__(self, key):
+        return self.od[key]
+
+    def __contains__(self, key):
+        return key in self.od
+
+    def __len__(self):
+        return self.od.__len__()
+
+
+
+
 class MemCache:
     """Memory cache."""
 
@@ -186,18 +214,20 @@ class MemCache:
         self.__calendar_mem_cache = klass(size_limit=size_limit)
         self.__instrument_mem_cache = klass(size_limit=size_limit)
         self.__feature_mem_cache = klass(size_limit=size_limit)
-        if "shared_memory_cache" in C:
-            self.__feature_share_mem_cache = klass(cache_data=C["shared_memory_cache"], size_limit=size_limit)
-        else:
-            self.__feature_share_mem_cache = self.__feature_mem_cache
         self.initialized = True
 
-    def clear(self):
-        if self.initialized:
-            self.__calendar_mem_cache.clear()
-            self.__instrument_mem_cache.clear()
-            self.__feature_mem_cache.clear()
-            self.__feature_share_mem_cache.clear()
+    def has_shared_cache(self):
+        return self.__feature_share_mem_cache is not None
+
+    def create_shared_cache(self, shared_cache_data):
+        self.__feature_share_mem_cache = SharedMemCacheUnit(shared_cache_data)
+
+    def clear(self, key=("c", "i", "f", "fs")):
+        if isinstance(key, str):
+            key = (key,)
+        for k in key:
+            if self[k] is not None:
+                self[k].clear()
 
 
 class MemCacheExpire:

@@ -49,10 +49,6 @@ def init(default_conf="client", **kwargs):
     C.set(default_conf, **kwargs)
     get_module_logger.setLevel(C.logging_level)
 
-    if C["joblib_backend"] == "multiprocessing":
-        from multiprocessing import Manager
-        C["shared_memory_cache"] = Manager().dict()
-
     # mount nfs
     for _freq, provider_uri in C.provider_uri.items():
         mount_path = C["mount_path"][_freq]

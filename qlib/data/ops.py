@@ -1674,12 +1674,21 @@ class XSectionOperator(ElemOperator):
         mydf = H["fs"][str(self)]
         return mydf.loc[start_index:end_index, instrument]
 
-
     def _load_all_instruments(self, start_index, end_index, *args) -> pd.DataFrame:
-        mydf = pd.concat(
-            [self.feature.load(inst, start_index, end_index, *args).rename(inst) for inst in self.population],
-            axis=1, join='outer'
-        )
+        def mask_data(series, spans):
+            if bool(spans):
+                mask = np.zeros(len(series), dtype=bool)
+                for begin, end in spans:
+                    mask |= (series.index >= begin) & (series.index <= end)
+                series[~mask] = np.nan
+            return series
+
+        mydf = pd.concat([
+                mask_data(self.feature.load(inst, start_index, end_index, *args).rename(inst), spans)
+                for inst, spans in self.population.items()
+            ], axis=1, join='outer')
+
+        print((~mydf.isna()).sum(axis=1).unique())
         return mydf
 
     @property

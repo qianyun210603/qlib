@@ -460,7 +460,7 @@ class DatasetProvider(abc.ABC):
     """
 
     @abc.abstractmethod
-    def dataset(self, instruments, fields, start_time=None, end_time=None, freq="day", inst_processors=[]):
+    def dataset(self, instruments, fields, start_time=None, end_time=None, freq="day", inst_processors=[], **kwargs):
         """Get dataset data.
 
         Parameters
@@ -615,7 +615,7 @@ class DatasetProvider(abc.ABC):
             level_shared_feature = level_shared_features.get(dep_level, set())
             cache_task_l = [delayed(DatasetProvider.load_cache)(
                 inst, start_time=start_time, end_time=end_time, freq=freq, expressions=expressions, g_config=C,
-                population=list(instruments_d), cache_data={**ts_cache.get(inst, {}), **cs_cache},
+                population=instruments_d, cache_data={**ts_cache.get(inst, {}), **cs_cache},
                 shared_cache = shared_data_cache
             ) for inst, _ in it]
             cs_cache.clear()
@@ -639,7 +639,7 @@ class DatasetProvider(abc.ABC):
                 inst,
                 delayed(DatasetProvider.inst_calculator)(
                     inst, start_time=start_time, end_time=end_time, freq=freq, column_names=normalize_column_names,
-                    expressions=cs_level_summary[0], spans=spans, g_config=C, inst_processors=inst_processors, population=list(instruments_d),
+                    expressions=cs_level_summary[0], spans=spans, g_config=C, inst_processors=inst_processors, population=instruments_d,
                     cache_data={**ts_cache.get(inst, {}), **cs_cache}, shared_cache = shared_data_cache
                 )
             ) for inst, spans in it)
@@ -952,11 +952,10 @@ class LocalExpressionProvider(ExpressionProvider):
         super().__init__()
         self.time2idx = time2idx
 
-    def expression(self, instrument, expression, start_time=None, end_time=None, freq="day", population=[]):
+    def expression(self, instrument, expression, start_time=None, end_time=None, freq="day", instrument_d={}):
         if isinstance(expression, str):
             expression = self.get_expression_instance(expression)
-        if isinstance(expression, ExpressionOps):
-            expression.set_population(population)
+
         start_time = time_to_slc_point(start_time)
         end_time = time_to_slc_point(end_time)
 
@@ -967,8 +966,15 @@ class LocalExpressionProvider(ExpressionProvider):
             _, _, start_index, end_index = Cal.locate_index(start_time, end_time, freq=freq, future=False)
             lft_etd, rght_etd = expression.get_extended_window_size()
             query_start, query_end = max(0, start_index - lft_etd), end_index + rght_etd
+            instrument_d = {
+                inst: [Cal.locate_index(span[0], span[1], freq=freq, future=False)[2:] for span in spans]
+                for inst, spans in instrument_d.items()
+            }
         else:
             start_index, end_index = query_start, query_end = start_time, end_time
+
+        if isinstance(expression, ExpressionOps):
+            expression.set_population(instrument_d)
 
         try:
             series = expression.load(instrument, query_start, query_end, freq)
@@ -1023,6 +1029,7 @@ class LocalDatasetProvider(DatasetProvider):
         end_time=None,
         freq="day",
         inst_processors=[],
+        **_
     ):
         instruments_d = self.get_instruments_d(instruments, freq)
         column_names = self.get_column_names(fields)
@@ -1160,10 +1167,11 @@ class ClientDatasetProvider(DatasetProvider):
         start_time=None,
         end_time=None,
         freq="day",
-        disk_cache=0,
         return_uri=False,
         inst_processors=[],
+        **kwargs
     ):
+        disk_cache = kwargs.pop("disk_cache", 0)
         if Inst.get_inst_type(instruments) == Inst.DICT:
             get_module_logger("data").warning(
                 "Getting features from a dict of instruments is not recommended because the features will not be "
@@ -1303,7 +1311,7 @@ class BaseProvider:
         disk_cache = C.default_disk_cache if disk_cache is None else disk_cache
         fields = list(fields)  # In case of tuple.
         try:
-            return DatasetD.dataset(instruments, fields, start_time, end_time, freq, inst_processors=inst_processors)
+            return DatasetD.dataset(instruments, fields, start_time, end_time, freq, inst_processors=inst_processors, disk_cache=disk_cache)
         except TypeError:
             return DatasetD.dataset(instruments, fields, start_time, end_time, freq, inst_processors=inst_processors)
 

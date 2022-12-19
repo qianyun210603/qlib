@@ -373,13 +373,16 @@ class RqdataNormalize(BaseNormalize):
                              ]
             df = df.reindex(index_from_cal)
 
+        df['vwap'] = df['money'] / df['volume']
+
         # assign adjclose as close price adjusted by split only
         # exclude index
         if 'closestock' in df.columns:
             df["adjclosestock"] = df.closestock
+            df["vwapstock"] = df["money"] / df["volume"]
             # adjust ohlc by split and dividends
-            df[['openstock', 'highstock', 'lowstock', 'closestock']] = df[
-                ['openstock', 'highstock', 'lowstock', 'closestock']].multiply(df.ex_cum_factor_stock, axis=0)
+            df[['openstock', 'highstock', 'lowstock', 'closestock', "vwapstock"]] = df[
+                ['openstock', 'highstock', 'lowstock', 'closestock', "vwapstock"]].multiply(df.ex_cum_factor_stock, axis=0)
             df['factorstock'] = df.ex_cum_factor_stock
 
         df.sort_index(inplace=True)
@@ -658,13 +661,13 @@ if __name__ == "__main__":
     # runner = Run(
     #     source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert\source",
     #     normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert\normalize",
-    #     max_workers=6
+    #     max_workers=12
     # )
     # today = pd.Timestamp.now().normalize()
-    # # runner.update_data_to_bin(
-    # #     qlib_data_1d_dir=r"/home/booksword/traderesearch/qlib_data/rqdata_convert/",
-    # #     trading_date=pd.Timestamp("2010-01-01"), end_date=today.strftime("%Y-%m-%d")
-    # # )
+    # runner.update_data_to_bin(
+    #     qlib_data_1d_dir=r"/home/booksword/traderesearch/qlib_data/rqdata_convert",
+    #     trading_date=pd.Timestamp("2010-01-01"), end_date=today.strftime("%Y-%m-%d")
+    # )
     #
     # runner.update_data_to_bin(
     #     qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert",

@@ -416,7 +416,7 @@ class ExpressionProvider(abc.ABC):
         return expression
 
     @abc.abstractmethod
-    def expression(self, instrument, field, start_time=None, end_time=None, freq="day", population=[]) -> pd.Series:
+    def expression(self, instrument, field, start_time=None, end_time=None, freq="day", **kwargs) -> pd.Series:
         """Get Expression data.
 
         The responsibility of `expression`
@@ -558,23 +558,28 @@ class DatasetProvider(abc.ABC):
     @staticmethod
     def _analysis_features(column_names):
         normalize_column_names = normalize_cache_fields(column_names)
-        feature_queue = deque([field, ExpressionD.get_expression_instance(field), 0] for field in reversed(normalize_column_names))
+        def _parse_col_name(field):
+            feature_instance = ExpressionD.get_expression_instance(field)
+            return field, feature_instance, feature_instance.get_extended_window_size(), 0
+        feature_queue = deque(_parse_col_name(field) for field in reversed(normalize_column_names))
         all_sub_features = {}
         cs_level_summary = {}
+        feature_extended_windows = {}
         while len(feature_queue)>0:
-            this_feature_name, this_feature, this_cs_level = feature_queue.pop()
+            this_feature_name, this_feature, extended_window, this_cs_level = feature_queue.pop()
             cs_level_summary.setdefault(this_cs_level, {})[this_feature_name] = this_feature
             all_sub_features.setdefault(str(this_feature), set()).add(this_cs_level)
+            feature_extended_windows.setdefault(str(this_feature), set()).add(extended_window)
             next_cs_level = this_cs_level + 1 if this_feature.require_cs_info else this_cs_level
             for next_feature in this_feature.get_direct_dependents():
-                feature_queue.append([str(next_feature), next_feature, next_cs_level])
+                feature_queue.append((str(next_feature), next_feature, extended_window, next_cs_level))
 
         level_shared_features = {}
         for feature, levels in all_sub_features.items():
             if len(levels) > 1:
                 level_shared_features.setdefault(max(levels), set()).add(feature)
 
-        return normalize_column_names, cs_level_summary, level_shared_features
+        return normalize_column_names, cs_level_summary, level_shared_features, feature_extended_windows
 
 
     @staticmethod
@@ -584,23 +589,25 @@ class DatasetProvider(abc.ABC):
         - default using multi-kernel method.
 
         """
-        # normalize_column_names = normalize_cache_fields(column_names)
-        # expression_instances_in_level = {}
-        # for col_name in normalize_column_names:
-        #     root_expression = ExpressionD.get_expression_instance(col_name)
-        #     for expression in root_expression.get_cs_dependants():
-        #         expression_instances_in_level.setdefault(expression.cs_dependent_level, {})[str(expression)] = expression
         get_module_logger('data').info("start")
-        normalize_column_names, cs_level_summary, level_shared_features = DatasetProvider._analysis_features(column_names)
+        normalize_column_names, cs_level_summary, level_shared_features, feature_extended_windows = \
+            DatasetProvider._analysis_features(column_names)
         get_module_logger('data').info("analysis feature done")
         # One process for one task, so that the memory will be freed quicker.
         workers = max(min(C.get_kernels(freq), len(instruments_d)), 1)
 
         # create iterator
         if isinstance(instruments_d, dict):
+            if not (start_time is None and end_time is None):
+                for inst in list(instruments_d):
+                    spans = [s for s in instruments_d[inst] if start_time<=s[0]<=end_time or start_time<=s[1]<=end_time]
+                    if not spans:
+                        del instruments_d[inst]
+                    else:
+                        instruments_d[inst] = spans
             it = instruments_d.items()
         else:
-            it = zip(instruments_d, [None] * len(instruments_d))
+            it = list(zip(instruments_d, [None] * len(instruments_d)))
 
         shared_data_cache = {}
         ts_cache = {}
@@ -614,7 +621,8 @@ class DatasetProvider(abc.ABC):
             expressions = cs_level_summary[dep_level]
             level_shared_feature = level_shared_features.get(dep_level, set())
             cache_task_l = [delayed(DatasetProvider.load_cache)(
-                inst, start_time=start_time, end_time=end_time, freq=freq, expressions=expressions, g_config=C,
+                inst, start_time=start_time, end_time=end_time, freq=freq, expressions=expressions,
+                feature_extended_windows=feature_extended_windows, g_config=C,
                 population=instruments_d, cache_data={**ts_cache.get(inst, {}), **cs_cache},
                 shared_cache = shared_data_cache
             ) for inst, _ in it]
@@ -654,6 +662,7 @@ class DatasetProvider(abc.ABC):
         get_module_logger('data').info("inst_cal cache done")
 
         if C['joblib_backend'] == "multiprocessing":
+            del shared_data_cache
             shared_mgr.shutdown()
 
         new_data = dict()
@@ -677,18 +686,22 @@ class DatasetProvider(abc.ABC):
 
     @staticmethod
     def load_cache(
-        inst, start_time, end_time, freq, expressions, g_config=None, population=(), shared_features=set(),
-            cache_data=None, shared_cache=None
+        inst, start_time, end_time, freq, expressions, feature_extended_windows={}, g_config=None, population={},
+        shared_features=set(), cache_data=None, shared_cache=None
     ):
 
         C.register_from_C(g_config)
         if cache_data is not None:
             H["f"].update(cache_data)
-        if shared_cache:
+        if shared_cache is not None:
             H.create_shared_cache(shared_cache)
         for field, expression in expressions.items():
             #  The client does not have expression provider, the data will be loaded from cache using static method.
-            ExpressionD.expression(inst, expression, start_time, end_time, freq, population)
+            for ext_windows in feature_extended_windows.get(str(expression), {(0,0)}):
+                ExpressionD.expression(
+                    inst, expression, start_time, end_time, freq, instrument_d=population,
+                    extend_windows=ext_windows
+                )
 
         obj = {}
         for k, v in H["f"].internal_data.items():
@@ -711,16 +724,16 @@ class DatasetProvider(abc.ABC):
         # FIXME: Windows OS or MacOS using spawn: https://docs.python.org/3.8/library/multiprocessing.html?highlight=spawn#contexts-and-start-methods
         # NOTE: This place is compatible with windows, windows multi-process is spawn
         C.register_from_C(g_config)
-        if cache_data:
+        if cache_data is not None:
             H['f'].update(cache_data)
 
-        if shared_cache:
+        if shared_cache is not None:
             H.create_shared_cache(shared_cache)
 
         obj = dict()
         for field in column_names:
             #  The client does not have expression provider, the data will be loaded from cache using static method.
-            obj[field] = ExpressionD.expression(inst, expressions[field], start_time, end_time, freq, population)
+            obj[field] = ExpressionD.expression(inst, expressions[field], start_time, end_time, freq, instrument_d=population)
 
         data = pd.DataFrame(obj)
         if not data.empty and not np.issubdtype(data.index.dtype, np.dtype("M")):
@@ -952,7 +965,10 @@ class LocalExpressionProvider(ExpressionProvider):
         super().__init__()
         self.time2idx = time2idx
 
-    def expression(self, instrument, expression, start_time=None, end_time=None, freq="day", instrument_d={}):
+    def expression(
+            self, instrument, expression, start_time=None, end_time=None, freq="day", instrument_d={},
+            extend_windows=(0, 0)
+    ):
         if isinstance(expression, str):
             expression = self.get_expression_instance(expression)
 
@@ -965,6 +981,8 @@ class LocalExpressionProvider(ExpressionProvider):
         if self.time2idx:
             _, _, start_index, end_index = Cal.locate_index(start_time, end_time, freq=freq, future=False)
             lft_etd, rght_etd = expression.get_extended_window_size()
+            lft_etd = max(extend_windows[0], lft_etd)
+            rght_etd = max(extend_windows[1], rght_etd)
             query_start, query_end = max(0, start_index - lft_etd), end_index + rght_etd
             instrument_d = {
                 inst: [Cal.locate_index(span[0], span[1], freq=freq, future=False)[2:] for span in spans]

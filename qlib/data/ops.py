@@ -14,7 +14,6 @@ from scipy.stats import percentileofscore
 from .base import Expression, ExpressionOps, Feature, PFeature
 from ..log import get_module_logger
 from ..utils import get_callable_kwargs
-from multiprocessing import Condition
 from qlib.config import C
 
 try:
@@ -350,6 +349,13 @@ class NpPairOperator(PairOperator):
                 f"Loading {instrument}: {str(self)}; np.{self.func}(series_left, series_right), "
                 f"series_left is {str(self.feature_left)}, series_right is {str(self.feature_right)}. Please check the data"
             )
+        if isinstance(series_left, pd.Series) and isinstance(series_right, pd.Series) and \
+                set(series_left.index) != set(series_right.index):
+            common_index = series_left.index.intersection(series_right.index)
+            if series_left[series_left.index.difference(common_index)].isna().all() and \
+                    series_right[series_right.index.difference(common_index)].isna().all():
+                series_left = series_left[common_index]
+                series_right = series_right[common_index]
         try:
             res = getattr(np, self.func)(series_left, series_right)
         except ValueError as e:
@@ -1646,9 +1652,6 @@ class Cov(PairRolling):
 
 #################### cross section operator ####################
 class XSectionOperator(ElemOperator):
-
-    lock = Condition()
-
     def __init__(self, feature, population=None):
         self.population = population
         super().__init__(feature)
@@ -1658,12 +1661,13 @@ class XSectionOperator(ElemOperator):
 
     def _load_internal(self, instrument, start_index, end_index, *args) -> pd.Series:
         from .cache import H  # pylint: disable=C0415
-        if not str(self) in H["fs"]:
+        cache_key = str(self), start_index, end_index
+        if not cache_key in H["fs"]:
             cond_status = H["fs"].cond.acquire(block=False)
             if cond_status:
-                get_module_logger('data').info(f"calculating calculation: {str(self)}")
+                # get_module_logger('data').info(f"calculating: {str(self)}")
                 df = self._load_all_instruments(start_index, end_index, *args)
-                H["fs"][str(self)] = self._process_df(df)
+                H["fs"][cache_key] = self._process_df(df)
                 H["fs"].cond.notify_all()
                 H["fs"].cond.release()
             else:
@@ -1671,7 +1675,7 @@ class XSectionOperator(ElemOperator):
                 H["fs"].cond.wait()
         # else:
             # get_module_logger('data').info(f"cache hit: {str(self)}")
-        mydf = H["fs"][str(self)]
+        mydf = H["fs"][cache_key]
         return mydf.loc[start_index:end_index, instrument]
 
     def _load_all_instruments(self, start_index, end_index, *args) -> pd.DataFrame:
@@ -1680,15 +1684,16 @@ class XSectionOperator(ElemOperator):
                 mask = np.zeros(len(series), dtype=bool)
                 for begin, end in spans:
                     mask |= (series.index >= begin) & (series.index <= end)
+                series = series.copy()
                 series[~mask] = np.nan
             return series
 
-        mydf = pd.concat([
-                mask_data(self.feature.load(inst, start_index, end_index, *args).rename(inst), spans)
-                for inst, spans in self.population.items()
-            ], axis=1, join='outer')
+        sub_features = [
+            mask_data(self.feature.load(inst, start_index, end_index, *args).rename(inst), spans)
+            for inst, spans in self.population.items()
+        ]
+        mydf = pd.concat([s for s in sub_features if not s.empty], axis=1, join='outer', sort=True)
 
-        print((~mydf.isna()).sum(axis=1).unique())
         return mydf
 
     @property

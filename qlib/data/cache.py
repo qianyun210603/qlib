@@ -164,8 +164,6 @@ class SharedMemCacheUnit(metaclass=SharedMemMeta):
         return self.od.__len__()
 
 
-
-
 class MemCache:
     """Memory cache."""
 
@@ -183,7 +181,7 @@ class MemCache:
         self.__calendar_mem_cache = None
         self.__instrument_mem_cache = None
         self.__feature_mem_cache = None
-        self.__feature_share_mem_cache = None
+        self._feature_share_mem_cache = None
 
     def __getitem__(self, key):
         if key == "c":
@@ -193,7 +191,7 @@ class MemCache:
         elif key == "f":
             return self.__feature_mem_cache
         elif key == "fs":
-            return self.__feature_share_mem_cache
+            return self._feature_share_mem_cache
         else:
             raise KeyError("Unknown memcache unit")
 
@@ -217,10 +215,13 @@ class MemCache:
         self.initialized = True
 
     def has_shared_cache(self):
-        return self.__feature_share_mem_cache is not None
+        return self._feature_share_mem_cache is not None
 
     def create_shared_cache(self, shared_cache_data):
-        self.__feature_share_mem_cache = SharedMemCacheUnit(shared_cache_data)
+        self._feature_share_mem_cache = SharedMemCacheUnit(shared_cache_data)
+
+    def destroy_shared_cache(self):
+        del self._feature_share_mem_cache
 
     def clear(self, key=("c", "i", "f", "fs")):
         if isinstance(key, str):

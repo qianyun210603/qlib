@@ -20,7 +20,6 @@ import numpy as np
 import pandas as pd
 from typing import Union, Iterable
 from collections import OrderedDict
-from multiprocessing import Lock
 
 from ..config import C
 from ..utils import (
@@ -168,15 +167,7 @@ class MemCache:
     """Memory cache."""
 
     def __init__(self):
-        """
 
-        Parameters
-        ----------
-        mem_cache_size_limit:
-            cache max size.
-        limit_type:
-            length or sizeof; length(call fun: len), size(call fun: sys.getsizeof).
-        """
         self.initialized = False
         self.__calendar_mem_cache = None
         self.__instrument_mem_cache = None
@@ -196,23 +187,31 @@ class MemCache:
             raise KeyError("Unknown memcache unit")
 
     def init_kernel(self, size_limit=None, limit_type=None):
-        if self.initialized:
-            raise RuntimeWarning("Kernel re-inited, previous kernel abandoned.")
-        if size_limit is None:
-            size_limit = C.mem_cache_size_limit
-        if limit_type is None:
-            limit_type = C.mem_cache_limit_type
+        """
+        Parameters
+        ----------
+        size_limit:
+            cache max size.
+        limit_type:
+            length or sizeof; length(call fun: len), size(call fun: sys.getsizeof).
+        """
+        get_module_logger('data').info(f"trying to init data cache in {os.getpid()}")
+        if not self.initialized:
+            if size_limit is None:
+                size_limit = C.mem_cache_size_limit
+            if limit_type is None:
+                limit_type = C.mem_cache_limit_type
 
-        if limit_type == "length":
-            klass = MemCacheLengthUnit
-        elif limit_type == "sizeof":
-            klass = MemCacheSizeofUnit
-        else:
-            raise ValueError(f"limit_type must be length or sizeof, your limit_type is {limit_type}")
-        self.__calendar_mem_cache = klass(size_limit=size_limit)
-        self.__instrument_mem_cache = klass(size_limit=size_limit)
-        self.__feature_mem_cache = klass(size_limit=size_limit)
-        self.initialized = True
+            if limit_type == "length":
+                klass = MemCacheLengthUnit
+            elif limit_type == "sizeof":
+                klass = MemCacheSizeofUnit
+            else:
+                raise ValueError(f"limit_type must be length or sizeof, your limit_type is {limit_type}")
+            self.__calendar_mem_cache = klass(size_limit=size_limit)
+            self.__instrument_mem_cache = klass(size_limit=size_limit)
+            self.__feature_mem_cache = klass(size_limit=size_limit)
+            self.initialized = True
 
     def has_shared_cache(self):
         return self._feature_share_mem_cache is not None
@@ -636,9 +635,9 @@ class DiskExpressionCache(ExpressionCache):
         r = np.hstack([df.index[0], expression_data]).astype("<f")
         r.tofile(str(cache_path))
 
-    def update(self, sid, cache_uri, freq: str = "day"):
+    def update(self, cache_uri, freq: str = "day"):
 
-        cp_cache_uri = self.get_cache_dir(freq).joinpath(sid).joinpath(cache_uri)
+        cp_cache_uri = self.get_cache_dir(freq).joinpath(cache_uri)
         meta_path = cp_cache_uri.with_suffix(".meta")
         if not self.check_cache_exists(cp_cache_uri, suffix_list=[".meta"]):
             self.logger.info(f"The cache {cp_cache_uri} has corrupted. It will be removed")
@@ -1120,6 +1119,13 @@ class DiskDatasetCache(DatasetCache):
 class SimpleDatasetCache(DatasetCache):
     """Simple dataset cache that can be used locally or on client."""
 
+    def update(self, cache_uri: Union[str, Path], freq: str = "day"):
+        pass
+
+    def _dataset_uri(self, instruments, fields, start_time=None, end_time=None, freq="day", disk_cache=1,
+                     inst_processors=[]):
+        pass
+
     def __init__(self, provider):
         super(SimpleDatasetCache, self).__init__(provider)
         try:
@@ -1173,6 +1179,17 @@ class SimpleDatasetCache(DatasetCache):
 
 class DatasetURICache(DatasetCache):
     """Prepared cache mechanism for server."""
+
+    def update(self, cache_uri: Union[str, Path], freq: str = "day"):
+        pass
+
+    def _dataset_uri(self, instruments, fields, start_time=None, end_time=None, freq="day", disk_cache=1,
+                     inst_processors=[]):
+        pass
+
+    def _dataset(self, instruments, fields, start_time=None, end_time=None, freq="day", disk_cache=1,
+                 inst_processors=[]):
+        pass
 
     def _uri(self, instruments, fields, start_time, end_time, freq, disk_cache=1, inst_processors=[], **kwargs):
         return hash_args(*self.normalize_uri_args(instruments, fields, freq), disk_cache, inst_processors)

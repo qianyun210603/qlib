@@ -7,7 +7,6 @@ from __future__ import print_function
 
 import abc
 import pandas as pd
-from collections import OrderedDict
 from ..log import get_module_logger
 
 
@@ -34,9 +33,6 @@ class Expression(abc.ABC):
     def cs_dependent_level(self):
         self.__cs_dependant_level = 0
         return self.__cs_dependant_level
-
-    def get_cs_dependants(self) -> list:
-        return list()
 
     def get_direct_dependents(self) -> list:
         return list()
@@ -319,18 +315,21 @@ class ExpressionOps(Expression):
             if isinstance(member_var, ExpressionOps):
                 member_var.set_population(population)
 
-    def get_cs_dependants(self) -> dict:
-        deps = list()
-        for v in self.__dict__.values():
-            if isinstance(v, ExpressionOps):
-                for d in v.get_cs_dependants():
-                    if d not in deps:
-                        deps.append(d)
-        return deps
-
     def get_direct_dependents(self) -> list:
         deps = list()
         for v in self.__dict__.values():
             if isinstance(v, Expression):
                 deps.append(v)
         return deps
+
+    @abc.abstractmethod
+    def _load_internal(self, instrument, start_index, end_index, *args) -> pd.Series:
+        raise NotImplementedError("This function must be implemented in your newly defined feature")
+
+    @abc.abstractmethod
+    def get_longest_back_rolling(self):
+        raise NotImplementedError("This function must be implemented in your newly defined feature")
+
+    @abc.abstractmethod
+    def get_extended_window_size(self):
+        raise NotImplementedError("This function must be implemented in your newly defined feature")

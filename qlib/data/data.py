@@ -13,7 +13,7 @@ import queue
 import bisect
 import numpy as np
 import pandas as pd
-from collections import deque, OrderedDict
+from collections import deque
 from typing import List, Union, Optional
 
 # For supporting multiprocessing in outer code, joblib is used
@@ -67,7 +67,6 @@ class ProviderBackendMixin:
         return init_instance_by_config(backend)
 
 
-# noinspection PyTypeChecker,PyUnresolvedReferences
 class CalendarProvider(abc.ABC):
     """Calendar provider base class
 
@@ -589,10 +588,8 @@ class DatasetProvider(abc.ABC):
         - default using multi-kernel method.
 
         """
-        get_module_logger('data').info("start")
         normalize_column_names, cs_level_summary, level_shared_features, feature_extended_windows = \
             DatasetProvider._analysis_features(column_names)
-        get_module_logger('data').info("analysis feature done")
         # One process for one task, so that the memory will be freed quicker.
         workers = max(min(C.get_kernels(freq), len(instruments_d)), 1)
 
@@ -659,7 +656,6 @@ class DatasetProvider(abc.ABC):
                 ParallelExt(n_jobs=workers, backend=C.joblib_backend, maxtasksperchild=C.maxtasksperchild)(task_l),
             )
         )
-        get_module_logger('data').info("inst_cal cache done")
 
         if C['joblib_backend'] == "multiprocessing":
             del shared_data_cache
@@ -680,8 +676,6 @@ class DatasetProvider(abc.ABC):
                 columns=column_names,
                 dtype=np.float32,
             )
-        get_module_logger('data').info("processing done")
-
         return data
 
     @staticmethod
@@ -1318,6 +1312,12 @@ class BaseProvider:
         """
         Parameters
         ----------
+        inst_processors
+        freq
+        end_time
+        start_time
+        fields
+        instruments
         disk_cache : int
             whether to skip(0)/use(1)/replace(2) disk_cache
 

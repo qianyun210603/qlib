@@ -1651,13 +1651,16 @@ class XSectionOperator(ElemOperator):
 
     def _load_internal(self, instrument, start_index, end_index, *args) -> pd.Series:
         from .cache import H  # pylint: disable=C0415
-        cache_key = str(self), start_index, end_index
+        cache_key = str(self), instrument, start_index, end_index, *args
         if not cache_key in H["fs"]:
             cond_status = H["fs"].cond.acquire(block=False)
             if cond_status:
                 # get_module_logger('data').info(f"calculating: {str(self)}")
                 df = self._load_all_instruments(start_index, end_index, *args)
-                H["fs"][cache_key] = self._process_df(df)
+                df = self._process_df(df)
+                for inst in df.columns:
+                    inst_cache_key = str(self), inst, start_index, end_index, *args
+                    H["fs"][inst_cache_key] = df.loc[start_index:end_index, inst].rename(str(self))
                 H["fs"].cond.notify_all()
                 H["fs"].cond.release()
             else:
@@ -1665,8 +1668,7 @@ class XSectionOperator(ElemOperator):
                 H["fs"].cond.wait()
         # else:
             # get_module_logger('data').info(f"cache hit: {str(self)}")
-        mydf = H["fs"][cache_key]
-        return mydf.loc[start_index:end_index, instrument]
+        return H['fs'][cache_key]
 
     def _load_all_instruments(self, start_index, end_index, *args) -> pd.DataFrame:
         def mask_data(series, spans):

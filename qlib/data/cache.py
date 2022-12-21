@@ -195,7 +195,7 @@ class MemCache:
         limit_type:
             length or sizeof; length(call fun: len), size(call fun: sys.getsizeof).
         """
-        get_module_logger('data').info(f"trying to init data cache in {os.getpid()}")
+        # get_module_logger('data').info(f"trying to init data cache in {os.getpid()}")
         if not self.initialized:
             if size_limit is None:
                 size_limit = C.mem_cache_size_limit

@@ -162,6 +162,15 @@ class SharedMemCacheUnit(metaclass=SharedMemMeta):
     def __len__(self):
         return self.od.__len__()
 
+    def keys(self):
+        return self.od.keys()
+
+    def values(self):
+        return self.od.values()
+
+    def items(self):
+        return self.od.items()
+
 
 class MemCache:
     """Memory cache."""

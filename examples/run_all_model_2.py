@@ -4,16 +4,13 @@
 import os
 import sys
 import fire
-import glob
 
 import pandas as pd
 import ruamel.yaml as yaml
-import shutil
 import signal
 import inspect
 import functools
 import statistics
-from datetime import datetime
 from pathlib import Path
 from operator import xor
 from pprint import pprint
@@ -178,7 +175,7 @@ def get_all_results(folders) -> dict:
     return results
 
 
-# function to generate and save markdown table
+# function to generate and save Markdown table
 def gen_and_save_md_table(metrics, dataset, base_path='.'):
     table = "| Model Name | Dataset | IC | ICIR | Rank IC | Rank ICIR | Annualized Return | Information Ratio | Max Drawdown |\n"
     table += "|---|---|---|---|---|---|---|---|---|\n"
@@ -293,7 +290,7 @@ class ModelRunner:
         self,
         times=1,
         models=None,
-        dataset="Alpha158",
+        dataset="Alpha101",
         universe="",
         exclude=False,
         exp_folder_name: str = "run_all_model_records",
@@ -374,15 +371,18 @@ class ModelRunner:
                 continue
             if universe == "" and fn == 'TRA':
                 universe = "full"
-            yaml_path = get_all_files(folders[fn], dataset, universe=universe)
+            temp_dir = base_folder.joinpath("temp_dir")
+            if not temp_dir.exists():
+                temp_dir.mkdir()
+            yaml_paths = list(temp_dir.glob(f"*{fn.lower()}_{dataset}_{universe}.yaml"))
+            if len(yaml_paths) > 0:
+                yaml_path = yaml_paths[0]
+            else:
+                yaml_path = get_all_files(folders[fn], dataset, universe=universe)
             if yaml_path is None:
                 sys.stderr.write(f"There is no {dataset}.yaml file in {folders[fn]}\n")
                 continue
             sys.stderr.write("\n")
-
-            temp_dir = base_folder.joinpath("temp_dir")
-            if not temp_dir.exists():
-                temp_dir.mkdir()
 
             # read yaml, remove seed kwargs of model, and then save file in the temp_dir
             yaml_path = gen_yaml_files_from_example_templates(

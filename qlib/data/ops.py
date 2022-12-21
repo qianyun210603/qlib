@@ -96,16 +96,6 @@ class ChangeInstrument(ElemOperator):
         return self.feature.load(instrument, start_index, end_index, *args)
 
     @property
-    def cs_dependent_level(self):
-        if self.__cs_dependent_devel < 0:
-            self.__cs_dependent_devel = self.feature.cs_dependent_level + 1
-        return self.__cs_dependent_devel
-
-    def get_cs_dependants(self) -> dict:
-        deps = self.feature.get_cs_dependants() + [self.feature]
-        return deps
-
-    @property
     def require_cs_info(self):
         return True
 
@@ -1695,16 +1685,6 @@ class XSectionOperator(ElemOperator):
         mydf = pd.concat([s for s in sub_features if not s.empty], axis=1, join='outer', sort=True)
 
         return mydf
-
-    @property
-    def cs_dependent_level(self):
-        if self.__cs_dependant_level < 0:
-            self.__cs_dependant_level = self.feature.__cs_dependant_level + 1
-        return self.__cs_dependant_level
-
-    def get_cs_dependants(self) -> dict:
-        deps = self.feature.get_cs_dependants() + [self.feature]
-        return deps
 
     @property
     def require_cs_info(self):

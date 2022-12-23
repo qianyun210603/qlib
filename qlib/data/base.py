@@ -300,7 +300,7 @@ class PFeature(Feature):
         return PITD.period_feature(instrument, str(self), start_index, end_index, cur_time, period)
 
 
-class ExpressionOps(Expression):
+class ExpressionOps(Expression, abc.ABC):
     """Operator Expression
 
     This kind of feature will use operator for feature
@@ -321,15 +321,3 @@ class ExpressionOps(Expression):
             if isinstance(v, Expression):
                 deps.append(v)
         return deps
-
-    @abc.abstractmethod
-    def _load_internal(self, instrument, start_index, end_index, *args) -> pd.Series:
-        raise NotImplementedError("This function must be implemented in your newly defined feature")
-
-    @abc.abstractmethod
-    def get_longest_back_rolling(self):
-        raise NotImplementedError("This function must be implemented in your newly defined feature")
-
-    @abc.abstractmethod
-    def get_extended_window_size(self):
-        raise NotImplementedError("This function must be implemented in your newly defined feature")

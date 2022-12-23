@@ -5,16 +5,17 @@
 from __future__ import division
 from __future__ import print_function
 
+from abc import ABC
+
 import numpy as np
 import pandas as pd
 import abc
-from functools import partial, reduce
 from typing import Union, List, Type
 from scipy.stats import percentileofscore
 from .base import Expression, ExpressionOps, Feature, PFeature
 from ..log import get_module_logger
 from ..utils import get_callable_kwargs
-from qlib.config import C
+
 
 try:
     from ._libs.rolling import rolling_slope, rolling_rsquare, rolling_resi
@@ -36,7 +37,7 @@ np.seterr(invalid="ignore")
 
 
 #################### Element-Wise Operator ####################
-class ElemOperator(ExpressionOps):
+class ElemOperator(ExpressionOps, ABC):
     """Element-wise Operator
 
     Parameters
@@ -1699,7 +1700,7 @@ class CSRank(XSectionOperator):
 
 class CSScale(XSectionOperator):
     def _process_df(self, df, **_) -> pd.DataFrame:
-        return df.div(df.abs().sum(axis=1))
+        return df.div(df.abs().sum(axis=1), axis=0)
 
 
 #################### other kind of operator ####################

@@ -171,6 +171,9 @@ class SharedMemCacheUnit(metaclass=SharedMemMeta):
     def items(self):
         return self.od.items()
 
+    def clear(self):
+        self.od.clear()
+
 
 class MemCache:
     """Memory cache."""

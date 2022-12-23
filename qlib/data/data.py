@@ -706,7 +706,7 @@ class DatasetProvider(abc.ABC):
     @staticmethod
     def inst_calculator(
         inst, start_time, end_time, freq, column_names, expressions, spans=None, g_config=None, inst_processors=(),
-        population=(), cache_data=None, shared_cache=None
+        population={}, cache_data=None, shared_cache=None
     ):
         """
         Calculate the expressions for **one** instrument, return a df result.
@@ -978,10 +978,11 @@ class LocalExpressionProvider(ExpressionProvider):
             lft_etd = max(extend_windows[0], lft_etd)
             rght_etd = max(extend_windows[1], rght_etd)
             query_start, query_end = max(0, start_index - lft_etd), end_index + rght_etd
-            instrument_d = {
-                inst: [Cal.locate_index(span[0], span[1], freq=freq, future=False)[2:] for span in spans]
-                for inst, spans in instrument_d.items()
-            }
+            if isinstance(instrument_d, dict):
+                instrument_d = {
+                    inst: [Cal.locate_index(span[0], span[1], freq=freq, future=False)[2:] for span in spans]
+                    for inst, spans in instrument_d.items()
+                }
         else:
             start_index, end_index = query_start, query_end = start_time, end_time
 

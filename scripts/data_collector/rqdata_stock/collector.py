@@ -582,16 +582,16 @@ class Run(BaseRun):
 
 
 if __name__ == "__main__":
-    # fire.Fire(Run)
-    runner = Run(
-        source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_stock\source",
-        normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_stock\normalize",
-        max_workers=8
-    )
-    # runner.download_data(max_collector_count=1, start=pd.Timestamp("2011-12-31"), end=pd.Timestamp("2022-12-03"))
-    # runner.normalize_data()
-    runner.update_data_to_bin(
-        qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_stock", trading_date='2022-12-01',
-        end_date=pd.Timestamp.now().strftime("%Y-%m-%d")
-    )
+    fire.Fire(Run)
+    # runner = Run(
+    #     source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_stock\source",
+    #     normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_stock\normalize",
+    #     max_workers=8
+    # )
+    # # runner.download_data(max_collector_count=1, start=pd.Timestamp("2011-12-31"), end=pd.Timestamp("2022-12-03"))
+    # # runner.normalize_data()
+    # runner.update_data_to_bin(
+    #     qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_stock", trading_date='2022-12-01',
+    #     end_date=pd.Timestamp.now().strftime("%Y-%m-%d")
+    # )
 

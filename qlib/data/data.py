@@ -597,7 +597,7 @@ class DatasetProvider(abc.ABC):
         if isinstance(instruments_d, dict):
             if not (start_time is None and end_time is None):
                 for inst in list(instruments_d):
-                    spans = [s for s in instruments_d[inst] if start_time<=s[0]<=end_time or start_time<=s[1]<=end_time]
+                    spans = [s for s in instruments_d[inst] if start_time<=s[1] and s[0]<=end_time]
                     if not spans:
                         del instruments_d[inst]
                     else:

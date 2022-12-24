@@ -172,7 +172,10 @@ class SharedMemCacheUnit(metaclass=SharedMemMeta):
         return self.od.items()
 
     def clear(self):
-        self.od.clear()
+        try:
+            self.od.clear()
+        except Exception:
+            pass
 
 
 class MemCache:
@@ -234,7 +237,7 @@ class MemCache:
     def destroy_shared_cache(self):
         del self._feature_share_mem_cache
 
-    def clear(self, key=("c", "i", "f", "fs")):
+    def clear(self, key=("c", "i", "f")):
         if isinstance(key, str):
             key = (key,)
         for k in key:

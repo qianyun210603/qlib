@@ -305,17 +305,11 @@ class RqdataNormalize(BaseNormalize):
             ]
             df = df.reindex(index_from_cal)
 
-        # assign adjclose as raw price
-        df["adjclose"] = df.close
         df["vwap"] = df['money'] / df['volume']
         # adjust ohlc by split and dividends
-        if 'limit_up' in df.columns:
-            df[["open", "close", "high", "low", 'limit_up', 'limit_down', 'vwap']] = \
-                df[["open", "close", "high", "low", 'limit_up', 'limit_down', 'vwap']].multiply(df.ex_cum_factor, axis=0)
-        else:
-            df[["open", "close", "high", "low", 'vwap']] = df[["open", "close", "high", "low", 'vwap']].multiply(
-                df.ex_cum_factor, axis=0
-            )
+        # df[["open", "close", "high", "low", 'vwap']] = df[["raw_open", "raw_close", "raw_high", "raw_low", 'raw_vwap']]\
+        #     .multiply(df.ex_cum_factor, axis=0)
+        # df[["volume"]] = df[["raw_volume"]].div(df.ex_cum_factor, axis=0)
         df['factor'] = df.ex_cum_factor
 
         df.sort_index(inplace=True)
@@ -551,12 +545,12 @@ class Run(BaseRun):
         )
         # download data from Rqdata
         # NOTE: when downloading data from RqdataFinance, max_workers is recommended to be 1
-        self.download_data(
-            max_collector_count=self.max_workers,
-            start=trading_date,
-            end=end_date,
-            check_data_length=check_data_length
-        )
+        # self.download_data(
+        #     max_collector_count=self.max_workers,
+        #     start=trading_date,
+        #     end=end_date,
+        #     check_data_length=check_data_length
+        # )
 
         # normalize data
         self.normalize_data(qlib_data_1d_dir)

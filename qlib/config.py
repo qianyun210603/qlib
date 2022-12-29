@@ -207,6 +207,16 @@ _default_config = {
     # if min_data_shift == 0, use default market time [9:30, 11:29, 1:00, 2:59]
     # if min_data_shift != 0, use shifted market time [9:30, 11:29, 1:00, 2:59] - shift*minute
     "min_data_shift": 0,
+    "ohlc_adjusted": False,
+    "adjust_factor_field": "$factor",
+    "fields_need_adjust": {
+        "$open": 1,
+        "$high": 1,
+        "$low": 1,
+        "$close": 1,
+        "$volume": -1,
+        "$vwap": 1,
+    },
 }
 
 MODE_CONF = {

@@ -8,6 +8,7 @@ from __future__ import print_function
 import abc
 import pandas as pd
 from ..log import get_module_logger
+from ..config import C
 
 
 class Expression(abc.ABC):
@@ -29,13 +30,12 @@ class Expression(abc.ABC):
     def require_cs_info(self):
         return False
 
-    @property
-    def cs_dependent_level(self):
-        self.__cs_dependant_level = 0
-        return self.__cs_dependant_level
-
     def get_direct_dependents(self) -> list:
         return list()
+
+    @property
+    def adjust_status(self):
+        return 0
 
     def __str__(self):
         return type(self).__name__
@@ -274,6 +274,11 @@ class Feature(Expression):
     def __str__(self):
         return "$" + self._name
 
+    @property
+    def adjust_status(self):
+        fields_need_adjust = C.get("fields_need_adjust", {})
+        return fields_need_adjust.get(str(self), 0)
+
     def _load_internal(self, instrument, start_index, end_index, *args):
         # load
         freq = args[0]
@@ -291,6 +296,11 @@ class Feature(Expression):
 class PFeature(Feature):
     def __str__(self):
         return "$$" + self._name
+
+    @property
+    def adjust_status(self):
+        fields_need_adjust = C.get("fields_need_adjust", {})
+        return fields_need_adjust.get(str(self), 0)
 
     def _load_internal(self, instrument, start_index, end_index, *args):
         cur_time = args[0]

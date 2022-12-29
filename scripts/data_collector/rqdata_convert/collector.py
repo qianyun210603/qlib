@@ -328,11 +328,11 @@ class RqdataNormalize(BaseNormalize):
     SOURCE_COLS = [
         "open_price", "close_price", "high_price", "low_price", "volume", 'turnover', 'conversion_price',
         'open_price_stock', 'high_price_stock', 'low_price_stock', 'close_price_stock', 'volume_stock',
-        'turnover_stock'
+        'turnover_stock', 'ex_cum_factor_stock'
     ]
     COLUMNS = [
         "open", "close", "high", "low", "volume", 'money', 'conversionprice', 'openstock',
-        'highstock', 'lowstock', 'closestock', 'volumestock', 'turnoverstock'
+        'highstock', 'lowstock', 'closestock', 'volumestock', 'moneystock', 'factorstock'
     ]
     DAILY_FORMAT = "%Y-%m-%d"
 
@@ -348,9 +348,10 @@ class RqdataNormalize(BaseNormalize):
 
     @staticmethod
     def normalize_rqdata(
-            df: pd.DataFrame,
-            calendar_list: list = None,
-            last_close: float = None,
+        df: pd.DataFrame,
+        calendar_list: list = None,
+        last_close: float = None,
+        ohlc_adjust: bool = True,
     ):
         if df.empty:
             return df
@@ -378,16 +379,19 @@ class RqdataNormalize(BaseNormalize):
         # assign adjclose as close price adjusted by split only
         # exclude index
         if 'closestock' in df.columns:
-            df["adjclosestock"] = df.closestock
-            df["vwapstock"] = df["money"] / df["volume"]
+            df["vwapstock"] = df["moneystock"] / df["volumestock"]
             # adjust ohlc by split and dividends
-            df[['openstock', 'highstock', 'lowstock', 'closestock', "vwapstock"]] = df[
-                ['openstock', 'highstock', 'lowstock', 'closestock', "vwapstock"]].multiply(df.ex_cum_factor_stock, axis=0)
-            df['factorstock'] = df.ex_cum_factor_stock
+            if ohlc_adjust:
+                df["adjclosestock"] = df.closestock
+                df[['openstock', 'highstock', 'lowstock', 'closestock', "vwapstock"]] = df[
+                    ['openstock', 'highstock', 'lowstock', 'closestock', "vwapstock"]].multiply(df.factorstock, axis=0)
 
         df.sort_index(inplace=True)
 
-        df.loc[(df["volume"] <= 1e-10) | np.isnan(df["volume"]), list(set(df.columns) - {"symbol"})] = np.nan
+        df.loc[
+            (df["volume"] <= 1e-10) | np.isnan(df["volume"]),
+            list(set(df.columns) - {"symbol", "factor", "factorstock"})
+        ] = np.nan
 
         _count = 0
 
@@ -398,7 +402,7 @@ class RqdataNormalize(BaseNormalize):
 
         df["symbol"] = symbol
         return df.drop(
-            columns=['ex_cum_factor_stock', 'ex_factor_stock', 'split_cum_factor_stock',
+            columns=['ex_factor_stock', 'split_cum_factor_stock',
                      'ex_cum_factor', 'ex_factor', 'split_cum_factor'],
             errors='ignore'
         ).reset_index()

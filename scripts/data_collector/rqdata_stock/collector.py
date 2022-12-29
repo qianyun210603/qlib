@@ -2,7 +2,6 @@
 # Licensed under the MIT License.
 
 import sys
-import copy
 import time
 import importlib
 import multiprocessing
@@ -263,9 +262,15 @@ class RqdataCollector(BaseCollector):
 
 
 class RqdataNormalize(BaseNormalize):
-    SOURCE_COLS = ["open_price", "close_price", "high_price", "low_price", "volume", 'turnover']
-    COLUMNS = ["open", "close", "high", "low", "volume", 'money']
+    SOURCE_COLS = ["open_price", "close_price", "high_price", "low_price", "volume", 'turnover', 'ex_cum_factor']
+    COLUMNS = ["open", "close", "high", "low", "volume", 'money', 'factor']
     DAILY_FORMAT = "%Y-%m-%d"
+
+    def __init__(
+            self, date_field_name: str = "date", symbol_field_name: str = "symbol", ohlc_adjust: bool = True, **kwargs
+    ):
+        self.ohlc_adjust = ohlc_adjust
+        super(RqdataNormalize, self).__init__(date_field_name, symbol_field_name, **kwargs)
 
     @staticmethod
     def calc_change(df: pd.DataFrame, last_close: float) -> pd.Series:
@@ -282,11 +287,11 @@ class RqdataNormalize(BaseNormalize):
         df: pd.DataFrame,
         calendar_list: list = None,
         last_close: float = None,
+        ohlc_adjust: bool = True
     ):
         if df.empty:
             return df
         symbol = df.loc[df["symbol"].first_valid_index(), "symbol"]
-        columns = copy.deepcopy(RqdataNormalize.COLUMNS)
         df['date'] = pd.to_datetime(df.date)
         df.set_index("date", inplace=True)
         df = df.rename(
@@ -306,48 +311,22 @@ class RqdataNormalize(BaseNormalize):
             df = df.reindex(index_from_cal)
 
         df["vwap"] = df['money'] / df['volume']
-        # adjust ohlc by split and dividends
-        # df[["open", "close", "high", "low", 'vwap']] = df[["raw_open", "raw_close", "raw_high", "raw_low", 'raw_vwap']]\
-        #     .multiply(df.ex_cum_factor, axis=0)
-        # df[["volume"]] = df[["raw_volume"]].div(df.ex_cum_factor, axis=0)
-        df['factor'] = df.ex_cum_factor
+        if ohlc_adjust:
+            # adjust ohlc by split and dividends
+            df[["open", "close", "high", "low", 'vwap']] = df[["open", "close", "high", "low", 'vwap']]\
+                .multiply(df.factor, axis=0)
+            df[["volume"]] = df[["volume"]].div(df.factor, axis=0)
 
         df.sort_index(inplace=True)
 
-        df.loc[(df["volume"] <= 1e-10) | np.isnan(df["volume"]), list(set(df.columns) - {"symbol"})] = np.nan
-
-        # NOTE: The data obtained by Rqdata finance sometimes has exceptions
-        # WARNING: If it is normal for a `symbol(exchange)` to differ by a factor of
-        # *89* to *111* for consecutive trading days,
-        # WARNING: the logic in the following line needs to be modified
-        _count = 0
-        change_series = RqdataNormalize.calc_change(df, last_close)
-        while True:
-            # NOTE: may appear unusual for many days in a row
-            _mask = (change_series >= 89) & (change_series <= 111)
-            if not _mask.any():
-                break
-            _tmp_cols = ["high", "close", "low", "open", "adjclose"]
-            df.loc[_mask, _tmp_cols] = df.loc[_mask, _tmp_cols] / 100
-            _count += 1
-            if _count >= 10:
-                _symbol = df.loc[df["symbol"].first_valid_index()]["symbol"]
-                logger.warning(
-                    f"{_symbol} `change` is abnormal for {_count} consecutive days, "
-                    f"please check the specific data file carefully"
-                )
-
+        df.loc[(df["volume"] <= 1e-10) | np.isnan(df["volume"]), list(set(df.columns) - {"symbol", 'factor'})] = np.nan
         df["change"] = RqdataNormalize.calc_change(df, last_close)
-
-        columns += ["change"]
-        df.loc[(df["volume"] <= 0) | np.isnan(df["volume"]), columns] = np.nan
-
         df["symbol"] = symbol
-        return df.drop(columns=['ex_cum_factor', 'ex_factor', 'split_cum_factor']).reset_index()
+        return df.drop(columns=['ex_factor', 'split_cum_factor']).reset_index()
 
     def normalize(self, df: pd.DataFrame) -> pd.DataFrame:
         # normalize
-        df = self.normalize_rqdata(df, self._calendar_list)
+        df = self.normalize_rqdata(df, self._calendar_list, ohlc_adjust=self.ohlc_adjust)
         return df
 
     @staticmethod
@@ -446,6 +425,7 @@ class Run(BaseRun):
     def normalize_data(
         self,
         qlib_data_1d_dir: str = None,
+        ohlc_adjust: bool = True,
     ):
         """normalize data
 
@@ -481,6 +461,7 @@ class Run(BaseRun):
             target_dir=self.normalize_dir,
             normalize_class=_class,
             max_workers=self.max_workers,
+            ohlc_adjust=ohlc_adjust
         )
         yc.normalize()
 
@@ -490,6 +471,7 @@ class Run(BaseRun):
         trading_date: str = None,
         end_date: str = None,
         check_data_length: int = -1,
+        ohlc_adjust: bool = True
     ):
         """update Rqdata data to bin
 
@@ -545,15 +527,15 @@ class Run(BaseRun):
         )
         # download data from Rqdata
         # NOTE: when downloading data from RqdataFinance, max_workers is recommended to be 1
-        # self.download_data(
-        #     max_collector_count=self.max_workers,
-        #     start=trading_date,
-        #     end=end_date,
-        #     check_data_length=check_data_length
-        # )
+        self.download_data(
+            max_collector_count=self.max_workers,
+            start=trading_date,
+            end=end_date,
+            check_data_length=check_data_length
+        )
 
         # normalize data
-        self.normalize_data(qlib_data_1d_dir)
+        self.normalize_data(qlib_data_1d_dir, ohlc_adjust=ohlc_adjust)
 
         qlib_dir = Path(qlib_data_1d_dir).expanduser().resolve()
         # dump bin

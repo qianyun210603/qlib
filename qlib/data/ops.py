@@ -912,7 +912,7 @@ class Rolling(ExpressionOps):
         series = self.feature.load(instrument, start_index, end_index, *args)
         factor = 1.0
         if not C.get("ohlc_adjusted", True) and self.feature.adjust_status != 0:
-            factor = Feature('factor').load(instrument, start_index, end_index, *args)
+            factor = Feature('factor').load(instrument, start_index, end_index, *args).ffill()
         series = series * factor ** self.feature.adjust_status
         # NOTE: remove all null check,
         # now it's user's responsibility to decide whether to use features in null days
@@ -1017,7 +1017,7 @@ class Ref(Rolling):
         series = self.feature.load(instrument, start_index, end_index, *args)
         factor = 1.0
         if not C.get("ohlc_adjusted", True) and self.feature.adjust_status != 0:
-            factor = Feature('factor').load(instrument, start_index, end_index, *args)
+            factor = Feature('factor').load(instrument, start_index, end_index, *args).ffill()
         series = series * factor ** self.feature.adjust_status
         # N = 0, return first day
         if series.empty:
@@ -1251,7 +1251,7 @@ class IdxMax(Rolling):
         series = self.feature.load(instrument, start_index, end_index, *args)
         factor = 1.0
         if not C.get("ohlc_adjusted", True) and self.feature.adjust_status != 0:
-            factor = Feature('factor').load(instrument, start_index, end_index, *args)
+            factor = Feature('factor').load(instrument, start_index, end_index, *args).ffill()
         series = series * factor ** self.feature.adjust_status
         if self.N == 0:
             series = series.expanding(min_periods=1).apply(lambda x: x.argmax() + 1, raw=True)
@@ -1306,7 +1306,7 @@ class IdxMin(Rolling):
         series = self.feature.load(instrument, start_index, end_index, *args)
         factor = 1.0
         if not C.get("ohlc_adjusted", True) and self.feature.adjust_status != 0:
-            factor = Feature('factor').load(instrument, start_index, end_index, *args)
+            factor = Feature('factor').load(instrument, start_index, end_index, *args).ffill()
         series = series * factor ** self.feature.adjust_status
         if self.N == 0:
             series = series.expanding(min_periods=1).apply(lambda x: x.argmin() + 1, raw=True)
@@ -1345,7 +1345,7 @@ class Quantile(Rolling):
         series = self.feature.load(instrument, start_index, end_index, *args)
         factor = 1.0
         if not C.get("ohlc_adjusted", True) and self.feature.adjust_status != 0:
-            factor = Feature('factor').load(instrument, start_index, end_index, *args)
+            factor = Feature('factor').load(instrument, start_index, end_index, *args).ffill()
         series = series * factor ** self.feature.adjust_status
         if self.N == 0:
             series = series.expanding(min_periods=1).quantile(self.qscore)
@@ -1436,7 +1436,7 @@ class Rank(Rolling):
         series = self.feature.load(instrument, start_index, end_index, *args)
         factor = 1.0
         if not C.get("ohlc_adjusted", True) and self.feature.adjust_status != 0:
-            factor = Feature('factor').load(instrument, start_index, end_index, *args)
+            factor = Feature('factor').load(instrument, start_index, end_index, *args).ffill()
         series = series * factor ** self.feature.adjust_status
 
         rolling_or_expending = series.expanding(min_periods=1) if self.N == 0 else series.rolling(self.N, min_periods=1)
@@ -1520,7 +1520,7 @@ class Delta(Rolling):
         series = self.feature.load(instrument, start_index, end_index, *args)
         factor = 1.0
         if not C.get("ohlc_adjusted", True) and self.feature.adjust_status != 0:
-            factor = Feature('factor').load(instrument, start_index, end_index, *args)
+            factor = Feature('factor').load(instrument, start_index, end_index, *args).ffill()
         series = series * factor ** self.feature.adjust_status
         if self.N == 0:
             series = series - series.iloc[0]
@@ -1562,7 +1562,7 @@ class Slope(Rolling):
     def _load_internal(self, instrument, start_index, end_index, *args):
         series = self.feature.load(instrument, start_index, end_index, *args)
         if not C.get("ohlc_adjusted", True) and self.feature.adjust_status != 0:
-            factor = Feature('factor').load(instrument, start_index, end_index, *args)
+            factor = Feature('factor').load(instrument, start_index, end_index, *args).ffill()
             series = series * factor ** self.feature.adjust_status
         if self.N == 0:
             series = pd.Series(expanding_slope(series.values), index=series.index)
@@ -1596,7 +1596,7 @@ class Rsquare(Rolling):
     def _load_internal(self, instrument, start_index, end_index, *args):
         _series = self.feature.load(instrument, start_index, end_index, *args)
         if not C.get("ohlc_adjusted", True) and self.feature.adjust_status != 0:
-            factor = Feature('factor').load(instrument, start_index, end_index, *args)
+            factor = Feature('factor').load(instrument, start_index, end_index, *args).ffill()
             _series = _series * factor ** self.feature.adjust_status
         if self.N == 0:
             series = pd.Series(expanding_rsquare(_series.values), index=_series.index)
@@ -1632,7 +1632,7 @@ class Resi(Rolling):
         series = self.feature.load(instrument, start_index, end_index, *args)
         factor = 1.0
         if not C.get("ohlc_adjusted", True) and self.feature.adjust_status != 0:
-            factor = Feature('factor').load(instrument, start_index, end_index, *args)
+            factor = Feature('factor').load(instrument, start_index, end_index, *args).ffill()
         series = series * factor ** self.feature.adjust_status
         if self.N == 0:
             series = pd.Series(expanding_resi(series.values), index=series.index)
@@ -1665,7 +1665,7 @@ class WMA(Rolling):
         series = self.feature.load(instrument, start_index, end_index, *args)
         factor = 1.0
         if not C.get("ohlc_adjusted", True) and self.feature.adjust_status != 0:
-            factor = Feature('factor').load(instrument, start_index, end_index, *args)
+            factor = Feature('factor').load(instrument, start_index, end_index, *args).ffill()
         series = series * factor ** self.feature.adjust_status
 
         # TODO: implement in Cython
@@ -1707,7 +1707,7 @@ class EMA(Rolling):
         series = self.feature.load(instrument, start_index, end_index, *args)
         factor = 1.0
         if not C.get("ohlc_adjusted", True) and self.feature.adjust_status != 0:
-            factor = Feature('factor').load(instrument, start_index, end_index, *args)
+            factor = Feature('factor').load(instrument, start_index, end_index, *args).ffill()
         series = series * factor ** self.feature.adjust_status
 
         def exp_weighted_mean(x):
@@ -1762,7 +1762,7 @@ class PairRolling(ExpressionOps):
         factor = 1.0
         if not C.get("ohlc_adjusted", True) and \
                 (self.feature_left.adjust_status != 0 or self.feature_right.adjust_status != 0):
-            factor = Feature('factor').load(instrument, start_index, end_index, *args)
+            factor = Feature('factor').load(instrument, start_index, end_index, *args).ffill()
         if isinstance(self.feature_left, Expression):
             series_left: pd.Series = self.feature_left.load(instrument, start_index, end_index, *args)
             series_left = series_left * factor ** self.feature_left.adjust_status

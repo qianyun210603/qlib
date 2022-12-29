@@ -15,6 +15,7 @@ from scipy.stats import percentileofscore
 from .base import Expression, ExpressionOps, Feature, PFeature
 from ..log import get_module_logger
 from ..utils import get_callable_kwargs
+from ..config import C
 
 
 try:
@@ -53,6 +54,11 @@ class ElemOperator(ExpressionOps, ABC):
 
     def __init__(self, feature):
         self.feature = feature
+    @property
+    def adjust_status(self):
+        if isinstance(self.feature, Expression):
+            return self.feature.adjust_status
+        return 0
 
     def __str__(self):
         return "{}({})".format(type(self).__name__, self.feature)
@@ -166,6 +172,10 @@ class Sign(NpElemOperator):
     def __init__(self, feature):
         super(Sign, self).__init__(feature, "sign")
 
+    @property
+    def adjust_status(self):
+        return 0
+
     def _load_internal(self, instrument, start_index, end_index, *args):
         """
         To avoid error raised by bool type input, we transform the data into float32.
@@ -192,6 +202,14 @@ class Log(NpElemOperator):
 
     def __init__(self, feature):
         super(Log, self).__init__(feature, "log")
+
+    @property
+    def adjust_status(self):
+        if isinstance(self.feature, Expression) and self.feature.adjust_status != 0:
+            get_module_logger(self.__class__.__name__).debug(
+                f"Taking log on feature {str(self)} which has a adjust status of {self.feature.adjust_status}"
+            )
+        return 0
 
 
 class Mask(NpElemOperator):
@@ -237,6 +255,10 @@ class Not(NpElemOperator):
 
     def __init__(self, feature):
         super(Not, self).__init__(feature, "bitwise_not")
+
+    @property
+    def adjust_status(self):
+        return 0
 
 
 #################### Pair-Wise Operator ####################
@@ -350,12 +372,23 @@ class NpPairOperator(PairOperator):
         try:
             res = getattr(np, self.func)(series_left, series_right)
         except ValueError as e:
-            get_module_logger("ops").debug(warning_info)
+            get_module_logger(self.__class__.__name__).debug(warning_info)
             raise ValueError(f"{str(e)}. \n\t{warning_info}") from e
         else:
             if check_length and len(series_left) != len(series_right):
-                get_module_logger("ops").debug(warning_info)
+                get_module_logger(self.__class__.__name__).debug(warning_info)
         return res
+
+    @property
+    def adjust_status(self):
+        if not isinstance(self.feature_left, Expression):
+            return self.feature_right.adjust_status
+        if not isinstance(self.feature_right, Expression):
+            return self.feature_left.adjust_status
+        if self.feature_left.adjust_status != self.feature_right.adjust_status:
+            get_module_logger('data').debug(f"{self.func}ing features with different adjust status: {str(self)}")
+            return 0
+        return self.feature_left.adjust_status
 
 
 class Power(NpPairOperator):
@@ -376,6 +409,13 @@ class Power(NpPairOperator):
 
     def __init__(self, feature_left, feature_right):
         super(Power, self).__init__(feature_left, feature_right, "power")
+
+    @property
+    def adjust_status(self):
+        if isinstance(self.feature_left, Expression) and self.feature_left.adjust_status != 0 or \
+                isinstance(self.feature_right, Expression) and self.feature_right.adjust_status != 0:
+            get_module_logger('data').debug(f"Adjust status not none for {str(self)}")
+        return 0
 
 
 class SignedPower(PairOperator):
@@ -410,13 +450,21 @@ class SignedPower(PairOperator):
         try:
             res = np.power(series_left.abs(), series_right) * np.sign(series_left)
         except ValueError as e:
-            get_module_logger("ops").debug(warning_info)
+            get_module_logger(self.__class__.__name__).debug(warning_info)
             raise ValueError(f"{str(e)}. \n\t{warning_info}") from e
         else:
             if check_length and len(series_left) != len(series_right):
-                get_module_logger("ops").debug(warning_info)
+                get_module_logger(self.__class__.__name__).debug(warning_info)
         return res
 
+    @property
+    def adjust_status(self):
+        if isinstance(self.feature_left, Expression) and self.feature_left.adjust_status != 0 or \
+                isinstance(self.feature_right, Expression) and self.feature_right.adjust_status != 0:
+            get_module_logger(self.__class__.__name__).debug(
+                f"Adjust status not 0 for {str(self)}"
+            )
+        return 0
 
 class Add(NpPairOperator):
     """Add Operator
@@ -477,6 +525,14 @@ class Mul(NpPairOperator):
     def __init__(self, feature_left, feature_right):
         super(Mul, self).__init__(feature_left, feature_right, "multiply")
 
+    @property
+    def adjust_status(self):
+        if not isinstance(self.feature_left, Expression):
+            return self.feature_right.adjust_status
+        if not isinstance(self.feature_right, Expression):
+            return self.feature_left.adjust_status
+        return self.feature_left.adjust_status + self.feature_right.adjust_status
+
 
 class Div(NpPairOperator):
     """Division Operator
@@ -496,6 +552,14 @@ class Div(NpPairOperator):
 
     def __init__(self, feature_left, feature_right):
         super(Div, self).__init__(feature_left, feature_right, "divide")
+
+    @property
+    def adjust_status(self):
+        if not isinstance(self.feature_left, Expression):
+            return -self.feature_right.adjust_status
+        if not isinstance(self.feature_right, Expression):
+            return self.feature_left.adjust_status
+        return self.feature_left.adjust_status - self.feature_right.adjust_status
 
 
 class Greater(NpPairOperator):
@@ -557,6 +621,10 @@ class Gt(NpPairOperator):
     def __init__(self, feature_left, feature_right):
         super(Gt, self).__init__(feature_left, feature_right, "greater")
 
+    @property
+    def adjust_status(self):
+        return 0
+
 
 class Ge(NpPairOperator):
     """Greater Equal Than Operator
@@ -576,6 +644,10 @@ class Ge(NpPairOperator):
 
     def __init__(self, feature_left, feature_right):
         super(Ge, self).__init__(feature_left, feature_right, "greater_equal")
+
+    @property
+    def adjust_status(self):
+        return 0
 
 
 class Lt(NpPairOperator):
@@ -597,6 +669,10 @@ class Lt(NpPairOperator):
     def __init__(self, feature_left, feature_right):
         super(Lt, self).__init__(feature_left, feature_right, "less")
 
+    @property
+    def adjust_status(self):
+        return 0
+
 
 class Le(NpPairOperator):
     """Less Equal Than Operator
@@ -617,6 +693,9 @@ class Le(NpPairOperator):
     def __init__(self, feature_left, feature_right):
         super(Le, self).__init__(feature_left, feature_right, "less_equal")
 
+    @property
+    def adjust_status(self):
+        return 0
 
 class Eq(NpPairOperator):
     """Equal Operator
@@ -636,6 +715,10 @@ class Eq(NpPairOperator):
 
     def __init__(self, feature_left, feature_right):
         super(Eq, self).__init__(feature_left, feature_right, "equal")
+
+    @property
+    def adjust_status(self):
+        return 0
 
 
 class Ne(NpPairOperator):
@@ -657,6 +740,9 @@ class Ne(NpPairOperator):
     def __init__(self, feature_left, feature_right):
         super(Ne, self).__init__(feature_left, feature_right, "not_equal")
 
+    @property
+    def adjust_status(self):
+        return 0
 
 class And(NpPairOperator):
     """And Operator
@@ -677,6 +763,10 @@ class And(NpPairOperator):
     def __init__(self, feature_left, feature_right):
         super(And, self).__init__(feature_left, feature_right, "bitwise_and")
 
+    @property
+    def adjust_status(self):
+        return 0
+
 
 class Or(NpPairOperator):
     """Or Operator
@@ -696,6 +786,10 @@ class Or(NpPairOperator):
 
     def __init__(self, feature_left, feature_right):
         super(Or, self).__init__(feature_left, feature_right, "bitwise_or")
+
+    @property
+    def adjust_status(self):
+        return 0
 
 
 #################### Triple-wise Operator ####################
@@ -767,6 +861,18 @@ class If(ExpressionOps):
             cl, cr = 0, 0
         return max(ll, rl, cl), max(lr, rr, cr)
 
+    @property
+    def adjust_status(self):
+        if not isinstance(self.feature_left, Expression) and not isinstance(self.feature_right, Expression):
+            return 0
+        if not isinstance(self.feature_left, Expression):
+            return self.feature_right.adjust_status
+        if not isinstance(self.feature_right, Expression):
+            return self.feature_left.adjust_status
+        if self.feature_left.adjust_status != self.feature_right.adjust_status:
+            get_module_logger('data').debug(f"If returns different adjust status: {str(self)}")
+            return 0
+        return self.feature_left.adjust_status
 
 #################### Rolling ####################
 # NOTE: methods like `rolling.mean` are optimized with cython,
@@ -804,6 +910,10 @@ class Rolling(ExpressionOps):
 
     def _load_internal(self, instrument, start_index, end_index, *args):
         series = self.feature.load(instrument, start_index, end_index, *args)
+        factor = 1.0
+        if not C.get("ohlc_adjusted", True) and self.feature.adjust_status != 0:
+            factor = Feature('factor').load(instrument, start_index, end_index, *args)
+        series = series * factor ** self.feature.adjust_status
         # NOTE: remove all null check,
         # now it's user's responsibility to decide whether to use features in null days
         # isnull = series.isnull() # NOTE: isnull = NaN, inf is not null
@@ -816,6 +926,7 @@ class Rolling(ExpressionOps):
             # series.iloc[:self.N-1] = np.nan
         # series[isnull] = np.nan
         series.loc[series.abs() < 1e-10] = 0
+        series = series / factor ** self.adjust_status
         return series
 
     def get_longest_back_rolling(self):
@@ -839,6 +950,10 @@ class Rolling(ExpressionOps):
             lft_etd, rght_etd = self.feature.get_extended_window_size()
             lft_etd = max(lft_etd + self.N - 1, lft_etd)
             return lft_etd, rght_etd
+
+    @property
+    def adjust_status(self):
+        return self.feature.adjust_status
 
 
 class NpRolling(Rolling):
@@ -900,6 +1015,10 @@ class Ref(Rolling):
 
     def _load_internal(self, instrument, start_index, end_index, *args):
         series = self.feature.load(instrument, start_index, end_index, *args)
+        factor = 1.0
+        if not C.get("ohlc_adjusted", True) and self.feature.adjust_status != 0:
+            factor = Feature('factor').load(instrument, start_index, end_index, *args)
+        series = series * factor ** self.feature.adjust_status
         # N = 0, return first day
         if series.empty:
             return series  # Pandas bug, see: https://github.com/pandas-dev/pandas/issues/21049
@@ -907,6 +1026,7 @@ class Ref(Rolling):
             series = pd.Series(series.iloc[0], index=series.index)
         else:
             series = series.shift(self.N)  # copy
+        series = series / factor ** self.feature.adjust_status
         return series
 
     def get_longest_back_rolling(self):
@@ -966,7 +1086,7 @@ class Sum(Rolling):
 
 
 class Prod(NpRolling):
-    """Rolling Sum
+    """Rolling Prod
 
     Parameters
     ----------
@@ -983,6 +1103,12 @@ class Prod(NpRolling):
 
     def __init__(self, feature, N):
         super(Prod, self).__init__(feature, N, "prod")
+
+    @property
+    def adjust_status(self):
+        if isinstance(self.feature, Expression):
+            return self.feature.adjust_status * self.N
+        return 0
 
 
 class Std(Rolling):
@@ -1024,6 +1150,12 @@ class Var(Rolling):
     def __init__(self, feature, N):
         super(Var, self).__init__(feature, N, "var")
 
+    @property
+    def adjust_status(self):
+        if isinstance(self.feature, Expression):
+            return self.feature.adjust_status * 2
+        return 0
+
 
 class Skew(Rolling):
     """Rolling Skewness
@@ -1045,6 +1177,10 @@ class Skew(Rolling):
         if N != 0 and N < 3:
             raise ValueError("The rolling window size of Skewness operation should >= 3")
         super(Skew, self).__init__(feature, N, "skew")
+
+    @property
+    def adjust_status(self):
+        return 0
 
 
 class Kurt(Rolling):
@@ -1068,6 +1204,9 @@ class Kurt(Rolling):
             raise ValueError("The rolling window size of Kurtosis operation should >= 5")
         super(Kurt, self).__init__(feature, N, "kurt")
 
+    @property
+    def adjust_status(self):
+        return 0
 
 class Max(Rolling):
     """Rolling Max
@@ -1110,12 +1249,19 @@ class IdxMax(Rolling):
 
     def _load_internal(self, instrument, start_index, end_index, *args):
         series = self.feature.load(instrument, start_index, end_index, *args)
+        factor = 1.0
+        if not C.get("ohlc_adjusted", True) and self.feature.adjust_status != 0:
+            factor = Feature('factor').load(instrument, start_index, end_index, *args)
+        series = series * factor ** self.feature.adjust_status
         if self.N == 0:
             series = series.expanding(min_periods=1).apply(lambda x: x.argmax() + 1, raw=True)
         else:
             series = series.rolling(self.N, min_periods=1).apply(lambda x: x.argmax() + 1, raw=True)
         return series
 
+    @property
+    def adjust_status(self):
+        return 0
 
 class Min(Rolling):
     """Rolling Min
@@ -1158,12 +1304,19 @@ class IdxMin(Rolling):
 
     def _load_internal(self, instrument, start_index, end_index, *args):
         series = self.feature.load(instrument, start_index, end_index, *args)
+        factor = 1.0
+        if not C.get("ohlc_adjusted", True) and self.feature.adjust_status != 0:
+            factor = Feature('factor').load(instrument, start_index, end_index, *args)
+        series = series * factor ** self.feature.adjust_status
         if self.N == 0:
             series = series.expanding(min_periods=1).apply(lambda x: x.argmin() + 1, raw=True)
         else:
             series = series.rolling(self.N, min_periods=1).apply(lambda x: x.argmin() + 1, raw=True)
         return series
 
+    @property
+    def adjust_status(self):
+        return 0
 
 class Quantile(Rolling):
     """Rolling Quantile
@@ -1190,11 +1343,19 @@ class Quantile(Rolling):
 
     def _load_internal(self, instrument, start_index, end_index, *args):
         series = self.feature.load(instrument, start_index, end_index, *args)
+        factor = 1.0
+        if not C.get("ohlc_adjusted", True) and self.feature.adjust_status != 0:
+            factor = Feature('factor').load(instrument, start_index, end_index, *args)
+        series = series * factor ** self.feature.adjust_status
         if self.N == 0:
             series = series.expanding(min_periods=1).quantile(self.qscore)
         else:
             series = series.rolling(self.N, min_periods=1).quantile(self.qscore)
         return series
+
+    @property
+    def adjust_status(self):
+        return 0
 
 
 class Med(Rolling):
@@ -1273,6 +1434,10 @@ class Rank(Rolling):
     # for compatiblity of python 3.7, which doesn't support pandas 1.4.0+ which implements Rolling.rank
     def _load_internal(self, instrument, start_index, end_index, *args):
         series = self.feature.load(instrument, start_index, end_index, *args)
+        factor = 1.0
+        if not C.get("ohlc_adjusted", True) and self.feature.adjust_status != 0:
+            factor = Feature('factor').load(instrument, start_index, end_index, *args)
+        series = series * factor ** self.feature.adjust_status
 
         rolling_or_expending = series.expanding(min_periods=1) if self.N == 0 else series.rolling(self.N, min_periods=1)
         if hasattr(rolling_or_expending, "rank"):
@@ -1287,6 +1452,10 @@ class Rank(Rolling):
             return percentileofscore(x1, x1[-1]) / 100
 
         return rolling_or_expending.apply(rank, raw=True)
+
+    @property
+    def adjust_status(self):
+        return 0
 
 
 class Count(Rolling):
@@ -1307,6 +1476,25 @@ class Count(Rolling):
 
     def __init__(self, feature, N):
         super(Count, self).__init__(feature, N, "count")
+
+    def _load_internal(self, instrument, start_index, end_index, *args):
+        series = self.feature.load(instrument, start_index, end_index, *args)
+        # NOTE: remove all null check,
+        # now it's user's responsibility to decide whether to use features in null days
+        # isnull = series.isnull() # NOTE: isnull = NaN, inf is not null
+        if isinstance(self.N, int) and self.N == 0:
+            series = getattr(series.expanding(min_periods=1), self.func)()
+        elif isinstance(self.N, float) and 0 < self.N < 1:
+            series = series.ewm(alpha=self.N, min_periods=1).mean()
+        else:
+            series = getattr(series.rolling(self.N, min_periods=1), self.func)()
+            # series.iloc[:self.N-1] = np.nan
+        # series[isnull] = np.nan
+        series.loc[series.abs() < 1e-10] = 0
+        return series
+
+    def adjust_status(self):
+        return 0
 
 
 class Delta(Rolling):
@@ -1330,10 +1518,15 @@ class Delta(Rolling):
 
     def _load_internal(self, instrument, start_index, end_index, *args):
         series = self.feature.load(instrument, start_index, end_index, *args)
+        factor = 1.0
+        if not C.get("ohlc_adjusted", True) and self.feature.adjust_status != 0:
+            factor = Feature('factor').load(instrument, start_index, end_index, *args)
+        series = series * factor ** self.feature.adjust_status
         if self.N == 0:
             series = series - series.iloc[0]
         else:
             series = series - series.shift(self.N)
+        series = series / factor ** self.adjust_status
         return series
 
 
@@ -1368,11 +1561,17 @@ class Slope(Rolling):
 
     def _load_internal(self, instrument, start_index, end_index, *args):
         series = self.feature.load(instrument, start_index, end_index, *args)
+        if not C.get("ohlc_adjusted", True) and self.feature.adjust_status != 0:
+            factor = Feature('factor').load(instrument, start_index, end_index, *args)
+            series = series * factor ** self.feature.adjust_status
         if self.N == 0:
             series = pd.Series(expanding_slope(series.values), index=series.index)
         else:
             series = pd.Series(rolling_slope(series.values, self.N), index=series.index)
         return series
+
+    def adjust_status(self):
+        return 0
 
 
 class Rsquare(Rolling):
@@ -1396,12 +1595,18 @@ class Rsquare(Rolling):
 
     def _load_internal(self, instrument, start_index, end_index, *args):
         _series = self.feature.load(instrument, start_index, end_index, *args)
+        if not C.get("ohlc_adjusted", True) and self.feature.adjust_status != 0:
+            factor = Feature('factor').load(instrument, start_index, end_index, *args)
+            _series = _series * factor ** self.feature.adjust_status
         if self.N == 0:
             series = pd.Series(expanding_rsquare(_series.values), index=_series.index)
         else:
             series = pd.Series(rolling_rsquare(_series.values, self.N), index=_series.index)
             series.loc[np.isclose(_series.rolling(self.N, min_periods=1).std(), 0, atol=2e-05)] = np.nan
         return series
+
+    def adjust_status(self):
+        return 0
 
 
 class Resi(Rolling):
@@ -1425,10 +1630,15 @@ class Resi(Rolling):
 
     def _load_internal(self, instrument, start_index, end_index, *args):
         series = self.feature.load(instrument, start_index, end_index, *args)
+        factor = 1.0
+        if not C.get("ohlc_adjusted", True) and self.feature.adjust_status != 0:
+            factor = Feature('factor').load(instrument, start_index, end_index, *args)
+        series = series * factor ** self.feature.adjust_status
         if self.N == 0:
             series = pd.Series(expanding_resi(series.values), index=series.index)
         else:
             series = pd.Series(rolling_resi(series.values, self.N), index=series.index)
+        series = series / factor ** self.adjust_status
         return series
 
 
@@ -1453,6 +1663,11 @@ class WMA(Rolling):
 
     def _load_internal(self, instrument, start_index, end_index, *args):
         series = self.feature.load(instrument, start_index, end_index, *args)
+        factor = 1.0
+        if not C.get("ohlc_adjusted", True) and self.feature.adjust_status != 0:
+            factor = Feature('factor').load(instrument, start_index, end_index, *args)
+        series = series * factor ** self.feature.adjust_status
+
         # TODO: implement in Cython
 
         def weighted_mean(x):
@@ -1464,6 +1679,7 @@ class WMA(Rolling):
             series = series.expanding(min_periods=1).apply(weighted_mean, raw=True)
         else:
             series = series.rolling(self.N, min_periods=1).apply(weighted_mean, raw=True)
+        series = series / factor ** self.adjust_status
         series.loc[series.abs() < 1e-10] = 0
         return series
 
@@ -1489,6 +1705,10 @@ class EMA(Rolling):
 
     def _load_internal(self, instrument, start_index, end_index, *args):
         series = self.feature.load(instrument, start_index, end_index, *args)
+        factor = 1.0
+        if not C.get("ohlc_adjusted", True) and self.feature.adjust_status != 0:
+            factor = Feature('factor').load(instrument, start_index, end_index, *args)
+        series = series * factor ** self.feature.adjust_status
 
         def exp_weighted_mean(x):
             a = 1 - 2 / (1 + len(x))
@@ -1502,6 +1722,7 @@ class EMA(Rolling):
             series = series.ewm(alpha=self.N, min_periods=1).mean()
         else:
             series = series.ewm(span=self.N, min_periods=1).mean()
+        series = series / factor ** self.adjust_status
         return series
 
 
@@ -1538,13 +1759,18 @@ class PairRolling(ExpressionOps):
         assert any(
             [isinstance(self.feature_left, Expression), self.feature_right, Expression]
         ), "at least one of two inputs is Expression instance"
-
+        factor = 1.0
+        if not C.get("ohlc_adjusted", True) and \
+                (self.feature_left.adjust_status != 0 or self.feature_right.adjust_status != 0):
+            factor = Feature('factor').load(instrument, start_index, end_index, *args)
         if isinstance(self.feature_left, Expression):
-            series_left = self.feature_left.load(instrument, start_index, end_index, *args)
+            series_left: pd.Series = self.feature_left.load(instrument, start_index, end_index, *args)
+            series_left = series_left * factor ** self.feature_left.adjust_status
         else:
             series_left = self.feature_left  # numeric value
         if isinstance(self.feature_right, Expression):
-            series_right = self.feature_right.load(instrument, start_index, end_index, *args)
+            series_right: pd.Series = self.feature_right.load(instrument, start_index, end_index, *args)
+            series_right = series_right * factor ** self.feature_right.adjust_status
         else:
             series_right = self.feature_right
 
@@ -1552,6 +1778,7 @@ class PairRolling(ExpressionOps):
             series = getattr(series_left.expanding(min_periods=1), self.func)(series_right)
         else:
             series = getattr(series_left.rolling(self.N, min_periods=1), self.func)(series_right)
+        series = series / factor ** self.adjust_status
         return series
 
     def get_longest_back_rolling(self):
@@ -1618,6 +1845,9 @@ class Corr(PairRolling):
         res.loc[np.isclose(res, -1.0, atol=1e-4)] = -1
         return res.replace([np.inf, -np.inf], 0)
 
+    @property
+    def adjust_status(self):
+        return 0
 
 class Cov(PairRolling):
     """Rolling Covariance
@@ -1639,6 +1869,10 @@ class Cov(PairRolling):
 
     def __init__(self, feature_left, feature_right, N):
         super(Cov, self).__init__(feature_left, feature_right, N, "cov")
+
+    @property
+    def adjust_status(self):
+        return self.feature_left.adjust_status + self.feature_right.adjust_status
 
 
 #################### cross section operator ####################
@@ -1692,6 +1926,10 @@ class XSectionOperator(ElemOperator):
     @property
     def require_cs_info(self):
         return True
+
+    @property
+    def adjust_status(self):
+        return 0
 
 class CSRank(XSectionOperator):
     def _process_df(self, df, **_) -> pd.DataFrame:

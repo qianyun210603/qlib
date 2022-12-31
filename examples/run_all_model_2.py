@@ -396,7 +396,7 @@ class ModelRunner:
                     workflow(config_path=yaml_path, experiment_name=fn, uri_folder=exp_folder_name)
                 except Exception as e:
                     logger.error(f"Failed run for {fn}: {str(e)}")
-                    raise
+
         self._collect_results(exp_folder_name, dataset, base_folder)
 
     @staticmethod

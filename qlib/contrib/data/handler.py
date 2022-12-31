@@ -57,7 +57,7 @@ class Alpha360(DataHandlerLP):
         fit_end_time=None,
         filter_pipe=None,
         inst_processor=None,
-        **kwargs
+        **kwargs,
     ):
         infer_processors = check_transform_proc(infer_processors, fit_start_time, fit_end_time)
         learn_processors = check_transform_proc(learn_processors, fit_start_time, fit_end_time)
@@ -82,7 +82,7 @@ class Alpha360(DataHandlerLP):
             data_loader=data_loader,
             learn_processors=learn_processors,
             infer_processors=infer_processors,
-            **kwargs
+            **kwargs,
         )
 
     def get_label_config(self):
@@ -153,7 +153,7 @@ class Alpha158(DataHandlerLP):
         process_type=DataHandlerLP.PTYPE_A,
         filter_pipe=None,
         inst_processor=None,
-        **kwargs
+        **kwargs,
     ):
         infer_processors = check_transform_proc(infer_processors, fit_start_time, fit_end_time)
         learn_processors = check_transform_proc(learn_processors, fit_start_time, fit_end_time)
@@ -178,7 +178,7 @@ class Alpha158(DataHandlerLP):
             infer_processors=infer_processors,
             learn_processors=learn_processors,
             process_type=process_type,
-            **kwargs
+            **kwargs,
         )
 
     def get_feature_config(self):
@@ -525,9 +525,6 @@ class Alpha101(DataHandlerLP):
             "alpha024": "If((Delta(Mean($close, 100) , 100) / Ref($close, 100)) <= 0.05, (Min($close,100)-$close),  -1*Delta($close, 3))",
             "alpha025": f"CSRank(-1*{f_return}*{f_adv20}*$vwap*($high-$close))",
             "alpha026": "0-Max(Corr(Rank($volume, 5), Rank($high, 5), 5), 3)",
-            'alpha027_0': "Corr(CSRank($volume), CSRank($vwap), 6)",
-            'alpha027_1': "Mean(Corr(CSRank($volume), CSRank($vwap), 6), 2)",
-            'alpha027_2': "CSRank(Mean(Corr(CSRank($volume), CSRank($vwap), 6), 2))",
             "alpha027": "If(0.5<CSRank(Mean(Corr(CSRank($volume), CSRank($vwap), 6), 2)), -1, 1)",
             "alpha028": f"CSScale((Corr({f_adv20}, $low, 5) + (($high + $low) / 2)) - $close)",
             "alpha029": f"Min(Prod(CSRank(Sum(Min(CSRank(-Delta($close-1,5)), 2), 1)),1), 5) + Rank(Ref(-1*{f_return}, 6), 5)",
@@ -588,7 +585,7 @@ class Alpha101(DataHandlerLP):
             "alpha081": f"If(CSRank(Sum(Log(CSRank(Power(CSRank(Corr($vwap, Sum({f_adv10}, 49), 8)), 4))), 15))<CSRank(Corr(CSRank($vwap), CSRank($volume), 5)), -1, 0)",
             # # 'alpha082': use  indneutralize
             "alpha083": "CSRank(Ref(($high - $low) / Mean($close, 5), 2))*CSRank($volume)*Mean($close, 5) * ($vwap - $close) / ($high*1.0000001-$low)",
-            "alpha084": f"Power(Rank($vwap - Max($vwap, 15), 20), Delta($close, 4))",
+            # "alpha084": f"Power(Rank($vwap - Max($vwap, 15), 20), Delta($close, 4))", # meaning less
             "alpha085": f"Power(CSRank(Corr(($high * 0.876703) + ($close * (1 - 0.876703)), {f_adv30}, 9)), CSRank(Corr(Rank(($high + $low) / 2, 3), Rank($volume, 10),7)))",
             "alpha086": f"If(Rank(Corr($close, Sum({f_adv20}, 14), 6), 20)<CSRank(($open+ $close) - ($vwap + $open)), -1, 0)",
             # 'alpha087': use  indneutralize

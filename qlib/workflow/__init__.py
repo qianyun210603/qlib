@@ -383,6 +383,8 @@ class QlibRecorder:
         recorder_name=None,
         experiment_id=None,
         experiment_name=None,
+        create=False,
+        start=False,
     ) -> Recorder:
         """
         Method for retrieving a recorder.
@@ -442,7 +444,7 @@ class QlibRecorder:
         A recorder instance.
         """
         return self.get_exp(experiment_name=experiment_name, experiment_id=experiment_id, create=False).get_recorder(
-            recorder_id, recorder_name, create=False, start=False
+            recorder_id, recorder_name, create=create, start=start
         )
 
     def delete_recorder(self, recorder_id=None, recorder_name=None):

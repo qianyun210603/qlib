@@ -129,13 +129,11 @@ class MemCacheUnit(abc.ABC):
 
 
 class MemCacheLengthUnit(MemCacheUnit):
-
     def _get_value_size(self, value):
         return 1
 
 
 class MemCacheSizeofUnit(MemCacheUnit):
-
     def _get_value_size(self, value):
         return sys.getsizeof(value)
 
@@ -145,8 +143,8 @@ class SharedMemMeta(type):
         super().__init__(name, bases, dct)
         cls.cond = multiprocessing.Condition()
 
-class SharedMemCacheUnit(metaclass=SharedMemMeta):
 
+class SharedMemCacheUnit(metaclass=SharedMemMeta):
     def __init__(self, shared_cache_data):
         self.od = shared_cache_data
 
@@ -1137,8 +1135,9 @@ class SimpleDatasetCache(DatasetCache):
     def update(self, cache_uri: Union[str, Path], freq: str = "day"):
         pass
 
-    def _dataset_uri(self, instruments, fields, start_time=None, end_time=None, freq="day", disk_cache=1,
-                     inst_processors=[]):
+    def _dataset_uri(
+        self, instruments, fields, start_time=None, end_time=None, freq="day", disk_cache=1, inst_processors=[]
+    ):
         pass
 
     def __init__(self, provider):
@@ -1198,12 +1197,14 @@ class DatasetURICache(DatasetCache):
     def update(self, cache_uri: Union[str, Path], freq: str = "day"):
         pass
 
-    def _dataset_uri(self, instruments, fields, start_time=None, end_time=None, freq="day", disk_cache=1,
-                     inst_processors=[]):
+    def _dataset_uri(
+        self, instruments, fields, start_time=None, end_time=None, freq="day", disk_cache=1, inst_processors=[]
+    ):
         pass
 
-    def _dataset(self, instruments, fields, start_time=None, end_time=None, freq="day", disk_cache=1,
-                 inst_processors=[]):
+    def _dataset(
+        self, instruments, fields, start_time=None, end_time=None, freq="day", disk_cache=1, inst_processors=[]
+    ):
         pass
 
     def _uri(self, instruments, fields, start_time, end_time, freq, disk_cache=1, inst_processors=[], **kwargs):

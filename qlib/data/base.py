@@ -23,6 +23,7 @@ class Expression(abc.ABC):
 
         - period time is designed for Point-in-time database.  For example, the period time maybe 2014Q4, its value can observe for multiple times(different value may be observed at different time due to amendment).
     """
+
     def __init__(self):
         self.__cs_dependant_level = -1
 

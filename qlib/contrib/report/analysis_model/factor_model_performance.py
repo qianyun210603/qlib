@@ -328,7 +328,7 @@ def _pred_autocorr(pred_label: pd.DataFrame, lag=1, **kwargs) -> tuple:
             xaxis=dict(tickangle=45, rangebreaks=kwargs.get("rangebreaks", guess_plotly_rangebreaks(_df.index))),
         ),
     ).figure
-    return ac_figure,
+    return (ac_figure,)
 
 
 def _pred_turnover(pred_label: pd.DataFrame, N=5, lag=1, **kwargs) -> tuple:
@@ -359,7 +359,7 @@ def _pred_turnover(pred_label: pd.DataFrame, N=5, lag=1, **kwargs) -> tuple:
             xaxis=dict(tickangle=45, rangebreaks=kwargs.get("rangebreaks", guess_plotly_rangebreaks(r_df.index))),
         ),
     ).figure
-    return turnover_figure,
+    return (turnover_figure,)
 
 
 def ic_figure(ic_df: pd.DataFrame, show_nature_day=True, **kwargs) -> go.Figure:

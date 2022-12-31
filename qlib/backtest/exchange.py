@@ -201,10 +201,11 @@ class Exchange:
 
         self.instrument_info = {}
         dpm_uri = C.dpm.get_data_uri(C.DEFAULT_FREQ)
-        if C.dpm.get_uri_type(dpm_uri) == 'local':
-            instrument_info_path = dpm_uri.joinpath('contract_specs')
+        if C.dpm.get_uri_type(dpm_uri) == "local":
+            instrument_info_path = dpm_uri.joinpath("contract_specs")
             if instrument_info_path.exists():
                 import pickle
+
                 self.instrument_info.update(
                     {p.stem.upper(): pickle.load(open(p, "rb")) for p in instrument_info_path.glob("*.pkl")}
                 )
@@ -222,6 +223,9 @@ class Exchange:
             disk_cache=True,
         )
         self.quote_df.columns = self.all_fields
+        if not C.get("ohlc_adjust", True):
+            self.quote_df["$close"] = self.quote_df["$close"] * self.quote_df["$factor"]
+            self.quote_df["$volume"] = self.quote_df["$volume"] / self.quote_df["$factor"]
 
         # check buy_price data and sell_price data
         for attr in ("buy_price", "sell_price"):

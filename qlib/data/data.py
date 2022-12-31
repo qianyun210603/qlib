@@ -557,14 +557,16 @@ class DatasetProvider(abc.ABC):
     @staticmethod
     def _analysis_features(column_names):
         normalize_column_names = normalize_cache_fields(column_names)
+
         def _parse_col_name(field):
             feature_instance = ExpressionD.get_expression_instance(field)
             return field, feature_instance, feature_instance.get_extended_window_size(), 0
+
         feature_queue = deque(_parse_col_name(field) for field in reversed(normalize_column_names))
         all_sub_features = {}
         cs_level_summary = {}
         feature_extended_windows = {}
-        while len(feature_queue)>0:
+        while len(feature_queue) > 0:
             this_feature_name, this_feature, extended_window, this_cs_level = feature_queue.pop()
             cs_level_summary.setdefault(this_cs_level, {})[this_feature_name] = this_feature
             all_sub_features.setdefault(str(this_feature), set()).add(this_cs_level)
@@ -580,7 +582,6 @@ class DatasetProvider(abc.ABC):
 
         return normalize_column_names, cs_level_summary, level_shared_features, feature_extended_windows
 
-
     @staticmethod
     def dataset_processor(instruments_d, column_names, start_time, end_time, freq, inst_processors=[]):
         """
@@ -588,8 +589,12 @@ class DatasetProvider(abc.ABC):
         - default using multi-kernel method.
 
         """
-        normalize_column_names, cs_level_summary, level_shared_features, feature_extended_windows = \
-            DatasetProvider._analysis_features(column_names)
+        (
+            normalize_column_names,
+            cs_level_summary,
+            level_shared_features,
+            feature_extended_windows,
+        ) = DatasetProvider._analysis_features(column_names)
         # One process for one task, so that the memory will be freed quicker.
         workers = max(min(C.get_kernels(freq), len(instruments_d)), 1)
 
@@ -597,7 +602,7 @@ class DatasetProvider(abc.ABC):
         if isinstance(instruments_d, dict):
             if not (start_time is None and end_time is None):
                 for inst in list(instruments_d):
-                    spans = [s for s in instruments_d[inst] if start_time<=s[1] and s[0]<=end_time]
+                    spans = [s for s in instruments_d[inst] if start_time <= s[1] and s[0] <= end_time]
                     if not spans:
                         del instruments_d[inst]
                     else:
@@ -610,44 +615,64 @@ class DatasetProvider(abc.ABC):
         ts_cache = {}
         cs_cache = {}
         shared_mgr = None
-        if C['joblib_backend'] == "multiprocessing":
+        if C["joblib_backend"] == "multiprocessing":
             shared_mgr = multiprocessing.Manager()
             shared_data_cache = shared_mgr.dict()
 
         for dep_level in sorted(cs_level_summary, reverse=True)[:-1]:
             expressions = cs_level_summary[dep_level]
             level_shared_feature = level_shared_features.get(dep_level, set())
-            cache_task_l = [delayed(DatasetProvider.load_cache)(
-                inst, start_time=start_time, end_time=end_time, freq=freq, expressions=expressions,
-                feature_extended_windows=feature_extended_windows, g_config=C,
-                population=instruments_d, cache_data={**ts_cache.get(inst, {}), **cs_cache},
-                shared_cache = shared_data_cache
-            ) for inst, _ in it]
+            cache_task_l = [
+                delayed(DatasetProvider.load_cache)(
+                    inst,
+                    start_time=start_time,
+                    end_time=end_time,
+                    freq=freq,
+                    expressions=expressions,
+                    feature_extended_windows=feature_extended_windows,
+                    g_config=C,
+                    population=instruments_d,
+                    cache_data={**ts_cache.get(inst, {}), **cs_cache},
+                    shared_cache=shared_data_cache,
+                )
+                for inst, _ in it
+            ]
             cs_cache.clear()
             shared_data_cache.clear()
-            result = ParallelExt(
-                n_jobs=workers, backend=C.joblib_backend, maxtasksperchild=C.maxtasksperchild
-            )(cache_task_l)
+            result = ParallelExt(n_jobs=workers, backend=C.joblib_backend, maxtasksperchild=C.maxtasksperchild)(
+                cache_task_l
+            )
             for inst_cache in result:
                 for k, v in inst_cache.items():
                     if k[0] in expressions:
-                        if C['joblib_backend'] == "multiprocessing":
+                        if C["joblib_backend"] == "multiprocessing":
                             shared_data_cache[k] = v
                         else:
                             cs_cache[k] = v
                     elif k[0] in level_shared_feature:
                         ts_cache.setdefault(k[1], {})[k[0]] = v
 
-        get_module_logger('data').info("prepare cache done")
         inst_l, task_l = zip(
-            *list((
-                inst,
-                delayed(DatasetProvider.inst_calculator)(
-                    inst, start_time=start_time, end_time=end_time, freq=freq, column_names=normalize_column_names,
-                    expressions=cs_level_summary[0], spans=spans, g_config=C, inst_processors=inst_processors, population=instruments_d,
-                    cache_data={**ts_cache.get(inst, {}), **cs_cache}, shared_cache = shared_data_cache
+            *list(
+                (
+                    inst,
+                    delayed(DatasetProvider.inst_calculator)(
+                        inst,
+                        start_time=start_time,
+                        end_time=end_time,
+                        freq=freq,
+                        column_names=normalize_column_names,
+                        expressions=cs_level_summary[0],
+                        spans=spans,
+                        g_config=C,
+                        inst_processors=inst_processors,
+                        population=instruments_d,
+                        cache_data={**ts_cache.get(inst, {}), **cs_cache},
+                        shared_cache=shared_data_cache,
+                    ),
                 )
-            ) for inst, spans in it)
+                for inst, spans in it
+            )
         )
 
         data = dict(
@@ -657,7 +682,7 @@ class DatasetProvider(abc.ABC):
             )
         )
 
-        if C['joblib_backend'] == "multiprocessing":
+        if C["joblib_backend"] == "multiprocessing":
             del shared_data_cache
             shared_mgr.shutdown()
 
@@ -680,8 +705,17 @@ class DatasetProvider(abc.ABC):
 
     @staticmethod
     def load_cache(
-        inst, start_time, end_time, freq, expressions, feature_extended_windows={}, g_config=None, population={},
-        shared_features=set(), cache_data=None, shared_cache=None
+        inst,
+        start_time,
+        end_time,
+        freq,
+        expressions,
+        feature_extended_windows={},
+        g_config=None,
+        population={},
+        shared_features=set(),
+        cache_data=None,
+        shared_cache=None,
     ):
 
         C.register_from_C(g_config)
@@ -691,10 +725,9 @@ class DatasetProvider(abc.ABC):
             H.create_shared_cache(shared_cache)
         for field, expression in expressions.items():
             #  The client does not have expression provider, the data will be loaded from cache using static method.
-            for ext_windows in feature_extended_windows.get(str(expression), {(0,0)}):
+            for ext_windows in feature_extended_windows.get(str(expression), {(0, 0)}):
                 ExpressionD.expression(
-                    inst, expression, start_time, end_time, freq, instrument_d=population,
-                    extend_windows=ext_windows
+                    inst, expression, start_time, end_time, freq, instrument_d=population, extend_windows=ext_windows
                 )
 
         obj = {}
@@ -705,8 +738,18 @@ class DatasetProvider(abc.ABC):
 
     @staticmethod
     def inst_calculator(
-        inst, start_time, end_time, freq, column_names, expressions, spans=None, g_config=None, inst_processors=(),
-        population={}, cache_data=None, shared_cache=None
+        inst,
+        start_time,
+        end_time,
+        freq,
+        column_names,
+        expressions,
+        spans=None,
+        g_config=None,
+        inst_processors=(),
+        population={},
+        cache_data=None,
+        shared_cache=None,
     ):
         """
         Calculate the expressions for **one** instrument, return a df result.
@@ -719,7 +762,7 @@ class DatasetProvider(abc.ABC):
         # NOTE: This place is compatible with windows, windows multi-process is spawn
         C.register_from_C(g_config)
         if cache_data is not None:
-            H['f'].update(cache_data)
+            H["f"].update(cache_data)
 
         if shared_cache is not None:
             H.create_shared_cache(shared_cache)
@@ -727,7 +770,9 @@ class DatasetProvider(abc.ABC):
         obj = dict()
         for field in column_names:
             #  The client does not have expression provider, the data will be loaded from cache using static method.
-            obj[field] = ExpressionD.expression(inst, expressions[field], start_time, end_time, freq, instrument_d=population)
+            obj[field] = ExpressionD.expression(
+                inst, expressions[field], start_time, end_time, freq, instrument_d=population
+            )
 
         data = pd.DataFrame(obj)
         if not data.empty and not np.issubdtype(data.index.dtype, np.dtype("M")):
@@ -960,8 +1005,7 @@ class LocalExpressionProvider(ExpressionProvider):
         self.time2idx = time2idx
 
     def expression(
-            self, instrument, expression, start_time=None, end_time=None, freq="day", instrument_d={},
-            extend_windows=(0, 0)
+        self, instrument, expression, start_time=None, end_time=None, freq="day", instrument_d={}, extend_windows=(0, 0)
     ):
         if isinstance(expression, str):
             expression = self.get_expression_instance(expression)
@@ -1034,16 +1078,7 @@ class LocalDatasetProvider(DatasetProvider):
         super().__init__()
         self.align_time = align_time
 
-    def dataset(
-        self,
-        instruments,
-        fields,
-        start_time=None,
-        end_time=None,
-        freq="day",
-        inst_processors=[],
-        **_
-    ):
+    def dataset(self, instruments, fields, start_time=None, end_time=None, freq="day", inst_processors=[], **_):
         instruments_d = self.get_instruments_d(instruments, freq)
         column_names = self.get_column_names(fields)
         if self.align_time:
@@ -1182,7 +1217,7 @@ class ClientDatasetProvider(DatasetProvider):
         freq="day",
         return_uri=False,
         inst_processors=[],
-        **kwargs
+        **kwargs,
     ):
         disk_cache = kwargs.pop("disk_cache", 0)
         if Inst.get_inst_type(instruments) == Inst.DICT:
@@ -1330,13 +1365,14 @@ class BaseProvider:
         disk_cache = C.default_disk_cache if disk_cache is None else disk_cache
         fields = list(fields)  # In case of tuple.
         try:
-            return DatasetD.dataset(instruments, fields, start_time, end_time, freq, inst_processors=inst_processors, disk_cache=disk_cache)
+            return DatasetD.dataset(
+                instruments, fields, start_time, end_time, freq, inst_processors=inst_processors, disk_cache=disk_cache
+            )
         except TypeError:
             return DatasetD.dataset(instruments, fields, start_time, end_time, freq, inst_processors=inst_processors)
 
 
 class LocalProvider(BaseProvider):
-
     @staticmethod
     def _uri(type_, **kwargs):
         """_uri

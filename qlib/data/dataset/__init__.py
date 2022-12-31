@@ -1,5 +1,5 @@
 from ...utils.serial import Serializable
-from typing import Callable, Union, List, Tuple, Dict, Text, Optional, Sequence
+from typing import Callable, Union, List, Tuple, Dict, Text, Optional, Sequence, Iterable
 from ...utils import init_instance_by_config, np_ffill, time_to_slc_point
 from ...log import get_module_logger
 from .handler import DataHandler, DataHandlerLP
@@ -291,16 +291,16 @@ class TSDataSampler:
 
 
     Indices design:
-        TSDataSampler has a index mechanism to help users query time-series data efficiently.
+        TSDataSampler has an index mechanism to help users query time-series data efficiently.
 
         The definition of related variables:
             data_arr: np.ndarray
-                The original data. it will contains all the original data.
+                The original data. it will contain all the original data.
                 The querying are often for time-series of a specific stock.
                 By leveraging this data charactoristics to speed up querying, the multi-index of data_arr is rearranged in (instrument, datetime) order
 
             data_index: pd.MultiIndex with index order <instrument, datetime>
-                it has the same shape with `idx_map`. Each elements of them are expected to be aligned.
+                it has the same shape with `idx_map`. Each element of them are expected to be aligned.
 
             idx_map: np.ndarray
                 It is the indexable data. It originates from data_arr, and then filtered by 1) `start` and `end`  2) `flt_data`
@@ -322,7 +322,7 @@ class TSDataSampler:
             idx_df: pd.DataFrame
                 It aims to map the <datetime, instrument> key to the original position in data_arr
 
-                For example, it may look like (NOTE: the index for a instrument time-series is continoues in memory)
+                For example, it may look like (NOTE: the index for an instrument time-series is continoues in memory)
 
                     instrument SH600000 SH600008 SH600009 SH600010 SH600011 SH600015  ...
                     datetime
@@ -415,7 +415,7 @@ class TSDataSampler:
                 assert len(flt_data.columns) == 1
                 flt_data = flt_data.iloc[:, 0]
             # NOTE: bool(np.nan) is True !!!!!!!!
-            # make sure reindex comes first. Otherwise extra NaN may appear.
+            # make sure reindex comes first. Otherwise, extra NaN may appear.
             flt_data = flt_data.swaplevel()
             flt_data = flt_data.reindex(self.data_index).fillna(False).astype(np.bool)
             self.flt_data = flt_data.values
@@ -455,7 +455,7 @@ class TSDataSampler:
         # The arr_map is expected to behave the same as idx_map
 
         dtype = np.int32
-        # set a index out of bound to indicate the none existing
+        # set an index out of bound to indicate the none existing
         no_existing_idx = (np.iinfo(dtype).max, np.iinfo(dtype).max)
 
         max_idx = max(idx_map.keys())
@@ -517,7 +517,7 @@ class TSDataSampler:
                 2017-01-06        3      245      476      720      NaN      977  ...
             2) the second element:  {<original index>: <row, col>}
         """
-        # object incase of pandas converting int to float
+        # object in case of pandas converting int to float
         idx_df = pd.Series(range(data.shape[0]), index=data.index, dtype=object)
         idx_df = lazy_sort_index(idx_df.unstack())
         # NOTE: the correctness of `__getitem__` depends on columns sorted here
@@ -577,7 +577,7 @@ class TSDataSampler:
         Tuple[int]:
             the row and col index
         """
-        # The the right row number `i` and col number `j` in idx_df
+        # The right row number `i` and col number `j` in idx_df
         if isinstance(idx, (int, np.integer)):
             real_idx = idx
             if 0 <= real_idx < len(self.idx_map):
@@ -598,7 +598,7 @@ class TSDataSampler:
     def __getitem__(self, idx: Union[int, Tuple[object, str], List[int]]):
         """
         # We have two method to get the time-series of a sample
-        tsds is a instance of TSDataSampler
+        tsds is an instance of TSDataSampler
 
         # 1) sample by int index directly
         tsds[len(tsds) - 1]
@@ -649,7 +649,7 @@ class TSDatasetH(DatasetH):
 
     Requirements analysis
 
-    The typical workflow of a user to get time-series data for an sample
+    The typical workflow of a user to get time-series data for a sample
     - process features
     - slice proper data from data handler:  dimension of sample <feature, >
     - Build relation of samples by <time, instrument> index
@@ -685,7 +685,7 @@ class TSDatasetH(DatasetH):
         pad_start = cal[pad_start_idx]
         return slice(pad_start, end)
 
-    def _prepare_seg(self, slc: slice, **kwargs) -> TSDataSampler:
+    def _prepare_seg(self, slc: Union[slice, Iterable], **kwargs) -> TSDataSampler:
         """
         split the _prepare_raw_seg is to leave a hook for data preprocessing before creating processing data
         NOTE: TSDatasetH only support slc segment on datetime !!!

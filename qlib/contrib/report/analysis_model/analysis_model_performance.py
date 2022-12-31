@@ -47,8 +47,18 @@ def _group_return(pred_label: pd.DataFrame = None, reverse: bool = False, N: int
     # Long-Short
     t_df["long-short"] = t_df["Group1"] - t_df["Group%d" % N]
 
-    # Long-Average
-    t_df["long-average"] = t_df["Group1"] - pred_label.groupby(level="datetime")["label"].mean()
+    # Long-benchmark
+    benchmark = kwargs.get("benchmark", "average")
+    if isinstance(benchmark, str) and benchmark == "average":
+        benchmark_name = benchmark
+        benchmark = pred_label.groupby(level="datetime")["label"].mean()
+    elif isinstance(benchmark, pd.Series):
+        benchmark_name = benchmark.name if bool(benchmark.name) else "benchmark"
+        benchmark = benchmark.reindex(t_df.index)
+    else:
+        raise TypeError(f"Invalid benchmark type: {type(benchmark)}")
+    t_df[f"long-{benchmark_name}"] = t_df["Group1"] - benchmark
+    # t_df["long-average"] = t_df["Group1"] - pred_label.groupby(level="datetime")["label"].mean()
 
     t_df = t_df.dropna(how="all")  # for days which does not contain label
     # Cumulative Return By Group
@@ -56,11 +66,11 @@ def _group_return(pred_label: pd.DataFrame = None, reverse: bool = False, N: int
         t_df.cumsum(),
         layout=dict(
             title="Cumulative Return",
-            xaxis=dict(tickangle=45, rangebreaks=kwargs.get("rangebreaks", guess_plotly_rangebreaks(t_df.index)))
-        )
+            xaxis=dict(tickangle=45, rangebreaks=kwargs.get("rangebreaks", guess_plotly_rangebreaks(t_df.index))),
+        ),
     ).figure
 
-    t_df = t_df.loc[:, ["long-short", "long-average"]]
+    t_df = t_df.loc[:, ["long-short", f"long-{benchmark_name}"]]
     _bin_size = float(((t_df.max() - t_df.min()) / 20).min())
     group_hist_figure = SubplotsGraph(
         t_df,
@@ -69,7 +79,7 @@ def _group_return(pred_label: pd.DataFrame = None, reverse: bool = False, N: int
             rows=1,
             cols=2,
             print_grid=False,
-            subplot_titles=["long-short", "long-average"],
+            subplot_titles=["long-short", f"long-{benchmark_name}"],
         ),
     ).figure
 
@@ -114,7 +124,7 @@ def _plot_qq(data: pd.Series = None, dist=stats.norm) -> go.Figure:
     return fig
 
 
-def _pred_ic(pred_label: pd.DataFrame = None, methods: Sequence[str] = ('IC', 'Rank IC'), **kwargs) -> tuple:
+def _pred_ic(pred_label: pd.DataFrame = None, methods: Sequence[str] = ("IC", "Rank IC"), **kwargs) -> tuple:
     """
 
     :param pred_label: pd.DataFrame
@@ -125,15 +135,16 @@ def _pred_ic(pred_label: pd.DataFrame = None, methods: Sequence[str] = ('IC', 'R
     Rank IC is the spearman correlation between label and score
     :return:
     """
-    _methods_mapping = {
-        'IC': 'pearson',
-        'Rank IC': 'spearman'
-    }
-    ic_df = pd.concat([
-        pred_label.groupby(level="datetime").apply(
-            lambda x: x["label"].corr(x['score'], method=_methods_mapping[m])
-        ).rename(m) for m in methods
-    ], axis=1)
+    _methods_mapping = {"IC": "pearson", "Rank IC": "spearman"}
+    ic_df = pd.concat(
+        [
+            pred_label.groupby(level="datetime")
+            .apply(lambda x: x["label"].corr(x["score"], method=_methods_mapping[m]))
+            .rename(m)
+            for m in methods
+        ],
+        axis=1,
+    )
     _ic_df = ic_df.iloc(axis=1)[[0]]
 
     _index = _ic_df.index.get_level_values(0).astype("str").str.replace("-", "").str.slice(0, 6)
@@ -220,9 +231,8 @@ def _pred_autocorr(pred_label: pd.DataFrame, lag=1, **kwargs) -> tuple:
             title="Auto Correlation",
             xaxis=dict(tickangle=45, rangebreaks=kwargs.get("rangebreaks", guess_plotly_rangebreaks(_df.index))),
         ),
-
     ).figure
-    return ac_figure,
+    return (ac_figure,)
 
 
 def _pred_turnover(pred_label: pd.DataFrame, N=5, lag=1, **kwargs) -> tuple:
@@ -253,7 +263,7 @@ def _pred_turnover(pred_label: pd.DataFrame, N=5, lag=1, **kwargs) -> tuple:
             xaxis=dict(tickangle=45, rangebreaks=kwargs.get("rangebreaks", guess_plotly_rangebreaks(r_df.index))),
         ),
     ).figure
-    return turnover_figure,
+    return (turnover_figure,)
 
 
 def ic_figure(ic_df: pd.DataFrame, show_nature_day=True, **kwargs) -> go.Figure:
@@ -287,7 +297,7 @@ def model_performance_graph(
     graph_names: list = ["group_return", "pred_ic", "pred_autocorr", "pred_turnover"],
     show_notebook: bool = True,
     show_nature_day=True,
-    **kwargs
+    **kwargs,
 ) -> [list, tuple]:
     """Model performance
 
@@ -319,13 +329,7 @@ def model_performance_graph(
     figure_list = []
     for graph_name in graph_names:
         fun_res = eval(f"_{graph_name}")(
-            pred_label=pred_label,
-            lag=lag,
-            N=N,
-            reverse=reverse,
-            rank=rank,
-            show_nature_day=show_nature_day,
-            **kwargs
+            pred_label=pred_label, lag=lag, N=N, reverse=reverse, rank=rank, show_nature_day=show_nature_day, **kwargs
         )
         figure_list += fun_res
 

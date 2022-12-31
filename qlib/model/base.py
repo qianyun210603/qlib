@@ -92,7 +92,7 @@ class Model(BaseModel):
         -------
         Prediction results with certain type such as `pandas.Series`.
         """
-        raise NotImplementedError()
+        return None, None
 
 
 class ModelFT(Model):

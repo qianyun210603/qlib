@@ -1,5 +1,6 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
+from functools import partial
 
 import pandas as pd
 
@@ -11,6 +12,7 @@ import matplotlib.pyplot as plt
 from scipy import stats
 
 from typing import Sequence
+from qlib.typehint import Literal
 
 from ..graph import ScatterGraph, SubplotsGraph, BarGraph, HeatmapGraph
 from ..utils import guess_plotly_rangebreaks
@@ -124,31 +126,36 @@ def _plot_qq(data: pd.Series = None, dist=stats.norm) -> go.Figure:
     return fig
 
 
-def _pred_ic(pred_label: pd.DataFrame = None, methods: Sequence[str] = ("IC", "Rank IC"), **kwargs) -> tuple:
+def _pred_ic(
+    pred_label: pd.DataFrame = None, methods: Sequence[Literal["IC", "Rank IC"]] = ("IC", "Rank IC"), **kwargs
+) -> tuple:
     """
 
     :param pred_label: pd.DataFrame
     must contain one column of realized return with name `label` and one column of predicted score names `score`.
-    :param methods: Sequence[{'IC', 'Rank IC'}]
+    :param methods: Sequence[Literal["IC", "Rank IC"]]
     IC series to plot.
     IC is sectional pearson correlation between label and score
     Rank IC is the spearman correlation between label and score
+    For the Monthly IC, IC histogram, IC Q-Q plot.  Only the first type of IC will be plotted.
     :return:
     """
     _methods_mapping = {"IC": "pearson", "Rank IC": "spearman"}
+
+    def _corr_series(x, method):
+        return x["label"].corr(x["score"], method=method)
+
     ic_df = pd.concat(
         [
-            pred_label.groupby(level="datetime")
-            .apply(lambda x: x["label"].corr(x["score"], method=_methods_mapping[m]))
-            .rename(m)
+            pred_label.groupby(level="datetime").apply(partial(_corr_series, method=_methods_mapping[m])).rename(m)
             for m in methods
         ],
         axis=1,
     )
-    _ic_df = ic_df.iloc(axis=1)[[0]]
+    _ic = ic_df.iloc(axis=1)[0]
 
-    _index = _ic_df.index.get_level_values(0).astype("str").str.replace("-", "").str.slice(0, 6)
-    _monthly_ic = _ic_df.groupby(_index).mean()
+    _index = _ic.index.get_level_values(0).astype("str").str.replace("-", "").str.slice(0, 6)
+    _monthly_ic = _ic.groupby(_index).mean()
     _monthly_ic.index = pd.MultiIndex.from_arrays(
         [_monthly_ic.index.str.slice(0, 4), _monthly_ic.index.str.slice(4, 6)],
         names=["year", "month"],
@@ -175,18 +182,19 @@ def _pred_ic(pred_label: pd.DataFrame = None, methods: Sequence[str] = ("IC", "R
 
     ic_heatmap_figure = HeatmapGraph(
         _monthly_ic.unstack(),
-        layout=dict(title="Monthly IC", yaxis=dict(tickformat=",d")),
+        layout=dict(title="Monthly IC", xaxis=dict(dtick=1), yaxis=dict(tickformat="04d", dtick=1)),
         graph_kwargs=dict(xtype="array", ytype="array"),
     ).figure
 
     dist = stats.norm
-    _qqplot_fig = _plot_qq(_ic_df.iloc(axis=1)[0], dist)
+    _qqplot_fig = _plot_qq(_ic, dist)
 
     if isinstance(dist, stats.norm.__class__):
         dist_name = "Normal"
     else:
         dist_name = "Unknown"
 
+    _ic_df = _ic.to_frame("IC")
     _bin_size = ((_ic_df.max() - _ic_df.min()) / 20).min()
     _sub_graph_data = [
         (
@@ -208,7 +216,7 @@ def _pred_ic(pred_label: pd.DataFrame = None, methods: Sequence[str] = ("IC", "R
             rows=1,
             cols=2,
             print_grid=False,
-            subplot_titles=["IC Hist", "IC %s Dist. Q-Q" % dist_name],
+            subplot_titles=["IC", "IC %s Dist. Q-Q" % dist_name],
         ),
         sub_graph_data=_sub_graph_data,
         layout=dict(
@@ -267,11 +275,11 @@ def _pred_turnover(pred_label: pd.DataFrame, N=5, lag=1, **kwargs) -> tuple:
 
 
 def ic_figure(ic_df: pd.DataFrame, show_nature_day=True, **kwargs) -> go.Figure:
-    """IC figure
+    r"""IC figure
 
     :param ic_df: ic DataFrame
     :param show_nature_day: whether to display the abscissa of non-trading day
-    :param **kwargs: contains some parameters to control plot style in plotly. Currently, supports
+    :param \*\*kwargs: contains some parameters to control plot style in plotly. Currently, supports
        - `rangebreaks`: https://plotly.com/python/time-series/#Hiding-Weekends-and-Holidays
     :return: plotly.graph_objs.Figure
     """
@@ -294,12 +302,12 @@ def model_performance_graph(
     N: int = 5,
     reverse=False,
     rank=False,
-    graph_names: list = ["group_return", "pred_ic", "pred_autocorr", "pred_turnover"],
+    graph_names: list = ["group_return", "pred_ic", "pred_autocorr"],
     show_notebook: bool = True,
-    show_nature_day=True,
+    show_nature_day: bool = False,
     **kwargs,
 ) -> [list, tuple]:
-    """Model performance
+    r"""Model performance
 
     :param pred_label: index is **pd.MultiIndex**, index name is **[instrument, datetime]**; columns names is **[score, label]**.
            It is usually same as the label of model training(e.g. "Ref($close, -2)/Ref($close, -1) - 1").
@@ -322,7 +330,7 @@ def model_performance_graph(
     :param graph_names: graph names; default ['cumulative_return', 'pred_ic', 'pred_autocorr', 'pred_turnover'].
     :param show_notebook: whether to display graphics in notebook, the default is `True`.
     :param show_nature_day: whether to display the abscissa of non-trading day.
-    :param **kwargs: contains some parameters to control plot style in plotly. Currently, supports
+    :param \*\*kwargs: contains some parameters to control plot style in plotly. Currently, supports
        - `rangebreaks`: https://plotly.com/python/time-series/#Hiding-Weekends-and-Holidays
     :return: if show_notebook is True, display in notebook; else return `plotly.graph_objs.Figure` list.
     """

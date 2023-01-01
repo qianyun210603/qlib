@@ -20,7 +20,7 @@ import fire
 import numpy as np
 import pandas as pd
 from loguru import logger
-logger.add("rqdata2qlib.log", rotation="12:00")
+logger.add("rqdata2qlib.log", rotation="1 MB")
 
 from qlib.utils import code_to_fname
 
@@ -336,6 +336,12 @@ class RqdataNormalize(BaseNormalize):
     ]
     DAILY_FORMAT = "%Y-%m-%d"
 
+    def __init__(
+            self, date_field_name: str = "date", symbol_field_name: str = "symbol", ohlc_adjust: bool = True, **kwargs
+    ):
+        self.ohlc_adjust = ohlc_adjust
+        super(RqdataNormalize, self).__init__(date_field_name, symbol_field_name, **kwargs)
+
     @staticmethod
     def calc_change(df: pd.DataFrame, last_close: float) -> pd.Series:
         df = df.copy()
@@ -380,9 +386,9 @@ class RqdataNormalize(BaseNormalize):
         # exclude index
         if 'closestock' in df.columns:
             df["vwapstock"] = df["moneystock"] / df["volumestock"]
+            df["rawclosestock"] = df.closestock
             # adjust ohlc by split and dividends
             if ohlc_adjust:
-                df["adjclosestock"] = df.closestock
                 df[['openstock', 'highstock', 'lowstock', 'closestock', "vwapstock"]] = df[
                     ['openstock', 'highstock', 'lowstock', 'closestock', "vwapstock"]].multiply(df.factorstock, axis=0)
 
@@ -409,7 +415,7 @@ class RqdataNormalize(BaseNormalize):
 
     def normalize(self, df: pd.DataFrame) -> pd.DataFrame:
         # normalize
-        df = self.normalize_rqdata(df, self._calendar_list)
+        df = self.normalize_rqdata(df, self._calendar_list, ohlc_adjust=self.ohlc_adjust)
         return df
 
     @staticmethod
@@ -418,7 +424,10 @@ class RqdataNormalize(BaseNormalize):
 
 
 class Run(BaseRun):
-    def __init__(self, source_dir=None, normalize_dir=None, max_workers=None, interval="1d", config_file=None):
+    def __init__(
+            self, source_dir=None, normalize_dir=None, max_workers=None, interval="1d",
+            ohlc_adjust=None, config_file=None
+    ):
         """
 
         Parameters
@@ -432,6 +441,8 @@ class Run(BaseRun):
             Concurrent number, default is 1; when collecting data, it is recommended that max_workers be set to 1
         interval: str
             freq, value from [1min, 1d], default 1d
+        ohlc_adjust: bool
+            if adjust price/volume by split and dividend
         config_file: Path
             config file path
         """
@@ -444,6 +455,7 @@ class Run(BaseRun):
             with open(config_file) as f:
                 self.config.update(yaml.safe_load(f))
 
+        self.ohlc_adjust = ohlc_adjust if ohlc_adjust is not None else self.config.get('ohlc_adjust', True)
         source_dir = source_dir if source_dir is not None else self.config.get('source_dir', None)
         normalize_dir = normalize_dir if normalize_dir is not None else self.config.get('normalize_dir', None)
         max_workers = max_workers if max_workers is not None else self.config.get('max_workers', None)
@@ -543,6 +555,7 @@ class Run(BaseRun):
             target_dir=self.normalize_dir,
             normalize_class=_class,
             max_workers=self.max_workers,
+            ohlc_adjust=self.ohlc_adjust
         )
         yc.normalize()
 
@@ -661,20 +674,3 @@ class Run(BaseRun):
 
 if __name__ == "__main__":
     fire.Fire(Run)
-
-    # runner = Run(
-    #     source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert\source",
-    #     normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert\normalize",
-    #     max_workers=12
-    # )
-    # today = pd.Timestamp.now().normalize()
-    # runner.update_data_to_bin(
-    #     qlib_data_1d_dir=r"/home/booksword/traderesearch/qlib_data/rqdata_convert",
-    #     trading_date=pd.Timestamp("2010-01-01"), end_date=today.strftime("%Y-%m-%d")
-    # )
-    #
-    # runner.update_data_to_bin(
-    #     qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_convert",
-    #     trading_date=(today - pd.Timedelta(days=7)).strftime("%Y-%m-%d"), end_date=today.strftime("%Y-%m-%d"),
-    #     check_data_length=2
-    # )

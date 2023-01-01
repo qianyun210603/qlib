@@ -311,6 +311,7 @@ class RqdataNormalize(BaseNormalize):
             df = df.reindex(index_from_cal)
 
         df["vwap"] = df['money'] / df['volume']
+        df["rawclose"] = df.close
         if ohlc_adjust:
             # adjust ohlc by split and dividends
             df[["open", "close", "high", "low", 'vwap']] = df[["open", "close", "high", "low", 'vwap']]\
@@ -335,7 +336,10 @@ class RqdataNormalize(BaseNormalize):
 
 
 class Run(BaseRun):
-    def __init__(self, source_dir=None, normalize_dir=None, max_workers=None, interval="1d", config_file=None):
+    def __init__(
+            self, source_dir=None, normalize_dir=None, max_workers=None, interval="1d", ohlc_adjust=None,
+            config_file=None
+    ):
         """
 
         Parameters
@@ -349,6 +353,8 @@ class Run(BaseRun):
             Concurrent number, default is 1; when collecting data, it is recommended that max_workers be set to 1
         interval: str
             freq, value from [1min, 1d], default 1d
+        ohlc_adjust: bool
+            if adjust price/volume by split and dividend
         config_file: Path
             config file path
          """
@@ -360,6 +366,7 @@ class Run(BaseRun):
         if config_file.exists():
             with open(config_file) as f:
                 self.config.update(yaml.safe_load(f))
+        self.ohlc_adjust = ohlc_adjust if ohlc_adjust is not None else self.config.get('ohlc_adjust', True)
         source_dir = source_dir if source_dir is not None else self.config.get('source_dir', None)
         normalize_dir = normalize_dir if normalize_dir is not None else self.config.get('normalize_dir', None)
         max_workers = max_workers if max_workers is not None else self.config.get('max_workers', None)
@@ -425,7 +432,6 @@ class Run(BaseRun):
     def normalize_data(
         self,
         qlib_data_1d_dir: str = None,
-        ohlc_adjust: bool = True,
     ):
         """normalize data
 
@@ -461,7 +467,7 @@ class Run(BaseRun):
             target_dir=self.normalize_dir,
             normalize_class=_class,
             max_workers=self.max_workers,
-            ohlc_adjust=ohlc_adjust
+            ohlc_adjust=self.ohlc_adjust,
         )
         yc.normalize()
 
@@ -471,7 +477,6 @@ class Run(BaseRun):
         trading_date: str = None,
         end_date: str = None,
         check_data_length: int = -1,
-        ohlc_adjust: bool = True
     ):
         """update Rqdata data to bin
 
@@ -535,7 +540,7 @@ class Run(BaseRun):
         )
 
         # normalize data
-        self.normalize_data(qlib_data_1d_dir, ohlc_adjust=ohlc_adjust)
+        self.normalize_data(qlib_data_1d_dir)
 
         qlib_dir = Path(qlib_data_1d_dir).expanduser().resolve()
         # dump bin

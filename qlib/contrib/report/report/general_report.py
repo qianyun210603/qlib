@@ -110,13 +110,16 @@ def generate_full_report_for_recorder(
 if __name__ == "__main__":
     import qlib
     from qlib.config import C
+    from qlib.data import D
     from qlib.constant import REG_CN
 
     exp_mgr = C["exp_manager"]
-    exp_mgr["kwargs"]["uri"] = "file:" + r"D:\Documents/TradeResearch/Stock/qlibmodels/run_all_model_records"
+    exp_mgr["kwargs"]["uri"] = 'file:'+r"D:\Documents/TradeResearch/Stock/qlibmodels/all_model_Alpha101_csi500"
     provider_uri = r"D:\Documents\TradeResearch\qlib_test\rqdata"
     qlib.init(provider_uri=provider_uri, region=REG_CN, exp_manager=exp_mgr)
 
-    my_html = generate_full_report_for_recorder(exp_name="LightGBM", recorder_id="84c129c0f1104a4da45792660316c9ac")
+    bench_price = D.features(["SH000905"], ['$close'], start_time='2018-12-20', end_time='2022-10-31', freq='day')
+    bench_ret = bench_price.loc['SH000905', '$close'] / bench_price.loc['SH000905', '$close'].shift(1) - 1
+    my_html = generate_full_report_for_recorder(exp_name="LightGBM", recorder_id="e0e7c34fd7284f1ea37d976d7bc514d4")
     with open(r"E:\test_qlib_perf_report.html", "w") as f:
         f.write(my_html)

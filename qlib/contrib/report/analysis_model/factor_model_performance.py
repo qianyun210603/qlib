@@ -249,11 +249,11 @@ def _pred_ic(pred_label: pd.DataFrame = None, rank: bool = False, **kwargs) -> t
 
     _ic_df = ic.to_frame("ic")
     ic_bar_figure = ic_figure(_ic_df, kwargs.get("show_nature_day", True))
-
+    _monthly_ic_abs_max = _monthly_ic.abs().max()
     ic_heatmap_figure = HeatmapGraph(
         _monthly_ic.unstack(),
         layout=dict(title="Monthly IC", yaxis=dict(tickformat=",d")),
-        graph_kwargs=dict(xtype="array", ytype="array"),
+        graph_kwargs=dict(xtype="array", ytype="array", zmin=-_monthly_ic_abs_max, zmax=_monthly_ic_abs_max),
     ).figure
 
     def _cal_statistic_ic(s):

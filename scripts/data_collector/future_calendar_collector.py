@@ -14,6 +14,8 @@ import pandas as pd
 import baostock as bs
 from loguru import logger
 
+import exchange_calendars as xcal
+
 
 class CollectorFutureCalendar:
     calendar_format = "%Y-%m-%d"
@@ -82,7 +84,13 @@ class CollectorFutureCalendarCN(CollectorFutureCalendar):
             data_list.append(rs.get_row_data())
         calendar = pd.DataFrame(data_list, columns=rs.fields)
         calendar["is_trading_day"] = calendar["is_trading_day"].astype(int)
-        return pd.to_datetime(calendar[calendar["is_trading_day"] == 1]["calendar_date"]).to_list()
+        trading_dates = pd.to_datetime(calendar[calendar["is_trading_day"] == 1]["calendar_date"]).to_list()
+        if trading_dates[-1] - pd.Timestamp.now().normalize() < pd.Timedelta(60):
+            cal = xcal.get_calendar('XSHG')
+            trading_dates += cal.sessions_in_range(
+                trading_dates[-1] + pd.Timedelta(days=1), pd.Timestamp.now().normalize() + pd.Timedelta(days=60)
+            ).to_list()
+        return trading_dates
 
 
 class CollectorFutureCalendarUS(CollectorFutureCalendar):

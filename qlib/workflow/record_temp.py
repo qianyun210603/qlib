@@ -420,6 +420,7 @@ class PortAnaRecord(ACRecordTemp):
         risk_analysis_freq: Union[List, str] = None,
         indicator_analysis_freq: Union[List, str] = None,
         indicator_analysis_method=None,
+        verbose=True,
         skip_existing=False,
     ):
         """
@@ -435,6 +436,8 @@ class PortAnaRecord(ACRecordTemp):
             indicator analysis freq of report
         indicator_analysis_method : str, optional, default by None
             the candidate values include 'mean', 'amount_weighted', 'value_weighted'
+        verbose: bool
+            if print out summary in console
         """
         super().__init__(recorder=recorder, skip_existing=skip_existing)
 
@@ -494,6 +497,8 @@ class PortAnaRecord(ACRecordTemp):
             "{0}{1}".format(*Freq.parse(_analysis_freq)) for _analysis_freq in indicator_analysis_freq
         ]
         self.indicator_analysis_method = indicator_analysis_method
+
+        self.verbose = verbose
 
     def _get_report_freq(self, executor_config):
         ret_freq = []
@@ -558,12 +563,13 @@ class PortAnaRecord(ACRecordTemp):
                     f"Portfolio analysis record 'port_analysis_{_analysis_freq}.pkl' has been saved as the artifact of the Experiment {self.recorder.experiment_id}"
                 )
                 # print out results
-                pprint(f"The following are analysis results of benchmark return({_analysis_freq}).")
-                pprint(risk_analysis(report_normal["bench"], freq=_analysis_freq))
-                pprint(f"The following are analysis results of the excess return without cost({_analysis_freq}).")
-                pprint(analysis["excess_return_without_cost"])
-                pprint(f"The following are analysis results of the excess return with cost({_analysis_freq}).")
-                pprint(analysis["excess_return_with_cost"])
+                if self.verbose:
+                    pprint(f"The following are analysis results of benchmark return({_analysis_freq}).")
+                    pprint(risk_analysis(report_normal["bench"], freq=_analysis_freq))
+                    pprint(f"The following are analysis results of the excess return without cost({_analysis_freq}).")
+                    pprint(analysis["excess_return_without_cost"])
+                    pprint(f"The following are analysis results of the excess return with cost({_analysis_freq}).")
+                    pprint(analysis["excess_return_with_cost"])
 
         for _analysis_freq in self.indicator_analysis_freq:
             if _analysis_freq not in indicator_dict:
@@ -582,8 +588,9 @@ class PortAnaRecord(ACRecordTemp):
                 logger.info(
                     f"Indicator analysis record 'indicator_analysis_{_analysis_freq}.pkl' has been saved as the artifact of the Experiment {self.recorder.experiment_id}"
                 )
-                pprint(f"The following are analysis results of indicators({_analysis_freq}).")
-                pprint(analysis_df)
+                if self.verbose:
+                    pprint(f"The following are analysis results of indicators({_analysis_freq}).")
+                    pprint(analysis_df)
 
     def list(self):
         list_path = []

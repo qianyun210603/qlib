@@ -402,7 +402,7 @@ class Position(BasePosition):
                     f"@ {trade_start_time.isoformat()} - {trade_end_time.isoformat()}"
                 )
 
-            if trade_start_time >= min(inst_info.maturity_date, inst_info.call_date):
+            if trade_end_time >= min(inst_info.maturity_date, inst_info.call_date):
                 self._del_stock(stock_id)
                 get_module_logger("position").debug(f"{stock_id}: matured/called @ {trade_start_time.isoformat()}")
 

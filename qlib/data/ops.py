@@ -1809,12 +1809,12 @@ class PairRolling(ExpressionOps):
             if factor.isna().all():
                 factor = 1.0
         if isinstance(self.feature_left, Expression):
-            series_left: pd.Series = self.feature_left.load(instrument, start_index, end_index, *args)
+            series_left = self.feature_left.load(instrument, start_index, end_index, *args)
             series_left = series_left * factor**self.feature_left.adjust_status
         else:
             series_left = self.feature_left  # numeric value
         if isinstance(self.feature_right, Expression):
-            series_right: pd.Series = self.feature_right.load(instrument, start_index, end_index, *args)
+            series_right = self.feature_right.load(instrument, start_index, end_index, *args)
             series_right = series_right * factor**self.feature_right.adjust_status
         else:
             series_right = self.feature_right
@@ -1934,22 +1934,21 @@ class XSectionOperator(ElemOperator):
         from .cache import H  # pylint: disable=C0415
 
         cache_key = str(self), instrument, start_index, end_index, *args
-        if not cache_key in H["fs"]:
-            cond_status = H["fs"].cond.acquire(block=False)
-            if cond_status:
-                # get_module_logger('data').info(f"calculating: {str(self)}")
+        if cache_key not in H["fs"]:
+            H["fs"].lock.acquire()
+            # get_module_logger(self.__class__.__name__).info(f"Acquiring cond {id(H['fs'].cond)} {cond_status}")
+            if cache_key not in H["fs"]:
+                get_module_logger(self.__class__.__name__).info(f"calculating: {str(self)}")
                 df = self._load_all_instruments(start_index, end_index, *args)
                 df = self._process_df(df)
                 for inst in df.columns:
                     inst_cache_key = str(self), inst, start_index, end_index, *args
                     H["fs"][inst_cache_key] = df.loc[start_index:end_index, inst].rename(str(self))
-                H["fs"].cond.notify_all()
-                H["fs"].cond.release()
-            else:
-                # get_module_logger('data').info(f"waiting for calculation: {str(self)}")
-                H["fs"].cond.wait()
+            # else:
+            #     get_module_logger(self.__class__.__name__).info(f"cache hit after waiting: {str(self)}")
+            H["fs"].lock.release()
         # else:
-        # get_module_logger('data').info(f"cache hit: {str(self)}")
+        #     get_module_logger(self.__class__.__name__).info(f"cache hit: {str(self)}")
         return H["fs"][cache_key]
 
     def _load_all_instruments(self, start_index, end_index, *args) -> pd.DataFrame:

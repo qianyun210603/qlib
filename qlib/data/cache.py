@@ -141,7 +141,7 @@ class MemCacheSizeofUnit(MemCacheUnit):
 class SharedMemMeta(type):
     def __init__(cls, name, bases, dct):
         super().__init__(name, bases, dct)
-        cls.cond = multiprocessing.Condition()
+        cls.lock = multiprocessing.Lock()
 
 
 class SharedMemCacheUnit(metaclass=SharedMemMeta):

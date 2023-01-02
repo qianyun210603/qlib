@@ -6,7 +6,6 @@ class AlphaConvert1(DataHandlerLP):
 
     def __init__(
         self,
-        benchmark="SH000832",
         instruments="converts",
         start_time=None,
         end_time=None,
@@ -19,7 +18,6 @@ class AlphaConvert1(DataHandlerLP):
         filter_pipe=None,
         **kwargs,
     ):
-        self.benchmark = benchmark
         infer_processors = check_transform_proc(infer_processors, fit_start_time, fit_end_time)
         learn_processors = check_transform_proc(learn_processors, fit_start_time, fit_end_time)
         feature_formula, feature_name = self.get_feature_config()
@@ -90,7 +88,6 @@ class AlphaConvert1(DataHandlerLP):
             "alpha191_155": "EMA($volume,2/13)-EMA($volume,2/27)-EMA(EMA($volume,2/13)-EMA($volume,2/27),2/10)",
             "diff_premium_02": "($rawclosestock * 100 / $conversionprice)/$close - Ref(($rawclosestock * 100 / $conversionprice)/$close, 2)",
             "diff_premium_05": "($rawclosestock * 100 / $conversionprice)/$close - Ref(($rawclosestock * 100 / $conversionprice)/$close, 5)",
-            # "diff_premium_05": "($rawclosestock * 100 / $conversionprice)/$close - Ref(($rawclosestock * 100 / $conversionprice)/$close, 5)",
         }
 
         return list(alpha_components.values()), list(alpha_components.keys())

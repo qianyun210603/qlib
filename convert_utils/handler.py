@@ -63,6 +63,7 @@ class AlphaConvert1(DataHandlerLP):
             "convertion_premium": '($rawclosestock * 100 / $conversionprice)/$close - 1',
             'pure_bond_ytm': '$pure_bond_ytm',
             'remaining_size': '$remaining_size',
+            'hv60': '$hv60',
             'turnover_rate': '$turnover_rate',
             "ROC5": "Ref($close, 5)/$close",
             "MA10": "Mean($close, 10)/$close",

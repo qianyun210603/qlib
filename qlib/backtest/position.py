@@ -21,6 +21,7 @@ class BasePosition:
     """
 
     def __init__(self, *args: Any, cash: float = 0.0, **kwargs: Any) -> None:
+        self.init_cash = cash
         self._settle_type = self.ST_NO
         self.position: dict = {}
 
@@ -261,11 +262,10 @@ class Position(BasePosition):
             if there is no price key in the dict of stocks, it will be filled by _fill_stock_value.
             by default {}.
         """
-        super().__init__()
+        super().__init__(cash=cash)
 
         # NOTE: The position dict must be copied!!!
-        # Otherwise the initial value
-        self.init_cash = cash
+        # Otherwise, the initial value
         self.position = position_dict.copy()
         for stock, value in self.position.items():
             if isinstance(value, int):
@@ -279,7 +279,7 @@ class Position(BasePosition):
             pass
 
     def fill_stock_value(self, start_time: Union[str, pd.Timestamp], freq: str, last_days: int = 30) -> None:
-        """fill the stock value by the close price of latest last_days from qlib.
+        """fill the stock value by the close price of the latest last_days from qlib.
 
         Parameters
         ----------
@@ -406,7 +406,7 @@ class Position(BasePosition):
                 get_module_logger("position").debug(f"{stock_id}: matured/called @ {date.isoformat()}")
 
     def update_order(self, order: Order, trade_val: float, cost: float, trade_price: float) -> None:
-        # handle order, order is a order class, defined in exchange.py
+        # handle order, order is an order class, defined in exchange.py
         if order.direction == Order.BUY:
             # BUY
             self._buy_stock(order.stock_id, trade_val, cost, trade_price)

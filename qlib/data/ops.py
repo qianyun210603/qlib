@@ -1935,20 +1935,21 @@ class XSectionOperator(ElemOperator):
 
         cache_key = str(self), instrument, start_index, end_index, *args
         if cache_key not in H["fs"]:
+            # get_module_logger(self.__class__.__name__).info(f"Acquiring cond {id(H['fs'].lock)}")
             H["fs"].lock.acquire()
-            # get_module_logger(self.__class__.__name__).info(f"Acquiring cond {id(H['fs'].cond)} {cond_status}")
-            if cache_key not in H["fs"]:
-                # get_module_logger(self.__class__.__name__).info(f"calculating: {str(self)}")
-                df = self._load_all_instruments(start_index, end_index, *args)
-                df = self._process_df(df)
-                for inst in df.columns:
-                    inst_cache_key = str(self), inst, start_index, end_index, *args
-                    H["fs"][inst_cache_key] = df.loc[start_index:end_index, inst].rename(str(self))
-            # else:
-            #     get_module_logger(self.__class__.__name__).info(f"cache hit after waiting: {str(self)}")
-            H["fs"].lock.release()
-        # else:
-        #     get_module_logger(self.__class__.__name__).info(f"cache hit: {str(self)}")
+            try:
+                if cache_key not in H["fs"]:
+                    # get_module_logger(self.__class__.__name__).info(f"calculating: {str(self)}")
+                    df = self._load_all_instruments(start_index, end_index, *args)
+                    df = self._process_df(df)
+                    for inst in df.columns:
+                        inst_cache_key = str(self), inst, start_index, end_index, *args
+                        H["fs"][inst_cache_key] = df.loc[start_index:end_index, inst].rename(str(self))
+                # else:
+                #    get_module_logger(self.__class__.__name__).info(f"cache hit after waiting: {str(self)}")
+            finally:
+                # get_module_logger(self.__class__.__name__).info(f"Release cond {id(H['fs'].lock)}")
+                H["fs"].lock.release()
         return H["fs"][cache_key]
 
     def _load_all_instruments(self, start_index, end_index, *args) -> pd.DataFrame:

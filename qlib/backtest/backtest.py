@@ -39,6 +39,7 @@ def backtest_loop(
         it records the trading portfolio_metrics information
     indicator_dict: INDICATOR_METRIC
         it computes the trading indicator
+    trades: dict
     """
     return_value: dict = {}
     for _decision in collect_data_loop(start_time, end_time, trade_strategy, trade_executor, return_value):

@@ -260,7 +260,7 @@ def backtest(
     indicator_dict: INDICATOR_METRIC
         it computes the trading indicator
         It is organized in a dict format
-
+    trade: Dict
     """
     trade_strategy, trade_executor = get_strategy_executor(
         start_time,

@@ -132,15 +132,25 @@ class RqdataCollector(BaseCollector):
     def get_info(self, symbol):
         meta = self.meta_lib.read(symbol)
         coupon = self.coupon_lib.read(symbol)
-        cash_flow = self.convert_cf_lib.read(symbol)
+        cash_flow = self.convert_cf_lib.read(symbol).sort_index()
         coupon.index += pd.Timedelta(days=1)
         if cash_flow.index.max() != coupon.index.max():
             call_date = cash_flow.index.max()
         else:
             call_date = pd.Timestamp(year=2200, month=1, day=1)
 
-        return ConvertInstrumentInfo(cash_flow.cash_flow, coupon.coupon_rate,
-                                     meta['maturity_date'].replace(tzinfo=None), call_date=call_date)
+        maturity_date = meta['maturity_date']
+        # FIXME mysteriously arctic loses tzinfo
+        if maturity_date.tzinfo is None:
+            maturity_date = pd.Timestamp(maturity_date).tz_localize("UTC").tz_convert('Asia/Shanghai')
+        maturity_date = maturity_date.tz_localize(None)
+
+        if cash_flow.index[-1] != maturity_date:
+            cash_flow_dt = cash_flow.index.tolist()
+            cash_flow_dt[-1] = maturity_date
+            cash_flow.index = cash_flow_dt
+
+        return ConvertInstrumentInfo(cash_flow.cash_flow, coupon.coupon_rate, maturity_date, call_date=call_date)
 
     def get_data(
             self, symbol: str, interval: str, start_datetime: pd.Timestamp, end_datetime: pd.Timestamp
@@ -669,7 +679,6 @@ class Run(BaseRun):
         all_converts.to_csv(
             instruments_dir.joinpath("converts.txt"), header=False, sep=_dump.INSTRUMENTS_SEP, index=False
         )
-
 
 
 if __name__ == "__main__":

@@ -1938,7 +1938,7 @@ class XSectionOperator(ElemOperator):
             H["fs"].lock.acquire()
             # get_module_logger(self.__class__.__name__).info(f"Acquiring cond {id(H['fs'].cond)} {cond_status}")
             if cache_key not in H["fs"]:
-                get_module_logger(self.__class__.__name__).info(f"calculating: {str(self)}")
+                # get_module_logger(self.__class__.__name__).info(f"calculating: {str(self)}")
                 df = self._load_all_instruments(start_index, end_index, *args)
                 df = self._process_df(df)
                 for inst in df.columns:

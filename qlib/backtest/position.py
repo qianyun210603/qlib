@@ -390,20 +390,21 @@ class Position(BasePosition):
     def check_stock(self, stock_id: str) -> bool:
         return stock_id in self.position
 
-    def update_event(self, stock_id, inst_info, date):
+    def update_event(self, stock_id, inst_info, trade_start_time, trade_end_time):
         if isinstance(inst_info, ConvertInstrumentInfo):
-            if date in inst_info.cash_flow_schedule:
-                new_cash = self.position[stock_id]["amount"] * inst_info.cash_flow_schedule[date]
+            if not inst_info.cash_flow_schedule[trade_start_time:trade_end_time].empty:
+                unit_cash = inst_info.cash_flow_schedule[trade_start_time:trade_end_time].sum()
+                new_cash = self.position[stock_id]["amount"] * unit_cash
                 self.position["cash"] += new_cash
                 get_module_logger("position").debug(
                     f"coupon or coupon+repayment for {stock_id}: "
-                    f"{inst_info.cash_flow_schedule[date]}*{self.position[stock_id]['amount']}={new_cash} "
-                    f"@ {date.isoformat()}"
+                    f"{unit_cash}*{self.position[stock_id]['amount']}={new_cash} "
+                    f"@ {trade_start_time.isoformat()} - {trade_end_time.isoformat()}"
                 )
 
-            if date >= min(inst_info.maturity_date, inst_info.call_date):
+            if trade_start_time >= min(inst_info.maturity_date, inst_info.call_date):
                 self._del_stock(stock_id)
-                get_module_logger("position").debug(f"{stock_id}: matured/called @ {date.isoformat()}")
+                get_module_logger("position").debug(f"{stock_id}: matured/called @ {trade_start_time.isoformat()}")
 
     def update_order(self, order: Order, trade_val: float, cost: float, trade_price: float) -> None:
         # handle order, order is an order class, defined in exchange.py

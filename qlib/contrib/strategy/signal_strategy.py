@@ -3,6 +3,8 @@
 import os
 import copy
 import warnings
+from abc import ABC
+
 import numpy as np
 import pandas as pd
 
@@ -21,7 +23,7 @@ from qlib.contrib.strategy.order_generator import OrderGenWOInteract
 from qlib.contrib.strategy.optimizer import EnhancedIndexingOptimizer
 
 
-class BaseSignalStrategy(BaseStrategy):
+class BaseSignalStrategy(BaseStrategy, ABC):
     def __init__(
         self,
         *,
@@ -107,7 +109,7 @@ class BaseTopkStrategy(BaseSignalStrategy):
 
         for code in current_stock_list:
             if not self.trade_exchange.is_stock_tradable(
-                stock_id=code, start_time=trade_start_time, end_time=trade_end_time
+                stock_id=code, start_time=trade_start_time, end_time=trade_end_time, direction=OrderDir.SELL
             ):
                 continue
             if code in sell:
@@ -146,7 +148,7 @@ class BaseTopkStrategy(BaseSignalStrategy):
         for code in buy:
             # check is stock suspended
             if not self.trade_exchange.is_stock_tradable(
-                stock_id=code, start_time=trade_start_time, end_time=trade_end_time
+                stock_id=code, start_time=trade_start_time, end_time=trade_end_time, direction=OrderDir.BUY
             ):
                 continue
             # buy order

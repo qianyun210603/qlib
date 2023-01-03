@@ -19,7 +19,7 @@ from qlib.backtest.signal import Signal, create_signal_from
 from qlib.backtest.decision import Order, OrderDir, TradeDecisionWO
 from qlib.log import get_module_logger
 from qlib.utils import get_pre_trading_date, load_dataset
-from qlib.contrib.strategy.order_generator import OrderGenWOInteract
+from qlib.contrib.strategy.order_generator import OrderGenerator, OrderGenWOInteract
 from qlib.contrib.strategy.optimizer import EnhancedIndexingOptimizer
 
 
@@ -49,7 +49,7 @@ class BaseSignalStrategy(BaseStrategy, ABC):
             - If `trade_exchange` is None, self.trade_exchange will be set with common_infra
             - It allowes different trade_exchanges is used in different executions.
             - For example:
-                - In daily execution, both daily exchange and minutely are usable, but the daily exchange is recommended because it run faster.
+                - In daily execution, both daily exchange and minutely are usable, but the daily exchange is recommended because it runs faster.
                 - In minutely execution, the daily exchange is not usable, only the minutely exchange is recommended.
 
         """
@@ -66,7 +66,7 @@ class BaseSignalStrategy(BaseStrategy, ABC):
 
     def get_risk_degree(self, trade_step=None):
         """get_risk_degree
-        Return the proportion of your total value you will used in investment.
+        Return the proportion of your total value you will use in investment.
         Dynamically risk_degree will result in Market timing.
         """
         # It will use 95% amount of your total value by default
@@ -76,7 +76,7 @@ class BaseSignalStrategy(BaseStrategy, ABC):
 class BaseTopkStrategy(BaseSignalStrategy):
     """
     hold top k instruments with equal amount of market value based on score
-    (to reduce turnover we may switch less than k instruments in one period, so it is not exactly equal amount of top k.
+    (to reduce turnover we may switch less than k instruments in one period, so it is not exactly equal amount of top k).
     """
 
     def __init__(self, hold_thresh, **kwargs):
@@ -248,7 +248,7 @@ class TopkDropoutStrategy(BaseTopkStrategy):
                 ]
 
         else:
-            # Otherwise, the stock will make decision with out the stock tradable info
+            # Otherwise, the stock will make decision without the stock tradable info
             def get_first_n(li, n):
                 return list(li)[:n]
 
@@ -451,15 +451,15 @@ class WeightStrategyBase(BaseSignalStrategy):
             - It allowes different trade_exchanges is used in different executions.
             - For example:
 
-                - In daily execution, both daily exchange and minutely are usable, but the daily exchange is recommended because it run faster.
+                - In daily execution, both daily exchange and minutely are usable, but the daily exchange is recommended because it runs faster.
                 - In minutely execution, the daily exchange is not usable, only the minutely exchange is recommended.
         """
         super().__init__(**kwargs)
 
         if isinstance(order_generator_cls_or_obj, type):
-            self.order_generator = order_generator_cls_or_obj()
+            self.order_generator: OrderGenerator = order_generator_cls_or_obj()
         else:
-            self.order_generator = order_generator_cls_or_obj
+            self.order_generator: OrderGenerator = order_generator_cls_or_obj
 
     def generate_target_weight_position(self, score, current, trade_start_time, trade_end_time):
         """
@@ -471,9 +471,8 @@ class WeightStrategyBase(BaseSignalStrategy):
             pred score for this trade date, index is stock_id, contain 'score' column.
         current : Position()
             current position.
-        trade_exchange : Exchange()
-        trade_date : pd.Timestamp
-            trade date.
+        trade_start_time: pd.Timestamp
+        trade_end_time: pd.Timestamp
         """
         raise NotImplementedError()
 

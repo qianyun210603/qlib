@@ -228,7 +228,7 @@ class Exchange:
             disk_cache=True,
         )
         self.quote_df.columns = self.all_fields
-        if not C.get("ohlc_adjust", True):
+        if not C.get("ohlc_adjusted", True):
             self.quote_df["$close"] = self.quote_df["$close"] * self.quote_df["$factor"]
             self.quote_df["$volume"] = self.quote_df["$volume"] / self.quote_df["$factor"]
 
@@ -294,8 +294,9 @@ class Exchange:
         else:
             raise NotImplementedError(f"This type of `limit_threshold` is not supported")
 
-    def _update_limit(self, limit_threshold: Union[Tuple, float, None]) -> None:
-        assert hasattr(self, 'limit_type'), "self.limit_type must be set first."
+    def _update_limit(self) -> None:
+        assert hasattr(self, 'limit_type') and hasattr(self, 'limit_threshold'), \
+            "self.limit_type and self.limit_threshold must be set first."
         # $close may contain NaN, the nan indicates that the stock is not tradable at that timestamp
         suspended = self.quote_df["$close"].isna()
         # check limit_threshold
@@ -305,12 +306,12 @@ class Exchange:
             self.quote_df["limit_sell"] = suspended
         elif limit_type == self.LT_TP_EXP:
             # set limit
-            limit_threshold = cast(tuple, limit_threshold)
+            limit_threshold = cast(tuple, self.limit_threshold)
             # astype bool is necessary, because quote_df is an expression and could be float
             self.quote_df["limit_buy"] = self.quote_df[limit_threshold[0]].astype("bool") | suspended
             self.quote_df["limit_sell"] = self.quote_df[limit_threshold[1]].astype("bool") | suspended
         elif limit_type == self.LT_FLT:
-            limit_threshold = cast(float, limit_threshold)
+            limit_threshold = cast(float, self.limit_threshold)
             self.quote_df["limit_buy"] = self.quote_df["$change"].ge(limit_threshold) | suspended
             self.quote_df["limit_sell"] = (
                 self.quote_df["$change"].le(-limit_threshold) | suspended

@@ -3,6 +3,7 @@
 from functools import partial
 
 import pandas as pd
+import numpy as np
 
 import plotly.graph_objs as go
 
@@ -24,6 +25,7 @@ def _group_return(pred_label: pd.DataFrame = None, reverse: bool = False, N: int
     :param pred_label:
     :param reverse:
     :param N:
+    :param
     :return:
     """
     if reverse:
@@ -34,12 +36,31 @@ def _group_return(pred_label: pd.DataFrame = None, reverse: bool = False, N: int
     # Group1 ~ Group5 only consider the dropna values
     pred_label_drop = pred_label.dropna(subset=["score"])
 
+    class _Stratifier:
+        def __init__(self, N):
+            self.N = N
+            self.cuts = {}
+
+        def __call__(self, x, i):
+            l = len(x)
+            if l not in self.cuts:
+                per_group_num, remain = divmod(l, N)
+                per_group_nums = np.ones(N, dtype=int) * per_group_num
+                if remain > 0:
+                    per_group_nums[:remain - remain // 2] += 1
+                    per_group_nums[-(remain // 2):] += 1
+                self.cuts[l] = np.insert(np.cumsum(per_group_nums), 0, 0)
+            return x[self.cuts[l][i]:self.cuts[l][i+1]]
+
+    _stratifier = _Stratifier(N)
+
     # Group
     t_df = pd.DataFrame(
         {
             "Group%d"
             % (i + 1): pred_label_drop.groupby(level="datetime")["label"].apply(
-                lambda x: x[len(x) // N * i : len(x) // N * (i + 1)].mean()  # pylint: disable=W0640
+                lambda x: _stratifier(x, i).mean()
+                #lambda x: x[len(x) // N * i : len(x) // N * (i + 1)].mean()  -> this is incorrect, doesn't exhaust all population if len(x) % N != 0.
             )
             for i in range(N)
         }
@@ -333,6 +354,8 @@ def model_performance_graph(
     :param show_nature_day: whether to display the abscissa of non-trading day.
     :param \*\*kwargs: contains some parameters to control plot style in plotly. Currently, supports
        - `rangebreaks`: https://plotly.com/python/time-series/#Hiding-Weekends-and-Holidays
+       - `benchmark`: pd.Series contains benchmark return, used in `group1-benchmark` cum-return plot. if not provided or `average`,
+                       use average of all instrument in population as benchmark.
     :return: if show_notebook is True, display in notebook; else return `plotly.graph_objs.Figure` list.
     """
     figure_list = []

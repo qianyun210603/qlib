@@ -81,7 +81,7 @@ class Recorder:
         ----------
         local_path : str
             if provided, them save the file or directory to the artifact URI.
-        artifact_path : str
+        artifact_path=None : str
             the relative path for the artifact to be stored in the URI.
         """
         raise NotImplementedError(f"Please implement the `save_objects` method.")
@@ -374,7 +374,7 @@ class MLflowRecorder(Recorder):
                 out = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT)
                 self.client.log_text(self.id, out.decode(), fname)  # this behaves same as above
             except subprocess.CalledProcessError:
-                logger.info(f"Fail to log the uncommitted code of $CWD when run `{cmd}`")
+                logger.info(f"Fail to log the uncommitted code of $CWD({os.getcwd()}) when run {cmd}.")
         os.chdir(curr_folder)  # cd to original folder
 
     def end_run(self, status: str = Recorder.STATUS_S):

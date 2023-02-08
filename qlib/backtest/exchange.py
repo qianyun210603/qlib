@@ -228,7 +228,10 @@ class Exchange:
             disk_cache=True,
         )
         self.quote_df.columns = self.all_fields
-        if not C.get("ohlc_adjusted", True):
+        if not (C.get("ohlc_adjusted", True) or self.quote_df["$factor"].isna().all()):
+            self.quote_df["$open"] = self.quote_df["$open"] * self.quote_df["$factor"]
+            self.quote_df["$high"] = self.quote_df["$high"] * self.quote_df["$factor"]
+            self.quote_df["$low"] = self.quote_df["$low"] * self.quote_df["$factor"]
             self.quote_df["$close"] = self.quote_df["$close"] * self.quote_df["$factor"]
             self.quote_df["$volume"] = self.quote_df["$volume"] / self.quote_df["$factor"]
 

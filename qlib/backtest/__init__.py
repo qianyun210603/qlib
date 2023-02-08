@@ -40,11 +40,10 @@ def get_exchange(
     open_cost: float = 0.0015,
     close_cost: float = 0.0025,
     min_cost: float = 5.0,
-    limit_threshold: Union[Tuple[str, str], float, None] = None,
     deal_price: Union[str, Tuple[str, str], List[str]] = None,
     **kwargs: Any,
 ) -> Exchange:
-    """get_exchange
+    r"""get_exchange
 
     Parameters
     ----------
@@ -78,8 +77,9 @@ def get_exchange(
                 <price> := str
                 - for example '$close', '$open', '$vwap' ("close" is OK. `Exchange` will help to prepend
                   "$" to the expression)
-    limit_threshold : float
-        limit move 0.1 (10%) for example, long and short with same limit.
+    \*\*kwargs:
+        - limit_threshold : Tuple[str, str]|float|None
+              limit move 0.1 (10%) for example, long and short with same limit.
 
     Returns
     -------
@@ -87,8 +87,6 @@ def get_exchange(
     an initialized Exchange object
     """
 
-    if limit_threshold is None:
-        limit_threshold = C.limit_threshold
     if exchange is None:
         logger.info("Create new exchange")
 
@@ -99,7 +97,6 @@ def get_exchange(
             codes=codes,
             deal_price=deal_price,
             subscribe_fields=subscribe_fields,
-            limit_threshold=limit_threshold,
             open_cost=open_cost,
             close_cost=close_cost,
             min_cost=min_cost,

@@ -43,7 +43,6 @@ class Exchange:
         codes: Union[list, str] = "all",
         deal_price: Union[str, Tuple[str, str], List[str]] = None,
         subscribe_fields: Iterable = (),
-        limit_threshold: Union[Tuple[str, str], float, None] = None,
         volume_threshold: Union[tuple, dict] = None,
         open_cost: float = 0.0015,
         close_cost: float = 0.0025,
@@ -69,7 +68,7 @@ class Exchange:
         :param subscribe_fields: Iterable (convertible to set), subscribe fields. This expressions will be added to the
                                  query and `self.quote`.
                                  It is useful when users want more fields to be queried
-        :param limit_threshold: Union[Tuple[str, str], float, None]
+        :param limit_threshold: Union[Tuple[str, str], List[str], float, None]
                                 1) `None`: no limitation
                                 2) float, 0.1 for example, default None
                                 3) Tuple[str, str]: (<the expression for buying stock limitation>,
@@ -134,11 +133,19 @@ class Exchange:
         self.end_time = end_time
 
         self.trade_unit = kwargs.pop("trade_unit", C.trade_unit)
+
+
+        # limit_threshold here shall be in kwargs to distinguish 'not provided' and `None` as `None` is a valid option here.
+        # not setting in kwargs will lead to `None` explicitly provided here, which should shield the one in global config,
+        # being overwrittin by the global config, which is counterintuitive.
+        # Also allow input as list here since yaml cannot direct provide tuple, in such case explicitly convert to tuple.
+        self.limit_threshold = kwargs.pop('limit_threshold', C.limit_threshold)
+        if isinstance(self.limit_threshold, list):
+            self.limit_threshold = tuple(self.limit_threshold)
+
         # if len(kwargs) > 0:
         #     raise ValueError(f"Get Unexpected arguments {kwargs}")
 
-        if limit_threshold is None:
-            limit_threshold = C.limit_threshold
         if deal_price is None:
             deal_price = C.deal_price
 
@@ -147,11 +154,11 @@ class Exchange:
 
         # TODO: the quote, trade_dates, codes are not necessary.
         # It is just for performance consideration.
-        self.limit_type = self._get_limit_type(limit_threshold)
-        if limit_threshold is None:
+        self.limit_type = self._get_limit_type()
+        if self.limit_threshold is None:
             if C.region in [REG_CN, REG_TW]:
                 self.logger.warning(f"limit_threshold not set. The stocks hit the limit may be bought/sold")
-        elif self.limit_type == self.LT_FLT and abs(cast(float, limit_threshold)) > 0.1:
+        elif self.limit_type == self.LT_FLT and abs(cast(float, self.limit_threshold)) > 0.1:
             if C.region in [REG_CN, REG_TW]:
                 self.logger.warning(f"limit_threshold may not be set to a reasonable value")
 
@@ -178,8 +185,8 @@ class Exchange:
 
         necessary_fields = {self.buy_price, self.sell_price, "$close", "$change", "$factor", "$volume"}
         if self.limit_type == self.LT_TP_EXP:
-            assert isinstance(limit_threshold, tuple)
-            for exp in limit_threshold:
+            assert isinstance(self.limit_threshold, tuple)
+            for exp in self.limit_threshold:
                 necessary_fields.add(exp)
         all_fields = list(necessary_fields | set(vol_lt_fields) | set(subscribe_fields))
 
@@ -190,7 +197,6 @@ class Exchange:
         self.min_cost = min_cost
         self.impact_cost = impact_cost
 
-        self.limit_threshold: Union[Tuple[str, str], float, None] = limit_threshold
         self.volume_threshold = volume_threshold
         self.extra_quote = extra_quote
         self.get_quote_from_qlib()
@@ -200,12 +206,11 @@ class Exchange:
         self.quote: BaseQuote = self.quote_cls(self.quote_df, freq)
 
         self.instrument_info = {}
-        dpm_uri = C.dpm.get_data_uri(C.DEFAULT_FREQ)
+        dpm_uri = C.dpm.get_data_uri()
         if C.dpm.get_uri_type(dpm_uri) == "local":
             instrument_info_path = dpm_uri.joinpath("contract_specs")
             if instrument_info_path.exists():
                 import pickle
-
                 self.instrument_info.update(
                     {p.stem.upper(): pickle.load(open(p, "rb")) for p in instrument_info_path.glob("*.pkl")}
                 )
@@ -223,7 +228,7 @@ class Exchange:
             disk_cache=True,
         )
         self.quote_df.columns = self.all_fields
-        if not C.get("ohlc_adjust", True):
+        if not C.get("ohlc_adjusted", True):
             self.quote_df["$close"] = self.quote_df["$close"] * self.quote_df["$factor"]
             self.quote_df["$volume"] = self.quote_df["$volume"] / self.quote_df["$factor"]
 
@@ -246,7 +251,7 @@ class Exchange:
             # Use normal price
             self.trade_w_adj_price = False
         # update limit
-        self._update_limit(self.limit_threshold)
+        self._update_limit()
 
         # concat extra_quote
         if self.extra_quote is not None:
@@ -277,33 +282,36 @@ class Exchange:
     def get_instrument_info(self, symbol: str):
         return self.instrument_info.get(symbol, None)
 
-    def _get_limit_type(self, limit_threshold: Union[tuple, float, None]) -> str:
+    def _get_limit_type(self) -> str:
         """get limit type"""
-        if isinstance(limit_threshold, tuple):
+        assert hasattr(self, 'limit_threshold'), "self.limit_threshold must be set first in __init__."
+        if isinstance(self.limit_threshold, tuple):
             return self.LT_TP_EXP
-        elif isinstance(limit_threshold, float):
+        elif isinstance(self.limit_threshold, float):
             return self.LT_FLT
-        elif limit_threshold is None:
+        elif self.limit_threshold is None:
             return self.LT_NONE
         else:
             raise NotImplementedError(f"This type of `limit_threshold` is not supported")
 
-    def _update_limit(self, limit_threshold: Union[Tuple, float, None]) -> None:
+    def _update_limit(self) -> None:
+        assert hasattr(self, 'limit_type') and hasattr(self, 'limit_threshold'), \
+            "self.limit_type and self.limit_threshold must be set first."
         # $close may contain NaN, the nan indicates that the stock is not tradable at that timestamp
         suspended = self.quote_df["$close"].isna()
         # check limit_threshold
-        limit_type = self._get_limit_type(limit_threshold)
+        limit_type = self.limit_type
         if limit_type == self.LT_NONE:
             self.quote_df["limit_buy"] = suspended
             self.quote_df["limit_sell"] = suspended
         elif limit_type == self.LT_TP_EXP:
             # set limit
-            limit_threshold = cast(tuple, limit_threshold)
+            limit_threshold = cast(tuple, self.limit_threshold)
             # astype bool is necessary, because quote_df is an expression and could be float
             self.quote_df["limit_buy"] = self.quote_df[limit_threshold[0]].astype("bool") | suspended
             self.quote_df["limit_sell"] = self.quote_df[limit_threshold[1]].astype("bool") | suspended
         elif limit_type == self.LT_FLT:
-            limit_threshold = cast(float, limit_threshold)
+            limit_threshold = cast(float, self.limit_threshold)
             self.quote_df["limit_buy"] = self.quote_df["$change"].ge(limit_threshold) | suspended
             self.quote_df["limit_sell"] = (
                 self.quote_df["$change"].le(-limit_threshold) | suspended

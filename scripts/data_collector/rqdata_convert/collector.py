@@ -240,12 +240,12 @@ class RqdataCollector(BaseCollector):
             if pd.isna(v['listed_date']):
                 return False
             if pd.isna(v['de_listed_date']):
-                return v['listed_date'] <= self.end_datetime
+                return v['listed_date'] < self.end_datetime.normalize()
             stop_trading_date = v.get('stop_trading_date', None)
             if stop_trading_date is None:
                 stop_trading_date = v['de_listed_date']
-            return self.start_datetime <= stop_trading_date and v['listed_date'].replace(hour=16) <= \
-                min(self.end_datetime, pd.Timestamp.now('Asia/Shanghai'))
+            return self.start_datetime <= stop_trading_date and v['listed_date'] < \
+                min(self.end_datetime, pd.Timestamp.now('Asia/Shanghai')).normalize()
 
         logger.info("get HS converts symbols......")
         symbol_dict = {x: self.meta_lib.read(x) for x in self.meta_lib.list_symbols()}

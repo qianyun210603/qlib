@@ -1953,19 +1953,26 @@ class XSectionOperator(ElemOperator):
         return H["fs"][cache_key]
 
     def _load_all_instruments(self, start_index, end_index, *args) -> pd.DataFrame:
-        def mask_data(series, spans):
-            if bool(spans):
-                mask = np.zeros(len(series), dtype=bool)
-                for begin, end in spans:
-                    mask |= (series.index >= begin) & (series.index <= end)
-                series = series.copy()
-                series[~mask] = np.nan
-            return series
 
-        sub_features = [
-            mask_data(self.feature.load(inst, start_index, end_index, *args).rename(inst), spans)
-            for inst, spans in self.population.items()
-        ]
+        if isinstance(self.population, dict):
+            def mask_data(series, spans):
+                if bool(spans):
+                    mask = np.zeros(len(series), dtype=bool)
+                    for begin, end in spans:
+                        mask |= (series.index >= begin) & (series.index <= end)
+                    series = series.copy()
+                    series[~mask] = np.nan
+                return series
+
+            sub_features = [
+                mask_data(self.feature.load(inst, start_index, end_index, *args).rename(inst), spans)
+                for inst, spans in self.population.items()
+            ]
+        else:
+            sub_features = [
+                self.feature.load(inst, start_index, end_index, *args).rename(inst)
+                for inst in self.population
+            ]
         mydf = pd.concat([s for s in sub_features if not s.empty], axis=1, join="outer", sort=True)
 
         return mydf

@@ -611,46 +611,47 @@ class DatasetProvider(abc.ABC):
         else:
             it = list(zip(instruments_d, [None] * len(instruments_d)))
 
+        cs_levels = sorted(cs_level_summary, reverse=True)
         shared_data_cache = {}
         ts_cache = {}
         cs_cache = {}
         shared_mgr = None
-        if C["joblib_backend"] == "multiprocessing":
+        if len(cs_levels) > 1 and C["joblib_backend"] == "multiprocessing":
             shared_mgr = multiprocessing.Manager()
             shared_data_cache = shared_mgr.dict()
 
-        for dep_level in sorted(cs_level_summary, reverse=True)[:-1]:
-            expressions = cs_level_summary[dep_level]
-            level_shared_feature = level_shared_features.get(dep_level, set())
-            cache_task_l = [
-                delayed(DatasetProvider.load_cache)(
-                    inst,
-                    start_time=start_time,
-                    end_time=end_time,
-                    freq=freq,
-                    expressions=expressions,
-                    feature_extended_windows=feature_extended_windows,
-                    g_config=C,
-                    population=instruments_d,
-                    cache_data={**ts_cache.get(inst, {}), **cs_cache},
-                    shared_cache=shared_data_cache,
+            for dep_level in cs_levels[:-1]:
+                expressions = cs_level_summary[dep_level]
+                level_shared_feature = level_shared_features.get(dep_level, set())
+                cache_task_l = [
+                    delayed(DatasetProvider.load_cache)(
+                        inst,
+                        start_time=start_time,
+                        end_time=end_time,
+                        freq=freq,
+                        expressions=expressions,
+                        feature_extended_windows=feature_extended_windows,
+                        g_config=C,
+                        population=instruments_d,
+                        cache_data={**ts_cache.get(inst, {}), **cs_cache},
+                        shared_cache=shared_data_cache,
+                    )
+                    for inst, _ in it
+                ]
+                cs_cache.clear()
+                shared_data_cache.clear()
+                result = ParallelExt(n_jobs=workers, backend=C.joblib_backend, maxtasksperchild=C.maxtasksperchild)(
+                    cache_task_l
                 )
-                for inst, _ in it
-            ]
-            cs_cache.clear()
-            shared_data_cache.clear()
-            result = ParallelExt(n_jobs=workers, backend=C.joblib_backend, maxtasksperchild=C.maxtasksperchild)(
-                cache_task_l
-            )
-            for inst_cache in result:
-                for k, v in inst_cache.items():
-                    if k[0] in expressions:
-                        if C["joblib_backend"] == "multiprocessing":
-                            shared_data_cache[k] = v
-                        else:
-                            cs_cache[k] = v
-                    elif k[0] in level_shared_feature:
-                        ts_cache.setdefault(k[1], {})[k[0]] = v
+                for inst_cache in result:
+                    for k, v in inst_cache.items():
+                        if k[0] in expressions:
+                            if C["joblib_backend"] == "multiprocessing":
+                                shared_data_cache[k] = v
+                            else:
+                                cs_cache[k] = v
+                        elif k[0] in level_shared_feature:
+                            ts_cache.setdefault(k[1], {})[k[0]] = v
 
         inst_l, task_l = zip(
             *list(
@@ -682,7 +683,7 @@ class DatasetProvider(abc.ABC):
             )
         )
 
-        if C["joblib_backend"] == "multiprocessing":
+        if len(cs_levels) > 1 and C["joblib_backend"] == "multiprocessing":
             del shared_data_cache
             shared_mgr.shutdown()
 

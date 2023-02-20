@@ -1,26 +1,24 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
-import os
 import copy
+import os
 import warnings
 from abc import ABC
+from typing import Dict, List, Text, Tuple, Union, cast
 
 import numpy as np
 import pandas as pd
-
-from typing import Dict, List, Text, Tuple, Union, cast
-
-from qlib.data import D
-from qlib.data.dataset import Dataset
-from qlib.model.base import BaseModel
-from qlib.strategy.base import BaseStrategy
+from qlib.backtest.decision import Order, OrderDir, TradeDecisionWO
 from qlib.backtest.position import Position
 from qlib.backtest.signal import Signal, create_signal_from
-from qlib.backtest.decision import Order, OrderDir, TradeDecisionWO
-from qlib.log import get_module_logger
-from qlib.utils import get_pre_trading_date, load_dataset
-from qlib.contrib.strategy.order_generator import OrderGenerator, OrderGenWOInteract
 from qlib.contrib.strategy.optimizer import EnhancedIndexingOptimizer
+from qlib.contrib.strategy.order_generator import OrderGenerator, OrderGenWOInteract
+from qlib.data import D
+from qlib.data.dataset import Dataset
+from qlib.log import get_module_logger
+from qlib.model.base import BaseModel
+from qlib.strategy.base import BaseStrategy
+from qlib.utils import get_pre_trading_date, load_dataset
 
 
 class BaseSignalStrategy(BaseStrategy, ABC):
@@ -54,8 +52,10 @@ class BaseSignalStrategy(BaseStrategy, ABC):
 
         """
         super().__init__(
-            outer_trade_decision=kwargs.get('outer_trade_decision', None), level_infra=level_infra,
-            common_infra=common_infra, trade_exchange=trade_exchange
+            outer_trade_decision=kwargs.get("outer_trade_decision", None),
+            level_infra=level_infra,
+            common_infra=common_infra,
+            trade_exchange=trade_exchange,
         )
 
         self.risk_degree = risk_degree
@@ -89,30 +89,28 @@ class BaseTopkStrategy(BaseSignalStrategy):
             self.instruments = None
         else:
             instruments = D.instruments(market)
-            if isinstance(instruments, dict) and 'market' in instruments:
-                self.instruments = D.list_instruments(instruments, freq='day')
-                self.forbid_buy_days = kwargs.get('forbid_buy_days', -2)
-                self.force_sell_days = kwargs.get('force_sell_days', -2)
+            if isinstance(instruments, dict) and "market" in instruments:
+                self.instruments = D.list_instruments(instruments, freq="day")
+                self.forbid_buy_days = kwargs.get("forbid_buy_days", -2)
+                self.force_sell_days = kwargs.get("force_sell_days", -2)
             else:
                 self.instruments = None
         self.delist_schedule = {"SZ000418": pd.Timestamp("2019-05-07")}
         super().__init__(**kwargs)
 
     def filter_instruments_by_market(self, pred_score, current_stock_list, trade_start_time, trade_end_time):
-
         def _check_delist(code):
             return code in self.delist_schedule and trade_end_time >= self.delist_schedule[code]
 
         if self.instruments is None:
-            force_sell = set(
-                code for code in current_stock_list if _check_delist(code)
-            )
+            force_sell = set(code for code in current_stock_list if _check_delist(code))
             remain_holding = set(current_stock_list) - set(force_sell)
 
             forbid_buy = np.array([_check_delist(code) for code in pred_score.index])
 
             pred_score = pred_score[
-                ~(pred_score.index.isin(force_sell) | forbid_buy) | pred_score.index.isin(remain_holding)]
+                ~(pred_score.index.isin(force_sell) | forbid_buy) | pred_score.index.isin(remain_holding)
+            ]
 
             return pred_score, list(remain_holding), list(force_sell)
 
@@ -135,15 +133,18 @@ class BaseTopkStrategy(BaseSignalStrategy):
         )
         remain_holding = set(current_stock_list) - set(force_sell)
 
-        forbid_buy = np.array([
-            (not code in remain_holding) and (_days_to_remove(code) <= self.forbid_buy_days or _check_delist(code))
-            for code in pred_score.index
-        ])
+        forbid_buy = np.array(
+            [
+                (not code in remain_holding) and (_days_to_remove(code) <= self.forbid_buy_days or _check_delist(code))
+                for code in pred_score.index
+            ]
+        )
 
-        pred_score = pred_score[~(pred_score.index.isin(force_sell)|forbid_buy)|pred_score.index.isin(remain_holding)]
+        pred_score = pred_score[
+            ~(pred_score.index.isin(force_sell) | forbid_buy) | pred_score.index.isin(remain_holding)
+        ]
 
         return pred_score, list(remain_holding), list(force_sell)
-
 
     def _generate_buy_sell_list(self, pred_score, current_stock_list, trade_start_time, trade_end_time):
         raise NotImplementedError("Please implement `_generate_buy_sell_list` method")
@@ -417,12 +418,17 @@ class TopkKeepnDropoutStrategy(BaseTopkStrategy):
         pred_df = pred_score.sort_values(ascending=False, kind="stable").to_frame()
         pred_df["current_hold"] = pred_df.index.isin(current_stock_list)
         pred_df["cum_current_hold"] = pred_df["current_hold"].cumsum()
-        pred_df["tradable"] = (
+        pred_df["tradestatusflag"] = (
             pred_df.apply(
-                lambda x: self.trade_exchange.is_stock_tradable(x.name, trade_start_time, trade_end_time), axis=1
+                lambda x: 0
+                if self.trade_exchange.is_stock_tradable(x.name, trade_start_time, trade_end_time)
+                else 1
+                if x.current_hold
+                else -1,
+                axis=1,
             )
             if self.only_tradable
-            else True
+            else 0
         )
         pred_df["rank"] = list(range(len(pred_df)))
         pred_df["keep"] = pred_df.apply(
@@ -438,73 +444,6 @@ class TopkKeepnDropoutStrategy(BaseTopkStrategy):
 
         sell = pred_df[(~pred_df.keep) & pred_df.current_hold].index.union(removed_from_population).to_list()
         buy = pred_df[~pred_df.current_hold & pred_df.tradable].iloc[: self.topk - num_keep].index.tolist()
-
-        return buy, sell
-
-
-class TopkDropout4ConvertStrategy(TopkDropoutStrategy):
-    def _generate_buy_sell_list(self, pred_score: pd.Series, current_stock_list, trade_start_time, trade_end_time):
-        pred_score, current_stock_list, removed_from_population = self.filter_instruments_by_market(
-            pred_score, current_stock_list, trade_start_time, trade_end_time
-        )
-
-        pred_df = pred_score.to_frame(name="score")
-        pred_df["current_hold"] = pred_df.index.isin(current_stock_list)
-
-        pred_df["call_announced"] = (
-            pred_df.apply(
-                lambda x: self.trade_exchange.quote.get_data(
-                    x.name, trade_start_time, trade_end_time, field="$call_announced", method="ts_data_last"
-                ),
-                axis=1,
-            ).fillna(1)
-            > 0.5
-        )
-        # pred_df['call_announced'] = False
-
-        pred_df["tradestatusflag"] = (
-            pred_df.apply(
-                lambda x: 0
-                if self.trade_exchange.is_stock_tradable(x.name, trade_start_time, trade_end_time)
-                else 1
-                if x.current_hold
-                else -1,
-                axis=1,
-            )
-            if self.only_tradable
-            else 0
-        )
-        pred_df.sort_values(
-            by=["tradestatusflag", "score", "current_hold"], ascending=False, inplace=True, kind="stable"
-        )
-
-        # sell all sellable holdings which annouced force redemption
-        sell = pred_df[pred_df.current_hold & (pred_df.tradestatusflag == 0) & pred_df.call_announced]\
-            .index
-
-        # drop items annouced force redemption
-        pred_df = pred_df[~pred_df.call_announced]
-
-        pred_df["rank"] = (pred_df["current_hold"] | (0 == pred_df["tradestatusflag"])).cumsum()
-        pred_df["cum_current_hold"] = pred_df["current_hold"].cumsum()
-        # sell only contains called ones now
-        additional_n_drop = max(0, self.n_drop - len(sell))
-
-        sell = sell.union(removed_from_population)
-
-        pred_df["keep"] = pred_df["current_hold"] & (
-            (pred_df["rank"] <= self.topk)
-            | (pred_df["cum_current_hold"] <= len(current_stock_list) - additional_n_drop)
-        )
-
-        num_keep = pred_df.keep.sum()
-
-        sell = sell.union(
-            pred_df[~pred_df.keep & (pred_df.tradestatusflag == 0) & pred_df.current_hold].index
-        ).to_list()
-        buy = (
-            pred_df[~pred_df.current_hold & (pred_df.tradestatusflag == 0)].iloc[: self.topk - num_keep].index.tolist()
-        )
 
         return buy, sell
 

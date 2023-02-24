@@ -281,7 +281,7 @@ def collect_data(
     account: Union[float, int, dict] = 1e9,
     exchange_kwargs: dict = {},
     pos_type: str = "Position",
-    return_value: dict = None,
+    return_value: dict | None = None,
 ) -> Generator[object, None, None]:
     """initialize the strategy and executor, then collect the trade decision data for rl training
 

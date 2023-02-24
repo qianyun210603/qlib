@@ -36,6 +36,48 @@ except ValueError:
 
 np.seterr(invalid="ignore")
 
+#################### Special Operator ####################
+class Today(Expression):
+    """
+    Return today
+
+    Parameters
+    ----------
+
+    Returns
+    ----------
+    Expression
+        Calendar days since BASE_DAY(1970-01-01), it can be easily convert to `pd.Timestamp` by pd.Timestamp(today, unit='d')
+
+    """
+
+    BASE_DAY = pd.Timestamp("1970-01-01")
+
+    def __str__(self):
+        return "Date()"
+
+    @property
+    def adjust_status(self):
+        fields_need_adjust = C.get("fields_need_adjust", {})
+        return fields_need_adjust.get(str(self), 0)
+
+    def _load_internal(self, instrument, start_index, end_index, *args):
+        freq = args[0]
+
+        from .data import Cal
+
+        _calendar = Cal.calendar(freq=freq)
+        return pd.Series(
+            [(d - Today.BASE_DAY).days for d in _calendar[start_index : end_index + 1]],
+            index=pd.RangeIndex(start_index, end_index + 1),
+        )
+
+    def get_longest_back_rolling(self):
+        return 0
+
+    def get_extended_window_size(self):
+        return 0, 0
+
 
 #################### Element-Wise Operator ####################
 class ElemOperator(ExpressionOps, ABC):
@@ -1955,6 +1997,7 @@ class XSectionOperator(ElemOperator):
     def _load_all_instruments(self, start_index, end_index, *args) -> pd.DataFrame:
 
         if isinstance(self.population, dict):
+
             def mask_data(series, spans):
                 if bool(spans):
                     mask = np.zeros(len(series), dtype=bool)
@@ -1970,8 +2013,7 @@ class XSectionOperator(ElemOperator):
             ]
         else:
             sub_features = [
-                self.feature.load(inst, start_index, end_index, *args).rename(inst)
-                for inst in self.population
+                self.feature.load(inst, start_index, end_index, *args).rename(inst) for inst in self.population
             ]
         mydf = pd.concat([s for s in sub_features if not s.empty], axis=1, join="outer", sort=True)
 
@@ -2112,6 +2154,7 @@ class TResample(ElemOperator):
 
 TOpsList = [TResample]
 OpsList = [
+    Today,
     ChangeInstrument,
     Neg,
     Rolling,

@@ -22,8 +22,10 @@ import hashlib
 import datetime
 import requests
 import importlib
+import importlib.util
 import contextlib
 import collections
+import collections.abc
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -120,7 +122,7 @@ def read_period_data(index_path, data_path, period, cur_date_int: int, quarterly
     quarterly: bool
         num quarter instead of num of year
     last_period_index: int
-        it is a optional parameter; it is designed to avoid repeatedly access the .index data of PIT database when
+        it is an optional parameter; it is designed to avoid repeatedly access the .index data of PIT database when
         sequentially observing the data (Because the latest index of a specific period of data certainly appear in
         after the one in last observation).
 
@@ -236,10 +238,10 @@ def requests_with_retry(url, retry=5, **kwargs):
 
 #################### Parse ####################
 def parse_config(config):
-    # Check whether need parse, all object except str do not need to be parsed
+    # Check whether parsing needed, all object except str do not need to be parsed
     if not isinstance(config, str):
         return config
-    # Check whether config is file
+    # Check whether config is a file
     if os.path.exists(config):
         with open(config, "r") as f:
             return yaml.safe_load(f)
@@ -349,7 +351,7 @@ def get_callable_kwargs(config: InstConf, default_module: Union[str, ModuleType]
     default_module : Python module or str
         It should be a python module to load the class type
         This function will load class from the config['module_path'] first.
-        If config['module_path'] doesn't exists, it will load the class from default_module.
+        If config['module_path'] doesn't exist, it will load the class from default_module.
 
     Returns
     -------
@@ -407,13 +409,13 @@ def init_instance_by_config(
 
     default_module : Python module
         Optional. It should be a python module.
-        NOTE: the "module_path" will be override by `module` arguments
+        NOTE: the "module_path" will be overriden by `module` arguments
 
         This function will load class from the config['module_path'] first.
-        If config['module_path'] doesn't exists, it will load the class from default_module.
+        If config['module_path'] doesn't exist, it will load the class from default_module.
 
     accept_types: Union[type, Tuple[type]]
-        Optional. If the config is a instance of specific type, return the config directly.
+        Optional. If the config is an instance of specific type, return the config directly.
         This will be passed into the second parameter of isinstance.
 
     try_kwargs: Dict
@@ -846,7 +848,7 @@ def get_item_from_obj(config: dict, name_path: str) -> object:
     """
     Follow the name_path to get values from config
     For example:
-    If we follow the example in in the Parameters section,
+    If we follow the example in the Parameters section,
         Timestamp('2008-01-02 00:00:00') will be returned
 
     Parameters

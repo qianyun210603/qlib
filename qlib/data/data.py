@@ -941,9 +941,15 @@ class LocalPITProvider(PITProvider):
         #         self.period_index[field] = {}
         # For acceleration}
 
-        if not field.endswith("_q") and not field.endswith("_a"):
-            raise ValueError("period field must ends with '_q' or '_a'")
-        quarterly = field.endswith("_q")
+        _, pit_mode = field.rsplit('_', 1)
+        if pit_mode not in {"a", "q", "m", "i"}:
+            raise ValueError(
+            """period field must have with following suffix:
+            _a: annually data
+            _q: quarterly data
+            _m: monthly data
+            _i: indefinite frequency data
+            """)
         index_path = C.dpm.get_data_uri() / "financial" / instrument.lower() / f"{field}.index"
         data_path = C.dpm.get_data_uri() / "financial" / instrument.lower() / f"{field}.data"
         if not (index_path.exists() and data_path.exists()):
@@ -962,9 +968,8 @@ class LocalPITProvider(PITProvider):
         loc = np.searchsorted(data["date"], cur_time_int, side="right")
         if loc <= 0:
             return pd.Series(dtype=C.pit_record_type["value"])
-        last_period = data["period"][:loc].max()  # return the latest quarter
-        first_period = data["period"][:loc].min()
-        period_list = get_period_list(first_period, last_period, quarterly)
+
+        period_list = get_period_list(data["period"][:loc], pit_mode)
         if period is not None:
             # NOTE: `period` has higher priority than `start_index` & `end_index`
             if period not in period_list:
@@ -977,7 +982,7 @@ class LocalPITProvider(PITProvider):
         for i, p in enumerate(period_list):
             # last_period_index = self.period_index[field].get(period)  # For acceleration
             value[i], now_period_index = read_period_data(
-                index_path, data_path, p, cur_time_int, quarterly  # , last_period_index  # For acceleration
+                index_path, data_path, p, cur_time_int, pit_mode  # , last_period_index  # For acceleration
             )
             # self.period_index[field].update({period: now_period_index})  # For acceleration
         # NOTE: the index is period_list; So it may result in unexpected values(e.g. nan)

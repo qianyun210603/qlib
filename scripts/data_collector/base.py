@@ -367,7 +367,6 @@ class BaseRun(abc.ABC):
         self.normalize_dir = Path(normalize_dir).expanduser().resolve()
         self.normalize_dir.mkdir(parents=True, exist_ok=True)
 
-        self._cur_module = importlib.import_module("collector")
         self.max_workers = max_workers
         self.interval = interval
 
@@ -385,6 +384,10 @@ class BaseRun(abc.ABC):
     @abc.abstractmethod
     def default_base_dir(self) -> [Path, str]:
         raise NotImplementedError("rewrite default_base_dir")
+
+    @property
+    def _cur_module(self):
+        return importlib.import_module("collector")
 
     def download_data(
         self,

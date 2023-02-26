@@ -66,28 +66,30 @@ def read_bin(file_path: Union[str, Path], start_index, end_index):
     return series
 
 
-def get_period_list(first: int, last: int, quarterly: bool) -> List[int]:
+def get_period_list(periods, pit_mode: str) -> List[int]:
     """
     This method will be used in PIT database.
     It returns all the possible values between `first` and `end`  (first and end is included)
 
     Parameters
     ----------
-    first: int
-    last: int
-    quarterly : bool
-        will it return quarterly index or yearly index.
+    periods : series of periods
+    pit_mode : {'a', 'q', 'm', 'u'}
+        frequency
 
     Returns
     -------
     List[int]
         the possible index between [first, last]
     """
-
-    if not quarterly:
+    if pit_mode == 'i':
+        return periods
+    last = periods.max()  # return the latest quarter
+    first = periods.min()
+    if pit_mode == 'a':
         assert all(1900 <= x <= 2099 for x in (first, last)), "invalid arguments"
         return list(range(first, last + 1))
-    else:
+    elif pit_mode == 'q':
         assert all(190000 <= x <= 209904 for x in (first, last)), "invalid arguments"
         res = []
         for year in range(first // 100, last // 100 + 1):
@@ -96,17 +98,28 @@ def get_period_list(first: int, last: int, quarterly: bool) -> List[int]:
                 if first <= period <= last:
                     res.append(year * 100 + q)
         return res
+    elif pit_mode == "m":
+        assert all(190000 <= x <= 209912 for x in (first, last)), "invalid arguments"
+        res = []
+        for year in range(first // 100, last // 100 + 1):
+            for m in range(1, 13):
+                period = year * 100 + m
+                if first <= period <= last:
+                    res.append(year * 100 + m)
+        return res
+    raise ValueError(f"pit mode '{pit_mode}' not supported!")
+
+def get_period_offset(first_year: int, period: int, pit_mode: str):
+    if pit_mode == 'q':
+        return (period // 100 - first_year) * 4 + period % 100 - 1
+    if pit_mode == 'a':
+        return period - first_year
+    if pit_mode == 'm':
+        return (period // 100 - first_year) * 12 + period % 100 - 1
+    return 0
 
 
-def get_period_offset(first_year: int, period: int, quarterly: bool):
-    if quarterly:
-        offset = (period // 100 - first_year) * 4 + period % 100 - 1
-    else:
-        offset = period - first_year
-    return offset
-
-
-def read_period_data(index_path, data_path, period, cur_date_int: int, quarterly: bool, last_period_index: int = None):
+def read_period_data(index_path, data_path, period, cur_date_int: int, pit_mode: str, last_period_index: int = None):
     """
     At `cur_date`(e.g. 20190102), read the information at `period`(e.g. 201803).
     Only the updating info before cur_date or at cur_date will be used.
@@ -119,7 +132,7 @@ def read_period_data(index_path, data_path, period, cur_date_int: int, quarterly
         date period represented by interger, e.g. 201901 corresponds to the first quarter in 2019
     cur_date_int: int
         date which represented by interger, e.g. 20190102
-    quarterly: bool
+    pit_mode: str
         num quarter instead of num of year
     last_period_index: int
         it is an optional parameter; it is designed to avoid repeatedly access the .index data of PIT database when
@@ -150,7 +163,7 @@ def read_period_data(index_path, data_path, period, cur_date_int: int, quarterly
         with open(index_path, "rb") as fi:
             (first_year,) = struct.unpack(PERIOD_DTYPE, fi.read(struct.calcsize(PERIOD_DTYPE)))
             all_periods = np.fromfile(fi, dtype=INDEX_DTYPE)
-        offset = get_period_offset(first_year, period, quarterly)
+        offset = get_period_offset(first_year, period, pit_mode)
         _next = all_periods[offset]
     else:
         _next = last_period_index

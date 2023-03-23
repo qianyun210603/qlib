@@ -56,7 +56,7 @@ class LinearModel(Model):
         df_train = dataset.prepare("train", col_set=["feature", "label"], data_key=DataHandlerLP.DK_L)
         if df_train.empty:
             raise ValueError("Empty data from dataset, please check your dataset config.")
-        w = None if reweighter is None else cast(pd.Series, reweighter.reweight(df_train)).value
+        w = None if reweighter is None else cast(pd.Series, reweighter.reweight(df_train)).values
         X, y = df_train["feature"].values, np.squeeze(df_train["label"].values)
         self.factor_names_ = df_train["feature"].columns
 

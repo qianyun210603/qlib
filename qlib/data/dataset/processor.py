@@ -96,7 +96,7 @@ class DropnaProcessor(Processor):
         self.fields_group = fields_group
 
     def __call__(self, df):
-        return df.dropna(subset=get_group_columns(df, self.fields_group))
+        return df.dropna(subset=get_group_columns(df, self.fields_group)).copy()
 
     def readonly(self):
         return True
@@ -195,7 +195,8 @@ class Fillna(Processor):
             # So we use numpy to accelerate filling values
             nan_select = np.isnan(df.values)
             nan_select[:, ~df.columns.isin(cols)] = False
-            df.values[nan_select] = self.fill_value
+            df[nan_select] = self.fill_value
+
         return df
 
 
@@ -321,7 +322,7 @@ class CSZScoreNorm(Processor):
             self.fields_group = [self.fields_group]
         for g in self.fields_group:
             cols = get_group_columns(df, g)
-            df[cols] = df[cols].groupby("datetime", group_keys=False).apply(self.zscore_func)
+            df.loc[:, cols] = df.loc[:, cols].groupby("datetime", group_keys=False).apply(self.zscore_func)
         return df
 
 
@@ -419,3 +420,92 @@ class TimeRangeFlt(InstProcessor):
         ):
             return df
         return df.head(0)
+
+
+class SymmetricOrthogonalization(Processor):
+    """Apply Symmetric Orthogonalization on features to remove collinearity"""
+
+    def __init__(self, fields_group="feature"):
+        self.fields_group = fields_group
+
+    def __call__(self, df: pd.DataFrame):
+        def orthogonalize_oneday(df):
+            mat_M = np.dot(df.values.T, df.values)
+            eigs, mat_U = np.linalg.eigh(mat_M)
+            mat_S = np.dot(np.dot(mat_U, np.diag(1.0 / np.sqrt(eigs))), mat_U.T)
+            df = pd.DataFrame(np.dot(df.values, mat_S), columns=df.columns, index=df.index)
+            return df
+
+        cols = get_group_columns(df, self.fields_group)
+        df.loc[:, cols] = df.loc[:, cols].groupby("datetime", group_keys=False).apply(orthogonalize_oneday)
+        return df
+
+
+class GramSchmidtOrthogonalization(Processor):
+    """Apply Gram-Schmidt Orthogonalization on features to remove collinearity"""
+
+    class GramSchmidtHelper(object):
+        def __init__(self, projection_order, orth_cols, label_cols=None, eps=1e-15):
+            self.orth_cols = orth_cols
+            self.projection_order = projection_order
+            self.label_cols = label_cols
+            self.processed_cols = []
+            self.eps = eps
+
+        def _cal_raw(self, df):
+            n = len(self.orth_cols)
+            for i in range(n):
+                projections = np.dot(
+                    df[self.orth_cols[:i]], np.dot(df[self.orth_cols[[i]]].T, df[self.orth_cols[:i]]).T
+                )
+                # subtract projections
+                df[self.orth_cols[[i]]] -= projections
+                if np.linalg.norm(df[self.orth_cols[[i]]]) < self.eps:
+                    df.loc[df[self.orth_cols[i]] < self.eps, self.orth_cols[i]] = 0.0  # set the small entries to 0
+                else:
+                    df.loc[:, self.orth_cols[i]] /= np.linalg.norm(df.loc[:, self.orth_cols[i]])
+            return df
+
+        def _cal_max_vertical_component(self, df):
+            cos_vector = np.dot(df[self.orth_cols].T, df[self.label_cols]) / np.linalg.norm(df[self.label_cols])
+            max_col = self.orth_cols.pop(np.abs(cos_vector).argmax())
+            self.processed_cols.append(max_col)
+
+            while len(self.orth_cols) > 0:
+                projections = np.dot(df[self.processed_cols], np.dot(df[self.orth_cols].T, df[self.processed_cols]).T)
+                remainings = df[self.orth_cols] - projections
+                remaining_norms = remainings.apply(np.linalg.norm, raw=True, axis=0)
+                max_remaining_col = remaining_norms.idxmax()
+                df[max_remaining_col] = remainings[max_remaining_col] / remaining_norms[max_remaining_col]
+                self.processed_cols.append(max_remaining_col)
+                self.orth_cols.remove(max_remaining_col)
+            return df
+
+        def __call__(self, df: pd.DataFrame):
+            if len(self.orth_cols) == 0:
+                self.orth_cols = self.processed_cols
+                self.processed_cols = []
+
+            df[self.orth_cols] = df[self.orth_cols] / df[self.orth_cols].apply(np.linalg.norm, axis=0, raw=True)
+            if self.projection_order == "raw" or df[self.label_cols].isna().all(axis=None):
+                return self._cal_raw(df)
+            if self.projection_order == "max_vertical_component":
+
+                return self._cal_max_vertical_component(df)
+            raise NotImplementedError("Unimplemented Orthogonalization Order.")
+
+    def __init__(self, fields_group="feature", projection_order="raw", label_group="label", eps=1e-15):
+        self.fields_group = fields_group
+        self.projection_order = projection_order
+        self.label_group = label_group
+        self.eps = eps
+
+    def __call__(self, df: pd.DataFrame):
+        df.sort_index(inplace=True)
+        cols = get_group_columns(df, self.fields_group)
+        label_cols = None if self.projection_order == "raw" else get_group_columns(df, self.label_group)
+        return df.groupby("datetime").apply(
+            GramSchmidtOrthogonalization.GramSchmidtHelper(
+                self.projection_order, orth_cols=list(cols), label_cols=label_cols, eps=self.eps
+            )
+        )

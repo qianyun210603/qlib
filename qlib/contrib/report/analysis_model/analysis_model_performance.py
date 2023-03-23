@@ -3,6 +3,7 @@
 from functools import partial
 
 import pandas as pd
+import numpy as np
 
 import plotly.graph_objs as go
 
@@ -19,11 +20,16 @@ from ..utils import guess_plotly_rangebreaks
 
 
 def _group_return(pred_label: pd.DataFrame = None, reverse: bool = False, N: int = 5, **kwargs) -> tuple:
-    """
+    r"""
 
-    :param pred_label:
-    :param reverse:
-    :param N:
+    :param pred_label: index is **pd.MultiIndex**, index name is **[instrument, datetime]**; columns names is **[score, label]**.
+           It is usually same as the label of model training(e.g. "Ref($close, -2)/Ref($close, -1) - 1").
+    :param reverse: if `True`, `pred['score'] *= -1`.
+    :param N: group number, default 5.
+    :param \*\*kwargs: contains some parameters to control plot style in plotly. Currently, supports
+       - `rangebreaks`: https://plotly.com/python/time-series/#Hiding-Weekends-and-Holidays
+       - `benchmark`: pd.Series contains benchmark return, used in `group1-benchmark` cum-return plot. if not provided or `average`,
+                       use average of all instrument in population as benchmark.
     :return:
     """
     if reverse:
@@ -31,15 +37,34 @@ def _group_return(pred_label: pd.DataFrame = None, reverse: bool = False, N: int
 
     pred_label = pred_label.sort_values("score", ascending=False)
 
-    # Group1 ~ Group5 only consider the dropna values
+    # Group1 ~ GroupN only consider the dropna values
     pred_label_drop = pred_label.dropna(subset=["score"])
+
+    class _Stratifier:
+        def __init__(self, N):
+            self.N = N
+            self.cuts = {}
+
+        def __call__(self, x, i):
+            l = len(x)
+            if l not in self.cuts:
+                per_group_num, remain = divmod(l, N)
+                per_group_nums = np.ones(N, dtype=int) * per_group_num
+                if remain > 0:
+                    per_group_nums[: remain - remain // 2] += 1
+                    per_group_nums[-(remain // 2) :] += 1
+                self.cuts[l] = np.insert(np.cumsum(per_group_nums), 0, 0)
+            return x[self.cuts[l][i] : self.cuts[l][i + 1]].mean()
+
+    _stratifier = _Stratifier(N)
 
     # Group
     t_df = pd.DataFrame(
         {
             "Group%d"
             % (i + 1): pred_label_drop.groupby(level="datetime")["label"].apply(
-                lambda x: x[len(x) // N * i : len(x) // N * (i + 1)].mean()  # pylint: disable=W0640
+                partial(_stratifier, i=i)
+                # lambda x: x[len(x) // N * i : len(x) // N * (i + 1)].mean()  -> this is incorrect, doesn't exhaust all population if len(x) % N != 0.
             )
             for i in range(N)
         }
@@ -49,8 +74,17 @@ def _group_return(pred_label: pd.DataFrame = None, reverse: bool = False, N: int
     # Long-Short
     t_df["long-short"] = t_df["Group1"] - t_df["Group%d" % N]
 
-    # Long-Average
-    t_df["long-average"] = t_df["Group1"] - pred_label.groupby(level="datetime")["label"].mean()
+    # Long-benchmark
+    benchmark = kwargs.get("benchmark", "average")
+    if isinstance(benchmark, str) and benchmark == "average":
+        benchmark_name = benchmark
+        benchmark = pred_label.groupby(level="datetime")["label"].mean()
+    elif isinstance(benchmark, pd.Series):
+        benchmark_name = benchmark.name if bool(benchmark.name) else "benchmark"
+        benchmark = benchmark.reindex(t_df.index)
+    else:
+        raise TypeError(f"Invalid benchmark type: {type(benchmark)}")
+    t_df[f"long-{benchmark_name}"] = t_df["Group1"] - benchmark
 
     t_df = t_df.dropna(how="all")  # for days which does not contain label
     # Cumulative Return By Group
@@ -62,7 +96,7 @@ def _group_return(pred_label: pd.DataFrame = None, reverse: bool = False, N: int
         ),
     ).figure
 
-    t_df = t_df.loc[:, ["long-short", "long-average"]]
+    t_df = t_df.loc[:, ["long-short", f"long-{benchmark_name}"]]
     _bin_size = float(((t_df.max() - t_df.min()) / 20).min())
     group_hist_figure = SubplotsGraph(
         t_df,
@@ -71,7 +105,7 @@ def _group_return(pred_label: pd.DataFrame = None, reverse: bool = False, N: int
             rows=1,
             cols=2,
             print_grid=False,
-            subplot_titles=["long-short", "long-average"],
+            subplot_titles=["long-short", f"long-{benchmark_name}"],
         ),
     ).figure
 
@@ -170,10 +204,11 @@ def _pred_ic(
 
     ic_bar_figure = ic_figure(ic_df, kwargs.get("show_nature_day", False))
 
+    _monthly_ic_abs_max = _monthly_ic.abs().max()
     ic_heatmap_figure = HeatmapGraph(
         _monthly_ic.unstack(),
         layout=dict(title="Monthly IC", xaxis=dict(dtick=1), yaxis=dict(tickformat="04d", dtick=1)),
-        graph_kwargs=dict(xtype="array", ytype="array"),
+        graph_kwargs=dict(xtype="array", ytype="array", zmin=-_monthly_ic_abs_max, zmax=_monthly_ic_abs_max),
     ).figure
 
     dist = stats.norm
@@ -322,6 +357,8 @@ def model_performance_graph(
     :param show_nature_day: whether to display the abscissa of non-trading day.
     :param \*\*kwargs: contains some parameters to control plot style in plotly. Currently, supports
        - `rangebreaks`: https://plotly.com/python/time-series/#Hiding-Weekends-and-Holidays
+       - `benchmark`: pd.Series contains benchmark return, used in `group1-benchmark` cum-return plot. if not provided or 'average', use average of all instrument in population as benchmark.
+
     :return: if show_notebook is True, display in notebook; else return `plotly.graph_objs.Figure` list.
     """
     figure_list = []

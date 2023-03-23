@@ -10,7 +10,7 @@ _build
 build/
 dist/
 
-
+*.log
 *.pkl
 *.hd5
 *.csv
@@ -50,3 +50,4 @@ tags
 
 ./pretrain
 .idea/
+

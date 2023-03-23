@@ -12,7 +12,7 @@ from qlib.utils import init_instance_by_config
 from .decision import BaseTradeDecision, Order
 from .exchange import Exchange
 from .high_performance_ds import BaseOrderIndicator
-from .position import BasePosition
+from .position import BasePosition, Position
 from .report import Indicator, PortfolioMetrics
 
 """
@@ -232,19 +232,24 @@ class Account:
         Update current to make rtn consistent with earning at the end of bar, and update holding bar count of stock
         """
         # update price for stock in the position and the profit from changed_price
-        # NOTE: updating position does not only serve portfolio metrics, it also serve the strategy
+        # NOTE: updating position does not only serve portfolio metrics, it also serves the strategy
         assert self.current_position is not None
 
         if not self.current_position.skip_update():
             stock_list = self.current_position.get_stock_list()
             for code in stock_list:
                 # if suspended, no new price to be updated, profit is 0
-                if trade_exchange.check_stock_suspended(code, trade_start_time, trade_end_time):
-                    continue
-                bar_close = cast(float, trade_exchange.get_close(code, trade_start_time, trade_end_time))
-                self.current_position.update_stock_price(stock_id=code, price=bar_close)
+                if not trade_exchange.check_stock_suspended(code, trade_start_time, trade_end_time):
+                    bar_close = cast(float, trade_exchange.get_close(code, trade_start_time, trade_end_time))
+                    self.current_position.update_stock_price(stock_id=code, price=bar_close)
+                inst_info = trade_exchange.get_instrument_info(code)
+                if inst_info:
+                    cast(Position, self.current_position).update_event(
+                        code, inst_info, trade_start_time, trade_end_time
+                    )
+
             # update holding day count
-            # NOTE: updating bar_count does not only serve portfolio metrics, it also serve the strategy
+            # NOTE: updating bar_count does not only serve portfolio metrics, it also serves the strategy
             self.current_position.add_count_all(bar=self.freq)
 
     def update_portfolio_metrics(self, trade_start_time: pd.Timestamp, trade_end_time: pd.Timestamp) -> None:
@@ -273,7 +278,7 @@ class Account:
         now_turnover = self.accum_info.get_turnover - last_total_turnover
 
         # update portfolio_metrics for today
-        # judge whether the trading is begin.
+        # judge whether the trading has begun.
         # and don't add init account state into portfolio_metrics, due to we don't have excess return in those days.
         self.portfolio_metrics.update_portfolio_metrics_record(
             trade_start_time=trade_start_time,

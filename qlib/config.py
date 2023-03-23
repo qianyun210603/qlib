@@ -207,6 +207,16 @@ _default_config = {
     # if min_data_shift == 0, use default market time [9:30, 11:29, 1:00, 2:59]
     # if min_data_shift != 0, use shifted market time [9:30, 11:29, 1:00, 2:59] - shift*minute
     "min_data_shift": 0,
+    "ohlc_adjusted": False,
+    "adjust_factor_field": "$factor",
+    "fields_need_adjust": {
+        "$open": 1,
+        "$high": 1,
+        "$low": 1,
+        "$close": 1,
+        "$volume": -1,
+        "$vwap": 1,
+    },
 }
 
 MODE_CONF = {
@@ -447,13 +457,16 @@ class QlibConfig(Config):
         from .utils import init_instance_by_config  # pylint: disable=C0415
         from .data.ops import register_all_ops  # pylint: disable=C0415
         from .data.data import register_all_wrappers  # pylint: disable=C0415
+        from .data.cache import H  # pylint: disable=C0415
         from .workflow import R, QlibRecorder  # pylint: disable=C0415
         from .workflow.utils import experiment_exit_handler  # pylint: disable=C0415
+        from .workflow.expm import ExpManager  # pylint: disable=C0415
 
         register_all_ops(self)
         register_all_wrappers(self)
+        H.init_kernel()
         # set up QlibRecorder
-        exp_manager = init_instance_by_config(self["exp_manager"])
+        exp_manager = init_instance_by_config(self["exp_manager"], accept_types=(ExpManager,))
         qr = QlibRecorder(exp_manager)
         R.register(qr)
         # clean up experiment when python program ends

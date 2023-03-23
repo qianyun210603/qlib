@@ -189,7 +189,7 @@ class ExpManager:
         experiment_name : str
             name of the experiment to return.
         create : boolean
-            create the experiment it if hasn't been created before.
+            create the experiment if it hasn't been created before.
         start : boolean
             start the new experiment if one is created.
 
@@ -201,7 +201,7 @@ class ExpManager:
         if experiment_id is None and experiment_name is None:
             if self.active_experiment is not None:
                 return self.active_experiment
-            # User don't want get active code now.
+            # User don't want to get active code now.
             experiment_name = self._default_exp_name
 
         if create:
@@ -227,7 +227,7 @@ class ExpManager:
         except ValueError:
             if experiment_name is None:
                 experiment_name = self._default_exp_name
-            logger.warning(f"No valid experiment found. Create a new experiment with name {experiment_name}.")
+            logger.info(f"No valid experiment found. Create a new experiment with name {experiment_name}.")
 
             # NOTE: mlflow doesn't consider the lock for recording multiple runs
             # So we supported it in the interface wrapper
@@ -235,7 +235,7 @@ class ExpManager:
             if pr.scheme == "file":
                 with FileLock(os.path.join(pr.netloc, pr.path, "filelock")):  # pylint: disable=E0110
                     return self.create_exp(experiment_name), True
-            # NOTE: for other schemes like http, we double check to avoid create exp conflicts
+            # NOTE: for other schemes like http, we double-check to avoid create exp conflicts
             try:
                 return self.create_exp(experiment_name), True
             except ExpAlreadyExistError:
@@ -345,7 +345,7 @@ class MLflowExpManager(ExpManager):
 
         return self.active_experiment
 
-    def _end_exp(self, recorder_status: Text = Recorder.STATUS_S):
+    def _end_exp(self, recorder_status: Text = Recorder.STATUS_S, **kwargs):
         if self.active_experiment is not None:
             self.active_experiment.end(recorder_status)
             self.active_experiment = None
@@ -375,6 +375,8 @@ class MLflowExpManager(ExpManager):
                 # NOTE: the mlflow's experiment_id must be str type...
                 # https://www.mlflow.org/docs/latest/python_api/mlflow.tracking.html#mlflow.tracking.MlflowClient.get_experiment
                 exp = self.client.get_experiment(experiment_id)
+                if experiment_name is not None and experiment_name != exp.name:
+                    raise ValueError(f"Conflict parameters: the exp with id {experiment_id} is {exp.name}.")
                 if exp.lifecycle_stage.upper() == "DELETED":
                     raise MlflowException("No valid experiment has been found.")
                 experiment = MLflowExperiment(exp.experiment_id, exp.name, self.uri)
@@ -408,6 +410,10 @@ class MLflowExpManager(ExpManager):
         ), "Please input a valid experiment id or name before deleting."
         try:
             if experiment_id is not None:
+                if experiment_name is not None and experiment_name != self._get_exp(experiment_id).name:
+                    raise ValueError(
+                        f"Conflict parameters: the exp with id {experiment_id} is {self._get_exp(experiment_id).name}."
+                    )
                 self.client.delete_experiment(experiment_id)
             else:
                 experiment = self.client.get_experiment_by_name(experiment_name)

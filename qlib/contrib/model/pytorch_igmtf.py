@@ -2,26 +2,25 @@
 # Licensed under the MIT License.
 
 
-from __future__ import division
-from __future__ import print_function
+from __future__ import division, print_function
+
+import copy
+from typing import Text, Union
 
 import numpy as np
 import pandas as pd
-from typing import Text, Union
-import copy
-from ...utils import get_or_create_path
-from ...log import get_module_logger
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from .pytorch_utils import count_parameters
-from ...model.base import Model
+from ...contrib.model.pytorch_gru import GRUModel
+from ...contrib.model.pytorch_lstm import LSTMModel
 from ...data.dataset import DatasetH
 from ...data.dataset.handler import DataHandlerLP
-from ...contrib.model.pytorch_lstm import LSTMModel
-from ...contrib.model.pytorch_gru import GRUModel
+from ...log import get_module_logger
+from ...model.base import Model
+from ...utils import get_or_create_path
+from .pytorch_utils import count_parameters
 
 
 class IGMTF(Model):
@@ -153,7 +152,6 @@ class IGMTF(Model):
         raise ValueError("unknown loss `%s`" % self.loss)
 
     def metric_fn(self, pred, label):
-
         mask = torch.isfinite(label)
 
         if self.metric == "ic":
@@ -201,7 +199,6 @@ class IGMTF(Model):
         return train_hidden, train_hidden_day
 
     def train_epoch(self, x_train, y_train, train_hidden, train_hidden_day):
-
         x_train_values = x_train.values
         y_train_values = np.squeeze(y_train.values)
 
@@ -222,7 +219,6 @@ class IGMTF(Model):
             self.train_optimizer.step()
 
     def test_epoch(self, data_x, data_y, train_hidden, train_hidden_day):
-
         # prepare training data
         x_values = data_x.values
         y_values = np.squeeze(data_y.values)
@@ -254,7 +250,6 @@ class IGMTF(Model):
         evals_result=dict(),
         save_path=None,
     ):
-
         df_train, df_valid = dataset.prepare(
             ["train", "valid"],
             col_set=["feature", "label"],

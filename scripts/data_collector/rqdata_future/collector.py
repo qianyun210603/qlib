@@ -1,49 +1,52 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
-import re
-import sys
 import copy
 import multiprocessing
-from datetime import time
-from pathlib import Path
-from typing import Iterable, cast, Type
-from operator import itemgetter
-from functools import partial
-from pandas_helper.tseries.offsets import CustomBusinessIntradayOffset
-from pandas_helper import resample
-import exchange_calendars as mcal
-from arctic.date import DateRange
-from arctic.auth import Credential
-from arctic.hooks import register_get_auth_hook
-from vnpy.trader.database import get_database, SETTINGS
-from vnpy_arctic.arctic_database import ArcticDatabase
-
+import re
+import sys
 # import fire
 import traceback
+from datetime import time
+from functools import partial
+from operator import itemgetter
+from pathlib import Path
+from typing import Iterable, Type, cast
+
+import exchange_calendars as mcal
 import numpy as np
 import pandas as pd
+from arctic.auth import Credential
+from arctic.date import DateRange
+from arctic.hooks import register_get_auth_hook
 from loguru import logger
+from pandas_helper import resample
+from pandas_helper.tseries.offsets import CustomBusinessIntradayOffset
+from vnpy.trader.database import SETTINGS, get_database
+from vnpy_arctic.arctic_database import ArcticDatabase
 
 from qlib.utils import code_to_fname
 
 CUR_DIR = Path(__file__).resolve().parent
 sys.path.append(str(CUR_DIR.parent.parent))
-from dump_bin import DumpDataUpdate, DumpDataAll
 from data_collector.base import BaseCollector, BaseNormalize, BaseRun, Normalize
 from data_collector.utils import get_calendar_list
+from dump_bin import DumpDataAll, DumpDataUpdate
 
 SYMBOL_PATTERN = re.compile(r"([A-Za-z]+)(\d+)_([A-Za-z]+)")
 
+
 def _process(tt):
     tl, tr = pd.Timestamp(tt[0]) - pd.Timedelta(minutes=1), pd.Timestamp(tt[1])
-    return tl.time() if tl.hour < 17 else (tl - pd.Timedelta(days=1)).time(), tr.time() if tr.hour < 17 else (tr - pd.Timedelta(
-        days=1)).time()
+    return (
+        tl.time() if tl.hour < 17 else (tl - pd.Timedelta(days=1)).time(),
+        tr.time() if tr.hour < 17 else (tr - pd.Timedelta(days=1)).time(),
+    )
 
 
 def arctic_auth_hook(*_):
     if bool(SETTINGS.get("database.password", "")) and bool(SETTINGS.get("database.user", "")):
         return Credential(
-            database='admin',
+            database="admin",
             user=SETTINGS["database.user"],
             password=SETTINGS["database.password"],
         )
@@ -54,7 +57,6 @@ register_get_auth_hook(arctic_auth_hook)
 
 
 class RqdataCollector(BaseCollector):
-
     def __init__(
         self,
         save_dir: [str, Path],
@@ -95,16 +97,16 @@ class RqdataCollector(BaseCollector):
         db_mgr = get_database()
         self.arctic_store = cast(ArcticDatabase, db_mgr).connection
         self.meta_lib = self.arctic_store.get_library("future_meta")
-        self.bar_lib = self.arctic_store.get_library('bar_data')
+        self.bar_lib = self.arctic_store.get_library("bar_data")
         self.dom_lib = self.arctic_store.get_library("future_dominant")
-        self.limit_lib = self.arctic_store.get_library('future_limit_up_down')
-        self.fut_next_mon_lib = self.arctic_store.get_library('future_next_mon')
+        self.limit_lib = self.arctic_store.get_library("future_limit_up_down")
+        self.fut_next_mon_lib = self.arctic_store.get_library("future_next_mon")
 
         self.symbol_dict = None
 
         self.commod_only = commod_only
 
-        interval = 'd' if interval.endswith('d') else interval
+        interval = "d" if interval.endswith("d") else interval
 
         super(RqdataCollector, self).__init__(
             save_dir=save_dir,
@@ -117,7 +119,7 @@ class RqdataCollector(BaseCollector):
             check_data_length=check_data_length,
             limit_nums=limit_nums,
         )
-        if self.interval not in {'d', '1d', '1m', '1min', "5min", "15min", "30min", "1h", '1hour'}:
+        if self.interval not in {"d", "1d", "1m", "1min", "5min", "15min", "30min", "1h", "1hour"}:
             raise ValueError(f"interval error: {self.interval}")
 
     @staticmethod
@@ -131,158 +133,235 @@ class RqdataCollector(BaseCollector):
     def _cal_rolling_yields(self, und_code, exch, dtrange):
         def get_days_to_expiry(s):
             mymeta = self.meta_lib.read(s.contract)
-            return (mymeta['maturity_date'].replace(tzinfo=None) - s.name).days
+            return (mymeta["maturity_date"].replace(tzinfo=None) - s.name).days
 
         doms = self.dom_lib.read(und_code, chunk_range=dtrange)
-        doms['days_to_expiry'] = doms.apply(get_days_to_expiry, axis=1)
-        dom_price_df = self.bar_lib.read(
-            und_code + '88_' + exch + '_d', chunk_range=dtrange,
-            columns=['close_price', 'date']
-        ).set_index('date').sort_index()
-        dom_contract = pd.merge(dom_price_df, doms, left_index=True, right_index=True, how='left')
-        next_mon_df = self.fut_next_mon_lib.read(
-            und_code, chunk_range=dtrange, columns=['date', 'close_price', 'contract']
-        ).set_index('date').sort_index()
-        next_mon_df['days_to_expiry'] = next_mon_df.apply(get_days_to_expiry, axis=1)
-        next_next_mon_df = self.fut_next_mon_lib.read(
-            und_code + '_next', chunk_range=dtrange, columns=['date', 'close_price', 'contract']
-        ).set_index('date').sort_index()
-        next_next_mon_df['days_to_expiry'] = next_next_mon_df.apply(get_days_to_expiry, axis=1)
-        dom_contract.loc[dom_contract.days_to_expiry == next_mon_df.days_to_expiry, :] = \
-            next_next_mon_df.loc[dom_contract.days_to_expiry == next_mon_df.days_to_expiry, :]
-        return (np.log(next_mon_df.close_price / dom_contract.close_price) * 365 /
-               (dom_contract.days_to_expiry - next_mon_df.days_to_expiry)).rename('rolling_yield')
+        doms["days_to_expiry"] = doms.apply(get_days_to_expiry, axis=1)
+        dom_price_df = (
+            self.bar_lib.read(und_code + "88_" + exch + "_d", chunk_range=dtrange, columns=["close_price", "date"])
+            .set_index("date")
+            .sort_index()
+        )
+        dom_contract = pd.merge(dom_price_df, doms, left_index=True, right_index=True, how="left")
+        next_mon_df = (
+            self.fut_next_mon_lib.read(und_code, chunk_range=dtrange, columns=["date", "close_price", "contract"])
+            .set_index("date")
+            .sort_index()
+        )
+        next_mon_df["days_to_expiry"] = next_mon_df.apply(get_days_to_expiry, axis=1)
+        next_next_mon_df = (
+            self.fut_next_mon_lib.read(
+                und_code + "_next", chunk_range=dtrange, columns=["date", "close_price", "contract"]
+            )
+            .set_index("date")
+            .sort_index()
+        )
+        next_next_mon_df["days_to_expiry"] = next_next_mon_df.apply(get_days_to_expiry, axis=1)
+        dom_contract.loc[dom_contract.days_to_expiry == next_mon_df.days_to_expiry, :] = next_next_mon_df.loc[
+            dom_contract.days_to_expiry == next_mon_df.days_to_expiry, :
+        ]
+        return (
+            np.log(next_mon_df.close_price / dom_contract.close_price)
+            * 365
+            / (dom_contract.days_to_expiry - next_mon_df.days_to_expiry)
+        ).rename("rolling_yield")
 
     def get_data(
         self, symbol: str, interval: str, start_datetime: pd.Timestamp, end_datetime: pd.Timestamp
     ) -> pd.DataFrame:
-        if interval not in {'d', '1d', '1min', '15min'}:
+        if interval not in {"d", "1d", "1min", "15min"}:
             raise ValueError(f"cannot support {interval}")
-        read_interval = 'd' if interval.endswith('d') else '1m'
+        read_interval = "d" if interval.endswith("d") else "1m"
         obj = re.match(SYMBOL_PATTERN, symbol)
         if obj is None:
             logger.error(f"wrong sym format {symbol}")
             return pd.DataFrame()
         und_sym, time_code, exch_str = obj.groups()
-        if und_sym == 'FU': # https://www.shfe.com.cn/news/notice/911330669.html
-            start_datetime=max(start_datetime, pd.Timestamp("2018-07-16", tz='Asia/Shanghai'))
-        if und_sym == 'WR': # https://www.shfe.com.cn/news/notice/911331232.html
-            start_datetime = max(start_datetime, pd.Timestamp("2018-10-16", tz='Asia/Shanghai'))
-        db_symbol = symbol + '_' + read_interval
+        if und_sym == "FU":  # https://www.shfe.com.cn/news/notice/911330669.html
+            start_datetime = max(start_datetime, pd.Timestamp("2018-07-16", tz="Asia/Shanghai"))
+        if und_sym == "WR":  # https://www.shfe.com.cn/news/notice/911331232.html
+            start_datetime = max(start_datetime, pd.Timestamp("2018-10-16", tz="Asia/Shanghai"))
+        db_symbol = symbol + "_" + read_interval
         dt_range = DateRange(start_datetime.tz_localize(None), end_datetime.tz_localize(None))
         _result = self.bar_lib.read(db_symbol, chunk_range=dt_range)
         try:
-            _result = _result.set_index('date').sort_index()
+            _result = _result.set_index("date").sort_index()
         except:
-            logger.error(f"{start_datetime.strftime('%Y-%m-%d')}, {end_datetime.strftime('%Y-%m-%d')}, {db_symbol}, {symbol}")
+            logger.error(
+                f"{start_datetime.strftime('%Y-%m-%d')}, {end_datetime.strftime('%Y-%m-%d')}, {db_symbol}, {symbol}"
+            )
             return pd.DataFrame()
 
-        if exch_str == 'CZCE' and read_interval == '1m' and time_code not in {'888', '889', '890', '891'}:
-            _result['turnover'] = (_result['high_price'] + _result['low_price'] + _result['close_price'])/3.0 * \
-                                  _result['volume'] * self.symbol_dict[symbol]["contract_multiplier"]
+        if exch_str == "CZCE" and read_interval == "1m" and time_code not in {"888", "889", "890", "891"}:
+            _result["turnover"] = (
+                (_result["high_price"] + _result["low_price"] + _result["close_price"])
+                / 3.0
+                * _result["volume"]
+                * self.symbol_dict[symbol]["contract_multiplier"]
+            )
 
-        _limits = self.limit_lib.read(symbol, chunk_range = dt_range, columns=['limit_up', 'limit_down', 'settlement']).sort_index()
+        _limits = self.limit_lib.read(
+            symbol, chunk_range=dt_range, columns=["limit_up", "limit_down", "settlement"]
+        ).sort_index()
 
-        if time_code in {'888', '889', '890', '891'}:
-            unadj_db_symbol = db_symbol.replace(time_code, '88')
-            if exch_str == 'CZCE' and read_interval == '1m':
-                unadjclose = self.bar_lib.read(
-                    unadj_db_symbol, chunk_range=dt_range,
-                    columns = ['date', 'close_price', 'high_price', 'low_price', 'turnover', 'volume', 'open_interest'],
-                ).set_index('date').sort_index()
-                unadjclose['turnover'] = (unadjclose['high_price'] + unadjclose['low_price']
-                                          + unadjclose['close_price'])/3.0 * unadjclose['volume'] * \
-                                         self.symbol_dict[symbol]["contract_multiplier"]
+        if time_code in {"888", "889", "890", "891"}:
+            unadj_db_symbol = db_symbol.replace(time_code, "88")
+            if exch_str == "CZCE" and read_interval == "1m":
+                unadjclose = (
+                    self.bar_lib.read(
+                        unadj_db_symbol,
+                        chunk_range=dt_range,
+                        columns=[
+                            "date",
+                            "close_price",
+                            "high_price",
+                            "low_price",
+                            "turnover",
+                            "volume",
+                            "open_interest",
+                        ],
+                    )
+                    .set_index("date")
+                    .sort_index()
+                )
+                unadjclose["turnover"] = (
+                    (unadjclose["high_price"] + unadjclose["low_price"] + unadjclose["close_price"])
+                    / 3.0
+                    * unadjclose["volume"]
+                    * self.symbol_dict[symbol]["contract_multiplier"]
+                )
             else:
-                unadjclose = self.bar_lib.read(
-                    unadj_db_symbol, chunk_range=dt_range, columns = [
-                        'date', 'close_price', 'turnover', 'volume', 'open_interest'
-                    ]).set_index('date').sort_index()
-            _result['unadjclose'] = unadjclose['close_price']
-            _result['volume'] = unadjclose['volume']
-            if exch_str == 'CZCE':
-                _result['turnover'] = unadjclose['turnover']
+                unadjclose = (
+                    self.bar_lib.read(
+                        unadj_db_symbol,
+                        chunk_range=dt_range,
+                        columns=["date", "close_price", "turnover", "volume", "open_interest"],
+                    )
+                    .set_index("date")
+                    .sort_index()
+                )
+            _result["unadjclose"] = unadjclose["close_price"]
+            _result["volume"] = unadjclose["volume"]
+            if exch_str == "CZCE":
+                _result["turnover"] = unadjclose["turnover"]
             else:
-                _result['turnover'] = unadjclose['turnover']
-            _result['open_interest'] = unadjclose['open_interest']
+                _result["turnover"] = unadjclose["turnover"]
+            _result["open_interest"] = unadjclose["open_interest"]
 
-            if time_code in ('888', '889'):
-                _result['factor'] = _result['close_price'] - _result['unadjclose']
-            elif time_code in ('890', '891'):
-                _result['factor'] = _result['close_price'] / _result['unadjclose']
+            if time_code in ("888", "889"):
+                _result["factor"] = _result["close_price"] - _result["unadjclose"]
+            elif time_code in ("890", "891"):
+                _result["factor"] = _result["close_price"] / _result["unadjclose"]
             else:
                 raise ValueError("unknow time code")
         else:
-            _result['factor'] = 1.0
-            _result['unadjclose'] = _result['close_price']
+            _result["factor"] = 1.0
+            _result["unadjclose"] = _result["close_price"]
 
-        if interval not in {'d', '1d'}:
-            _limits.index = _limits.index - pd.Timedelta('6H')
-
+        if interval not in {"d", "1d"}:
+            _limits.index = _limits.index - pd.Timedelta("6H")
 
         try:
             _result = pd.merge_asof(_result, _limits, left_index=True, right_index=True)
         except:
-            logger.error(f"merge limits failed for {db_symbol} from {start_datetime} to {end_datetime}: {traceback.format_exc()}")
+            logger.error(
+                f"merge limits failed for {db_symbol} from {start_datetime} to {end_datetime}: {traceback.format_exc()}"
+            )
             raise
 
         if self.commod_only % 2 == 1:
             day_only = True
         else:
             day_only = False
-        if interval in {'15min'}:
+        if interval in {"15min"}:
             try:
-                trading_peroids =  [tuple(x.split('-')) for x in self.symbol_dict[symbol]['trading_hours'].split(',')]
+                trading_peroids = [tuple(x.split("-")) for x in self.symbol_dict[symbol]["trading_hours"].split(",")]
                 starts, ends = map(list, zip(*[_process(tt) for tt in trading_peroids]))
 
                 # for financial futures before 2018
-                if _result.index.time.min() == time(9, 15) and starts[0] != time(9,15):
+                if _result.index.time.min() == time(9, 15) and starts[0] != time(9, 15):
                     starts[0] = time(9, 15)
                 if _result.index.time.max() == time(15, 14) and ends[-1] != time(15, 15):
                     ends[-1] = time(15, 15)
 
                 cbi = CustomBusinessIntradayOffset(
-                    n=1, step=pd.Timedelta("15min"), start=starts, end=ends, holidays=mcal.get_calendar("SSE").adhoc_holidays.tolist(), normalize=False,
-                    weekmask='Mon Tue Wed Thu Fri'
+                    n=1,
+                    step=pd.Timedelta("15min"),
+                    start=starts,
+                    end=ends,
+                    holidays=mcal.get_calendar("SSE").adhoc_holidays.tolist(),
+                    normalize=False,
+                    weekmask="Mon Tue Wed Thu Fri",
                 )
-                _result = resample(_result, rule=cbi).agg(
-                    {'open_price': 'first', "high_price": 'max', 'low_price': 'min', 'close_price': 'last', 'unadjclose': 'last', 'volume': 'sum',
-                     'turnover': 'sum', 'open_interest': 'last', 'factor': 'mean'}).dropna(how='all', subset=['open_price', 'high_price', 'low_price', 'close_price'])
+                _result = (
+                    resample(_result, rule=cbi)
+                    .agg(
+                        {
+                            "open_price": "first",
+                            "high_price": "max",
+                            "low_price": "min",
+                            "close_price": "last",
+                            "unadjclose": "last",
+                            "volume": "sum",
+                            "turnover": "sum",
+                            "open_interest": "last",
+                            "factor": "mean",
+                        }
+                    )
+                    .dropna(how="all", subset=["open_price", "high_price", "low_price", "close_price"])
+                )
                 if day_only:
                     _result = _result.between_time("08:00", "17:00")
             except Exception:
                 logger.error(
-                    f"resampling failed for {db_symbol} from {start_datetime} to {end_datetime}: {traceback.format_exc()}")
+                    f"resampling failed for {db_symbol} from {start_datetime} to {end_datetime}: {traceback.format_exc()}"
+                )
                 raise
 
-        if obj is not None and obj[2] in ('888', '889'):
-            _result['vwap'] = _result['turnover'] / _result['volume'] / self.symbol_dict[symbol]["contract_multiplier"] + _result['factor']
+        if obj is not None and obj[2] in ("888", "889"):
+            _result["vwap"] = (
+                _result["turnover"] / _result["volume"] / self.symbol_dict[symbol]["contract_multiplier"]
+                + _result["factor"]
+            )
         else:
-            _result['vwap'] = _result['turnover'] / _result['volume'] / self.symbol_dict[symbol]["contract_multiplier"] * _result['factor']
+            _result["vwap"] = (
+                _result["turnover"]
+                / _result["volume"]
+                / self.symbol_dict[symbol]["contract_multiplier"]
+                * _result["factor"]
+            )
 
-        _result['vwap'].fillna(_result['close_price'], inplace=True)
-        if interval in {'d', '1d'}:
-            _result['rolling_yield'] = self._cal_rolling_yields(und_code=und_sym, exch=exch_str, dtrange=dt_range)
+        _result["vwap"].fillna(_result["close_price"], inplace=True)
+        if interval in {"d", "1d"}:
+            _result["rolling_yield"] = self._cal_rolling_yields(und_code=und_sym, exch=exch_str, dtrange=dt_range)
 
         return pd.DataFrame() if _result is None else _result
 
     def get_instrument_list(self):
         def symbol_validation(_, v):
-            if self.commod_only > 1 and v["underlying_symbol"] in {'IF', 'IC', 'IH', 'IM', 'T', 'TS', 'TF'}:
+            if self.commod_only > 1 and v["underlying_symbol"] in {"IF", "IC", "IH", "IM", "T", "TS", "TF"}:
                 return False
-            if pd.isna(v['listed_date']):
+            if pd.isna(v["listed_date"]):
                 return False
-            if pd.isna(v['de_listed_date']):
-                return v['listed_date']<=self.end_datetime
-            if v["underlying_symbol"] == 'FU' and v['listed_date'] < pd.Timestamp("2018-07-15 23:00:00", tz='Asia/Shanghai'):
+            if pd.isna(v["de_listed_date"]):
+                return v["listed_date"] <= self.end_datetime
+            if v["underlying_symbol"] == "FU" and v["listed_date"] < pd.Timestamp(
+                "2018-07-15 23:00:00", tz="Asia/Shanghai"
+            ):
                 return False
-            if v["underlying_symbol"] == 'WR' and v['listed_date'] < pd.Timestamp("2018-10-15 23:00:00", tz='Asia/Shanghai'):
+            if v["underlying_symbol"] == "WR" and v["listed_date"] < pd.Timestamp(
+                "2018-10-15 23:00:00", tz="Asia/Shanghai"
+            ):
                 return False
-            return self.start_datetime<=v['de_listed_date'] and v['listed_date'].replace(hour=16) <= min(self.end_datetime, pd.Timestamp.now('Asia/Shanghai'))
+            return self.start_datetime <= v["de_listed_date"] and v["listed_date"].replace(hour=16) <= min(
+                self.end_datetime, pd.Timestamp.now("Asia/Shanghai")
+            )
 
         logger.info("get china future contracts......")
         self.symbol_dict = {x: self.meta_lib.read(x) for x in self.meta_lib.list_symbols()}
-        symbols = [k for k, v in self.symbol_dict.items() if k!='_exchange_underlying_mapping' and symbol_validation(k, v)]
+        symbols = [
+            k for k, v in self.symbol_dict.items() if k != "_exchange_underlying_mapping" and symbol_validation(k, v)
+        ]
         logger.info(f"get {len(symbols)} symbols.")
         return symbols
 
@@ -337,7 +416,7 @@ class RqdataCollector(BaseCollector):
         instrument_path = self.save_dir.joinpath(f"{symbol}.csv")
         df["symbol"] = symbol
         if instrument_path.exists():
-            _old_df = pd.read_csv(instrument_path, index_col=['date'], parse_dates=['date'])
+            _old_df = pd.read_csv(instrument_path, index_col=["date"], parse_dates=["date"])
             df = pd.concat([_old_df[~_old_df.index.isin(df.index)], df], sort=True)
         df.to_csv(instrument_path)
 
@@ -362,15 +441,27 @@ class RqdataCollector(BaseCollector):
 
 class RqdataNormalize(BaseNormalize):
     SOURCE_COLS = [
-        "open_price", "close_price", "high_price", "low_price", "volume", 'turnover', 'open_interest',
+        "open_price",
+        "close_price",
+        "high_price",
+        "low_price",
+        "volume",
+        "turnover",
+        "open_interest",
     ]
     COLUMNS = [
-        "open", "close", "high", "low", "volume", 'money', 'open_interest',
+        "open",
+        "close",
+        "high",
+        "low",
+        "volume",
+        "money",
+        "open_interest",
     ]
     DAILY_FORMAT = "%Y-%m-%d"
 
     def __init__(self, date_field_name: str = "date", symbol_field_name: str = "symbol", **kwargs):
-        self.commod_only = kwargs.get('commod_only', 0)
+        self.commod_only = kwargs.get("commod_only", 0)
         super(RqdataNormalize, self).__init__(date_field_name, symbol_field_name, **kwargs)
 
     @staticmethod
@@ -393,22 +484,24 @@ class RqdataNormalize(BaseNormalize):
             return df
         symbol = df.loc[df["symbol"].first_valid_index(), "symbol"]
         columns = copy.deepcopy(RqdataNormalize.COLUMNS)
-        df['date'] = pd.to_datetime(df.date)
+        df["date"] = pd.to_datetime(df.date)
         df.set_index("date", inplace=True)
-        df = df.rename(columns=dict((s, t) for s, t in zip(RqdataNormalize.SOURCE_COLS, RqdataNormalize.COLUMNS))).copy()
+        df = df.rename(
+            columns=dict((s, t) for s, t in zip(RqdataNormalize.SOURCE_COLS, RqdataNormalize.COLUMNS))
+        ).copy()
 
         duplicated_record = df.index.duplicated(keep="first")
         if duplicated_record.any():
             logger.warning(f"Duplicated record discovered for {symbol}")
             df = df[~duplicated_record]
         if calendar_list is not None:
-            tmp_idx_cal = pd.DatetimeIndex(calendar_list, name='date').sort_values()
+            tmp_idx_cal = pd.DatetimeIndex(calendar_list, name="date").sort_values()
             index_from_cal = tmp_idx_cal[
-                tmp_idx_cal.searchsorted(df.index.min().replace(hour=0, minute=0, second=0)):
-                tmp_idx_cal.searchsorted(df.index.max().replace(hour=23, minute=59, second=59))
+                tmp_idx_cal.searchsorted(df.index.min().replace(hour=0, minute=0, second=0)) : tmp_idx_cal.searchsorted(
+                    df.index.max().replace(hour=23, minute=59, second=59)
+                )
             ]
             df = df.reindex(index_from_cal)
-
 
         df.sort_index(inplace=True)
 
@@ -427,10 +520,15 @@ class RqdataNormalize(BaseNormalize):
     def _get_calendar_list(self) -> Iterable[pd.Timestamp]:
         return [x for x in get_calendar_list("ALL")]
 
-class RqdataNormalizeIntraday(RqdataNormalize):
 
+class RqdataNormalizeIntraday(RqdataNormalize):
     def __init__(
-        self, qlib_data_1d_dir: [str, Path], date_field_name: str = "date", symbol_field_name: str = "symbol", interval: str = '1min', **kwargs
+        self,
+        qlib_data_1d_dir: [str, Path],
+        date_field_name: str = "date",
+        symbol_field_name: str = "symbol",
+        interval: str = "1min",
+        **kwargs,
     ):
         self.qlib_data_1d_dir = qlib_data_1d_dir
         db_mgr = get_database()
@@ -438,7 +536,6 @@ class RqdataNormalizeIntraday(RqdataNormalize):
         self.meta_lib = self.arctic_store.get_library("future_meta")
         self.interval = interval
         super(RqdataNormalizeIntraday, self).__init__(date_field_name, symbol_field_name, **kwargs)
-
 
     def _get_calendar_list(self) -> Iterable[pd.Timestamp]:
         return self.generate_intraday_from_daily(self.calendar_list_1d)
@@ -459,13 +556,12 @@ class RqdataNormalizeIntraday(RqdataNormalize):
         return calendar_list_1d
 
     def _generate_intraday_intervals(self):
-
         def _merge_union_interval(open_periods_sets):
-
             def process(tt):
                 tl, tr = pd.Timestamp(tt[0]) - pd.Timedelta(minutes=1), pd.Timestamp(tt[1]) - pd.Timedelta(minutes=1)
                 return tl if tl.hour < 17 else tl - pd.Timedelta(days=1), tr if tr.hour < 17 else tr - pd.Timedelta(
-                    days=1)
+                    days=1
+                )
 
             tss = sorted(sum([[process(tt) for tt in one_set] for one_set in open_periods_sets], []), key=itemgetter(0))
             merged = []
@@ -473,7 +569,6 @@ class RqdataNormalizeIntraday(RqdataNormalize):
             # second interval
             curr_lb, curr_rb = tss[0]
             for interval in tss[1:]:
-
                 # If this is not first Interval and overlaps
                 # with the previous one, Merge previous and
                 # current Intervals
@@ -484,18 +579,29 @@ class RqdataNormalizeIntraday(RqdataNormalize):
                     curr_lb, curr_rb = interval
             merged.append((curr_lb, curr_rb))
 
-            return [(lb.time(), rb.time()) for lb, rb in merged if self.commod_only < 2 or time(8, 0)<lb.time()<time(17, 0) and time(8, 0)<rb.time()<time(17, 0)]
+            return [
+                (lb.time(), rb.time())
+                for lb, rb in merged
+                if self.commod_only < 2 or time(8, 0) < lb.time() < time(17, 0) and time(8, 0) < rb.time() < time(17, 0)
+            ]
 
-        metas = {x: self.meta_lib.read(x) for x in self.meta_lib.list_symbols() if '888' in x}
-        trading_hours = {k: v['trading_hours'] for k, v in metas.items() if not self.commod_only > 1 or v['underlying_symbol'] not in {'IF', 'IC', 'IH', 'IM', 'T', 'TS', 'TF'}}
-        open_periods_sets = [[tuple(x.split('-')) for x in th.split(',')] for th in trading_hours.values()]
+        metas = {x: self.meta_lib.read(x) for x in self.meta_lib.list_symbols() if "888" in x}
+        trading_hours = {
+            k: v["trading_hours"]
+            for k, v in metas.items()
+            if not self.commod_only > 1 or v["underlying_symbol"] not in {"IF", "IC", "IH", "IM", "T", "TS", "TF"}
+        }
+        open_periods_sets = [[tuple(x.split("-")) for x in th.split(",")] for th in trading_hours.values()]
         return _merge_union_interval(open_periods_sets)
 
     def generate_intraday_from_daily(self, calendars: Iterable) -> pd.Index:
-
         def _generate_offset_intervals(time_interval):
-            left_time_delta = pd.Timedelta(hours=time_interval[0].hour, minutes=time_interval[0].minute, seconds=time_interval[0].second)
-            right_time_delta = pd.Timedelta(hours=time_interval[1].hour, minutes=time_interval[1].minute, seconds=time_interval[1].second)
+            left_time_delta = pd.Timedelta(
+                hours=time_interval[0].hour, minutes=time_interval[0].minute, seconds=time_interval[0].second
+            )
+            right_time_delta = pd.Timedelta(
+                hours=time_interval[1].hour, minutes=time_interval[1].minute, seconds=time_interval[1].second
+            )
             if right_time_delta < left_time_delta:
                 right_time_delta += pd.Timedelta(hours=24)
             return left_time_delta, right_time_delta
@@ -535,7 +641,7 @@ class Run(BaseRun):
         commod_only: int
             0=all species, all time; 1=all species, day only; 2=commodity only, all time, 3=commodity only, day only
         """
-        self.suffix = 'day' if interval in ('d', '1d') else interval
+        self.suffix = "day" if interval in ("d", "1d") else interval
         self.commod_only = commod_only
         super().__init__(source_dir, normalize_dir, max_workers, interval)
 
@@ -545,7 +651,7 @@ class Run(BaseRun):
 
     @property
     def normalize_class_name(self):
-        if self.suffix == 'day':
+        if self.suffix == "day":
             return f"RqdataNormalize"
         return f"RqdataNormalizeIntraday"
 
@@ -639,7 +745,7 @@ class Run(BaseRun):
             target_dir=self.normalize_dir,
             normalize_class=_class,
             max_workers=self.max_workers,
-            qlib_data_1d_dir = qlib_data_1d_dir,
+            qlib_data_1d_dir=qlib_data_1d_dir,
             interval=self.interval,
             commod_only=self.commod_only,
         )
@@ -694,7 +800,9 @@ class Run(BaseRun):
             else self.max_workers
         )
         # # download data from Rqdata
-        self.download_data(max_collector_count=self.max_workers, start=trading_date, end=end_date, check_data_length=check_data_length)
+        self.download_data(
+            max_collector_count=self.max_workers, start=trading_date, end=end_date, check_data_length=check_data_length
+        )
 
         # # normalize data
         self.normalize_data(qlib_data_1d_dir)
@@ -708,34 +816,51 @@ class Run(BaseRun):
             qlib_dir=qlib_dir,
             exclude_fields="symbol,date",
             max_workers=self.max_workers,
-            freq = self.suffix,
+            freq=self.suffix,
         )
         _dump.dump()
 
-        if self.suffix == 'day':
+        if self.suffix == "day":
             logger.info("generate continuous population")
             instruments_dir = _dump._instruments_dir
-            #all_instrument_path = instrument_dir.joinpath(_dump.INSTRUMENTS_FILE_NAME)
-            all_instrument_date_range = pd.read_csv(instruments_dir.joinpath(_dump.INSTRUMENTS_FILE_NAME), sep='\t', header=None)
+            # all_instrument_path = instrument_dir.joinpath(_dump.INSTRUMENTS_FILE_NAME)
+            all_instrument_date_range = pd.read_csv(
+                instruments_dir.joinpath(_dump.INSTRUMENTS_FILE_NAME), sep="\t", header=None
+            )
 
             def check_symbol(symbol, suffix, commod_only):
-                base, _ = symbol.rsplit('_', 1)
-                und_code = base[:-len(suffix)]
-                if commod_only > 1 and und_code in {'IF', 'IC', 'IH', 'IM', 'T', 'TS', 'TF'}:
+                base, _ = symbol.rsplit("_", 1)
+                und_code = base[: -len(suffix)]
+                if commod_only > 1 and und_code in {"IF", "IC", "IH", "IM", "T", "TS", "TF"}:
                     return False
                 return base.endswith(suffix) and und_code.isalpha()
 
-            for suffix, name in [('88', 'continuous'), ('888', 'cont_prev_close_spread', ), ('889', 'cont_open_spread'), ('890', 'cont_prev_close_ratio', ), ('891', 'cont_open_ratio')]:
+            for suffix, name in [
+                ("88", "continuous"),
+                (
+                    "888",
+                    "cont_prev_close_spread",
+                ),
+                ("889", "cont_open_spread"),
+                (
+                    "890",
+                    "cont_prev_close_ratio",
+                ),
+                ("891", "cont_open_ratio"),
+            ]:
                 this_kind_conti = all_instrument_date_range[
-                    all_instrument_date_range.iloc[:, 0].apply(partial(check_symbol, suffix=suffix, commod_only=self.commod_only))
+                    all_instrument_date_range.iloc[:, 0].apply(
+                        partial(check_symbol, suffix=suffix, commod_only=self.commod_only)
+                    )
                 ]
-                this_kind_conti.to_csv(instruments_dir.joinpath(f"{name}.txt"), header=False,
-                                               sep=_dump.INSTRUMENTS_SEP, index=False)
+                this_kind_conti.to_csv(
+                    instruments_dir.joinpath(f"{name}.txt"), header=False, sep=_dump.INSTRUMENTS_SEP, index=False
+                )
 
 
 if __name__ == "__main__":
-    #fire.Fire(Run)
-    interval = 'd'
+    # fire.Fire(Run)
+    interval = "d"
     runner = Run(
         source_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut\source" + interval,
         normalize_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut\normalize" + interval,
@@ -745,4 +870,8 @@ if __name__ == "__main__":
     )
     # runner.download_data(max_collector_count=6, start=pd.Timestamp('2017-01-01'), end=pd.Timestamp.now().strftime("%Y-%m-%d"))
     # runner.normalize_data(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut_commod")
-    runner.update_data_to_bin(qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut", trading_date='2012-01-01', end_date=pd.Timestamp.now().strftime("%Y-%m-%d"))
+    runner.update_data_to_bin(
+        qlib_data_1d_dir=r"D:\Documents\TradeResearch\qlib_test\rqdata_fut",
+        trading_date="2012-01-01",
+        end_date=pd.Timestamp.now().strftime("%Y-%m-%d"),
+    )

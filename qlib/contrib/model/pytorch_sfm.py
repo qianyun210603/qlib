@@ -1,25 +1,24 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from __future__ import division
-from __future__ import print_function
+from __future__ import division, print_function
+
+import copy
+from typing import Text, Union
 
 import numpy as np
 import pandas as pd
-from typing import Text, Union
-import copy
-from ...utils import get_or_create_path
-from ...log import get_module_logger
-
 import torch
 import torch.nn as nn
 import torch.nn.init as init
 import torch.optim as optim
 
-from .pytorch_utils import count_parameters
-from ...model.base import Model
 from ...data.dataset import DatasetH
 from ...data.dataset.handler import DataHandlerLP
+from ...log import get_module_logger
+from ...model.base import Model
+from ...utils import get_or_create_path
+from .pytorch_utils import count_parameters
 
 
 class SFM_Model(nn.Module):
@@ -306,7 +305,6 @@ class SFM(Model):
         return self.device != torch.device("cpu")
 
     def test_epoch(self, data_x, data_y):
-
         # prepare training data
         x_values = data_x.values
         y_values = np.squeeze(data_y.values)
@@ -319,7 +317,6 @@ class SFM(Model):
         indices = np.arange(len(x_values))
 
         for i in range(len(indices))[:: self.batch_size]:
-
             if len(indices) - i < self.batch_size:
                 break
 
@@ -336,7 +333,6 @@ class SFM(Model):
         return np.mean(losses), np.mean(scores)
 
     def train_epoch(self, x_train, y_train):
-
         x_train_values = x_train.values
         y_train_values = np.squeeze(y_train.values)
 
@@ -346,7 +342,6 @@ class SFM(Model):
         np.random.shuffle(indices)
 
         for i in range(len(indices))[:: self.batch_size]:
-
             if len(indices) - i < self.batch_size:
                 break
 
@@ -367,7 +362,6 @@ class SFM(Model):
         evals_result=dict(),
         save_path=None,
     ):
-
         df_train, df_valid = dataset.prepare(
             ["train", "valid"],
             col_set=["feature", "label"],
@@ -431,7 +425,6 @@ class SFM(Model):
         raise ValueError("unknown loss `%s`" % self.loss)
 
     def metric_fn(self, pred, label):
-
         mask = torch.isfinite(label)
 
         if self.metric in ("", "loss"):

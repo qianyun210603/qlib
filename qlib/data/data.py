@@ -2,44 +2,31 @@
 # Licensed under the MIT License.
 
 
-from __future__ import division
-from __future__ import print_function
+from __future__ import division, print_function
 
-import multiprocessing
-import re
 import abc
-import copy
-import queue
 import bisect
+import copy
+import multiprocessing
+import queue
+import re
+from collections import deque
+from typing import List, Optional, Union
+
 import numpy as np
 import pandas as pd
-from collections import deque
-from typing import List, Union, Optional
-
 # For supporting multiprocessing in outer code, joblib is used
 from joblib import delayed
 
-from .cache import H
 from ..config import C
-from .inst_processor import InstProcessor
-
 from ..log import get_module_logger
-from .cache import DiskDatasetCache
-from ..utils import (
-    Wrapper,
-    init_instance_by_config,
-    register_wrapper,
-    get_module_by_module_path,
-    parse_field,
-    hash_args,
-    normalize_cache_fields,
-    code_to_fname,
-    time_to_slc_point,
-    read_period_data,
-    get_period_list,
-)
+from ..utils import (Wrapper, code_to_fname, get_module_by_module_path, get_period_list, hash_args,
+                     init_instance_by_config, normalize_cache_fields, parse_field, read_period_data, register_wrapper,
+                     time_to_slc_point)
 from ..utils.paral import ParallelExt
-from .ops import Operators, ExpressionOps  # pylint: disable=W0611  # noqa: F401
+from .cache import DiskDatasetCache, H
+from .inst_processor import InstProcessor
+from .ops import ExpressionOps, Operators  # pylint: disable=W0611  # noqa: F401
 
 
 class ProviderBackendMixin:
@@ -718,7 +705,6 @@ class DatasetProvider(abc.ABC):
         cache_data=None,
         shared_cache=None,
     ):
-
         C.register_from_C(g_config)
         if cache_data is not None:
             H["f"].update(cache_data)
@@ -941,15 +927,16 @@ class LocalPITProvider(PITProvider):
         #         self.period_index[field] = {}
         # For acceleration}
 
-        _, pit_mode = field.rsplit('_', 1)
+        _, pit_mode = field.rsplit("_", 1)
         if pit_mode not in {"a", "q", "m", "i"}:
             raise ValueError(
-            """period field must have with following suffix:
+                """period field must have with following suffix:
             _a: annually data
             _q: quarterly data
             _m: monthly data
             _i: indefinite frequency data
-            """)
+            """
+            )
         index_path = C.dpm.get_data_uri() / "financial" / instrument.lower() / f"{field}.index"
         data_path = C.dpm.get_data_uri() / "financial" / instrument.lower() / f"{field}.data"
         if not (index_path.exists() and data_path.exists()):
@@ -1273,7 +1260,6 @@ class ClientDatasetProvider(DatasetProvider):
                 else:
                     return data
         else:
-
             """
             Call the server to generate the data-set cache, get the uri of the cache file.
             Then load the data from the file on NFS directly.

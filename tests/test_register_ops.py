@@ -2,6 +2,7 @@
 # Licensed under the MIT License.
 
 import unittest
+
 import numpy as np
 
 from qlib.data import D

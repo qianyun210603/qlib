@@ -20,9 +20,7 @@ Contains the full TFT architecture and associated components. Defines functions
 for training, evaluation and prediction using simple Pandas Dataframe inputs.
 """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 import gc
 import json
@@ -475,7 +473,6 @@ class TemporalFusionTransformer:
 
         embeddings = []
         for i in range(num_categorical_variables):
-
             embedding = tf.keras.Sequential(
                 [
                     tf.keras.layers.InputLayer([time_steps]),
@@ -680,7 +677,6 @@ class TemporalFusionTransformer:
 
         data_map = {}
         for _, sliced in data.groupby(id_col):
-
             col_mappings = {"identifier": [id_col], "time": [time_col], "outputs": [target_col], "inputs": input_cols}
 
             for k in col_mappings:
@@ -954,7 +950,6 @@ class TemporalFusionTransformer:
         """
 
         with tf.variable_scope(self.name):
-
             transformer_layer, all_inputs, attention_components = self._build_base_graph()
 
             outputs = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(self.output_size * len(self.quantiles)))(

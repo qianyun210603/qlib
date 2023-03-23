@@ -87,7 +87,6 @@ class TopkKeepnDropoutCBStrategy(TopkKeepnDropoutStrategy):
             > 0.5
         )
 
-
         pred_df["tradestatusflag"] = (
             pred_df.apply(
                 lambda x: 0
@@ -116,10 +115,14 @@ class TopkKeepnDropoutCBStrategy(TopkKeepnDropoutStrategy):
 
         sell = sell.union(removed_from_population)
 
-        pred_df["keep"] = pred_df["current_hold"] & (pred_df["rank"] <= self.keepn) & (
+        pred_df["keep"] = (
+            pred_df["current_hold"]
+            & (pred_df["rank"] <= self.keepn)
+            & (
                 (pred_df["cum_current_hold"] <= len(current_stock_list) - additional_n_drop)
                 | (pred_df["rank"] <= self.topk)
             )
+        )
 
         if self.only_positive_score:
             pred_df["keep"] = pred_df["keep"] & (pred_df["score"] >= 0.0)

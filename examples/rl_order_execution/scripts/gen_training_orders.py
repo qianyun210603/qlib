@@ -2,10 +2,11 @@
 # Licensed under the MIT License.
 
 import os
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-from pathlib import Path
 
 DATA_PATH = Path(os.path.join("data", "pickle_dataframe", "backtest"))
 OUTPUT_PATH = Path(os.path.join("data", "orders"))

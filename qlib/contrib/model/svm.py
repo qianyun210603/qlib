@@ -1,15 +1,17 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from typing import Text, Union, cast
+
 import numpy as np
 import pandas as pd
-from typing import Text, Union, cast
-from qlib.data.dataset.weight import Reweighter
 from sklearn.svm import SVR
 
-from ...model.base import Model
+from qlib.data.dataset.weight import Reweighter
+
 from ...data.dataset import DatasetH
 from ...data.dataset.handler import DataHandlerLP
+from ...model.base import Model
 
 
 class SVMRegression(Model):

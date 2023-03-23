@@ -1,19 +1,20 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-import sys
 import shutil
+import sys
 import unittest
-import pytest
 from pathlib import Path
+
+import pytest
 
 import qlib
 from qlib.config import C
-from qlib.utils import init_instance_by_config, flatten_dict
-from qlib.workflow import R
-from qlib.workflow.record_temp import SignalRecord, SigAnaRecord, PortAnaRecord
 from qlib.tests import TestAutoData
-from qlib.tests.config import CSI300_GBDT_TASK, CSI300_BENCH
+from qlib.tests.config import CSI300_BENCH, CSI300_GBDT_TASK
+from qlib.utils import flatten_dict, init_instance_by_config
+from qlib.workflow import R
+from qlib.workflow.record_temp import PortAnaRecord, SigAnaRecord, SignalRecord
 
 
 def train(uri_path: str = None):

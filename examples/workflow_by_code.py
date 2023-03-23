@@ -9,15 +9,13 @@ The interface of (1) is `qrun XXX.yaml`.  The interface of (2) is script like th
 """
 import qlib
 from qlib.constant import REG_CN
-from qlib.utils import init_instance_by_config, flatten_dict
-from qlib.workflow import R
-from qlib.workflow.record_temp import SignalRecord, PortAnaRecord, SigAnaRecord
-from qlib.tests.data import GetData
 from qlib.tests.config import CSI300_BENCH, CSI300_GBDT_TASK
-
+from qlib.tests.data import GetData
+from qlib.utils import flatten_dict, init_instance_by_config
+from qlib.workflow import R
+from qlib.workflow.record_temp import PortAnaRecord, SigAnaRecord, SignalRecord
 
 if __name__ == "__main__":
-
     # use default data
     provider_uri = "~/.qlib/qlib_data/cn_data"  # target_dir
     GetData().qlib_data(target_dir=provider_uri, region=REG_CN, exists_skip=True)

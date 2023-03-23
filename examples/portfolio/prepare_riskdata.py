@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 import os
+
 import numpy as np
 import pandas as pd
 
@@ -9,7 +10,6 @@ from qlib.model.riskmodel import StructuredCovEstimator
 
 
 def prepare_data(riskdata_root="./riskdata", T=240, start_time="2016-01-01"):
-
     universe = D.features(D.instruments("csi300"), ["$close"], start_time=start_time).swaplevel().sort_index()
 
     price_all = (
@@ -20,7 +20,6 @@ def prepare_data(riskdata_root="./riskdata", T=240, start_time="2016-01-01"):
     riskmodel = StructuredCovEstimator()
 
     for i in range(T - 1, len(price_all)):
-
         date = price_all.index[i]
         ref_date = price_all.index[i - T + 1]
 
@@ -47,7 +46,6 @@ def prepare_data(riskdata_root="./riskdata", T=240, start_time="2016-01-01"):
 
 
 if __name__ == "__main__":
-
     import qlib
 
     qlib.init(provider_uri="~/.qlib/qlib_data/cn_data")

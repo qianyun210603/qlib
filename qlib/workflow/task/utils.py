@@ -6,18 +6,19 @@ Some tools for task management.
 """
 
 import bisect
+from typing import Union
+
 import pandas as pd
-from qlib.data import D
-from qlib.workflow import R
-from qlib.config import C
-from qlib.log import get_module_logger
 from pymongo import MongoClient
 from pymongo.database import Database
-from typing import Union
+
+from qlib.config import C
+from qlib.data import D
+from qlib.log import get_module_logger
+from qlib.workflow import R
 
 
 def get_mongodb() -> Database:
-
     """
     Get database in MongoDB, which means you need to declare the address and the name of a database at first.
 

@@ -2,13 +2,14 @@
 # Licensed under the MIT License.
 
 
-from __future__ import division
-from __future__ import print_function
+from __future__ import division, print_function
 
 import abc
+
 import pandas as pd
-from ..log import get_module_logger
+
 from ..config import C
+from ..log import get_module_logger
 
 
 class Expression(abc.ABC):

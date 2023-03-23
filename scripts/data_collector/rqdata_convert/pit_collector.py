@@ -1,14 +1,14 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-import numpy as np
-import sys
 import importlib
+import sys
 from datetime import datetime
 from pathlib import Path
-from typing import List, Iterable, Optional, Union, cast
+from typing import Iterable, List, Optional, Union, cast
 
 import fire
+import numpy as np
 import pandas as pd
 from loguru import logger
 from vnpy.trader.database import get_database
@@ -17,18 +17,36 @@ from vnpy_arctic.arctic_database import ArcticDatabase
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.append(str(BASE_DIR.parent.parent))
 
-from data_collector.base import BaseCollector, BaseRun, BaseNormalize
+from data_collector.base import BaseCollector, BaseNormalize, BaseRun
 from data_collector.utils import get_calendar_list
 from dump_pit import DumpPitData
 
+
 class RqPitCollector(BaseCollector):
     DATE_FIELDS_IN_META = [
-        'value_date', 'conversion_start_date', 'conversion_end_date', 'de_listed_date', 'listed_date',
-        'maturity_date', 'stop_trading_date', 'callback_start_date', 'callback_end_date', 'putback_start_date',
-        'putback_end_date', "no_call_peroid_end"
+        "value_date",
+        "conversion_start_date",
+        "conversion_end_date",
+        "de_listed_date",
+        "listed_date",
+        "maturity_date",
+        "stop_trading_date",
+        "callback_start_date",
+        "callback_end_date",
+        "putback_start_date",
+        "putback_end_date",
+        "no_call_peroid_end",
     ]
-    REMOVE_FIELDS_IN_META = ["name", "short_name", "symbol", "exchange", "stock_code", "type", "round_lot",
-                             "stock_exchange"]
+    REMOVE_FIELDS_IN_META = [
+        "name",
+        "short_name",
+        "symbol",
+        "exchange",
+        "stock_code",
+        "type",
+        "round_lot",
+        "stock_exchange",
+    ]
 
     INTERVAL_QUARTERLY = "quarterly"
     INTERVAL_ANNUAL = "annual"
@@ -48,7 +66,6 @@ class RqPitCollector(BaseCollector):
         limit_nums: Optional[int] = None,
         symbol_regex: Optional[str] = None,
     ):
-
         self.symbol_regex = symbol_regex
         db_mgr = get_database()
         self.arctic_store = cast(ArcticDatabase, db_mgr).connection
@@ -72,18 +89,19 @@ class RqPitCollector(BaseCollector):
         )
 
     def get_instrument_list(self) -> List[str]:
-
         def symbol_validation(_, v):
-            if pd.isna(v['listed_date']):
+            if pd.isna(v["listed_date"]):
                 return False
-            if pd.isna(v['de_listed_date']):
-                return v['listed_date'] < self.end_datetime.normalize()
-            stop_trading_date = v.get('stop_trading_date', None)
+            if pd.isna(v["de_listed_date"]):
+                return v["listed_date"] < self.end_datetime.normalize()
+            stop_trading_date = v.get("stop_trading_date", None)
             if stop_trading_date is None:
-                stop_trading_date = v['de_listed_date']
+                stop_trading_date = v["de_listed_date"]
             # print(self.start_datetime, stop_trading_date, v)
-            return self.start_datetime <= stop_trading_date and v['listed_date'] < \
-                   min(self.end_datetime, pd.Timestamp.now('Asia/Shanghai')).normalize()
+            return (
+                self.start_datetime <= stop_trading_date
+                and v["listed_date"] < min(self.end_datetime, pd.Timestamp.now("Asia/Shanghai")).normalize()
+            )
 
         logger.info("get HS converts symbols......")
         self.syms_with_meta = {x: self.meta_lib.read_history(x) for x in self.meta_lib.list_symbols()}
@@ -117,10 +135,10 @@ class RqPitCollector(BaseCollector):
         parsed_meta = {}
         for d, content_row in meta_hist.iterrows():
             meta_dict = {k: v for k, v in content_row.iloc[0].items() if k not in self.REMOVE_FIELDS_IN_META}
-            if pd.isna(meta_dict['listed_date']):
+            if pd.isna(meta_dict["listed_date"]):
                 continue
-            if pd.isna(meta_dict['stop_trading_date']):
-                meta_dict['stop_trading_date'] = meta_dict['maturity_date']
+            if pd.isna(meta_dict["stop_trading_date"]):
+                meta_dict["stop_trading_date"] = meta_dict["maturity_date"]
             for f in self.DATE_FIELDS_IN_META:
                 if f in meta_dict:
                     meta_dict[f] = (meta_dict[f] - pd.Timestamp(year=1970, month=1, day=1, tz=meta_dict[f].tzinfo)).days
@@ -134,21 +152,29 @@ class RqPitCollector(BaseCollector):
 
         min_d = min(parsed_meta.keys())
         first_meta_dict = parsed_meta.pop(min_d)
-        parsed_meta[max(pd.Timestamp(first_meta_dict['listed_date'], unit='d'), pd.Timestamp("2010-01-01"))] = first_meta_dict
+        parsed_meta[
+            max(pd.Timestamp(first_meta_dict["listed_date"], unit="d"), pd.Timestamp("2010-01-01"))
+        ] = first_meta_dict
 
-        df = pd.DataFrame.from_dict(parsed_meta, orient='index').ffill().unstack().to_frame('value').sort_index()\
-            .reset_index(level=0).rename(columns={'level_0': 'field'}).drop_duplicates(keep='first')
-        df.index.name = 'date'
+        df = (
+            pd.DataFrame.from_dict(parsed_meta, orient="index")
+            .ffill()
+            .unstack()
+            .to_frame("value")
+            .sort_index()
+            .reset_index(level=0)
+            .rename(columns={"level_0": "field"})
+            .drop_duplicates(keep="first")
+        )
+        df.index.name = "date"
         df["symbol"] = self.normalize_symbol(symbol)
         df["period"] = (df.index - pd.Timestamp(year=1970, month=1, day=1)).days
         df.reset_index(inplace=True)
 
         return df
 
-
     def get_coupon(self):
         pass
-
 
     def get_data(
         self,
@@ -172,7 +198,9 @@ class RqPitNormalize(BaseNormalize):
             return df
         df["period"] = pd.to_datetime(df["period"])
         df["period"] = df["period"].apply(
-            lambda x: x.year if self.interval == RqPitCollector.INTERVAL_ANNUAL else x.year * 100 + (x.month - 1) // 3 + 1
+            lambda x: x.year
+            if self.interval == RqPitCollector.INTERVAL_ANNUAL
+            else x.year * 100 + (x.month - 1) // 3 + 1
         )
         return df
 
@@ -181,7 +209,6 @@ class RqPitNormalize(BaseNormalize):
 
 
 class Run(BaseRun):
-
     @property
     def _cur_module(self):
         return importlib.import_module("pit_collector")
@@ -201,7 +228,7 @@ class Run(BaseRun):
     def update_data_to_bin(
         self,
         qlib_dir,
-        interval = "indefinite",
+        interval="indefinite",
         trading_date: Union[str, pd.Timestamp, datetime] = None,
         end_date: Union[str, pd.Timestamp, datetime] = None,
     ):
@@ -232,11 +259,11 @@ class Run(BaseRun):
 
         # start/end date
         if end_date is None:
-            end_date = (pd.Timestamp.now() + pd.Timedelta(days=1))
+            end_date = pd.Timestamp.now() + pd.Timedelta(days=1)
             logger.info(f"end_date not specified, use the tomorrow: {end_date}")
 
         if trading_date is None:
-            trading_date = (end_date - pd.Timedelta(days=8))
+            trading_date = end_date - pd.Timedelta(days=8)
             logger.info(f"trading_date is None, use the one week before: {trading_date}")
 
         # NOTE: a larger max_workers setting here would be faster
@@ -262,10 +289,10 @@ class Run(BaseRun):
             max_workers=self.max_workers,
         )
 
-        _dump.dump(interval=interval,)
-
+        _dump.dump(
+            interval=interval,
+        )
 
 
 if __name__ == "__main__":
     fire.Fire(Run)
-

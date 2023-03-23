@@ -1,13 +1,14 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
-import pandas as pd
 import numpy as np
+import pandas as pd
+import seaborn as sns
+from loguru import logger
+
+from qlib.contrib.eva.alpha import pred_autocorr_all
 from qlib.contrib.report.data.base import FeaAnalyser
 from qlib.contrib.report.utils import sub_fig_generator
 from qlib.utils.paral import datetime_groupby_apply
-from qlib.contrib.eva.alpha import pred_autocorr_all
-from loguru import logger
-import seaborn as sns
 
 DT_COL_NAME = "datetime"
 
@@ -30,7 +31,6 @@ class CombFeaAna(FeaAnalyser):
         """The statistics of features are finished in the underlying analysers"""
 
     def plot_all(self, *args, **kwargs):
-
         ax_gen = iter(sub_fig_generator(row_n=len(self._fea_ana_l), *args, **kwargs))
 
         for col in self._dataset:

@@ -1,4 +1,5 @@
 import datetime
+
 import pandas as pd
 
 from qlib.data.inst_processor import InstProcessor

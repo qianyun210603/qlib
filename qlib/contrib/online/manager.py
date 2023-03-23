@@ -4,14 +4,16 @@
 # pylint: skip-file
 # flake8: noqa
 
-import yaml
 import pathlib
-import pandas as pd
 import shutil
+
+import pandas as pd
+import yaml
+
 from ...backtest.account import Account
+from ...utils import init_instance_by_config
 from .user import User
 from .utils import load_instance, save_instance
-from ...utils import init_instance_by_config
 
 
 class UserManager:

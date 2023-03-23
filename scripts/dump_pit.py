@@ -10,18 +10,19 @@ import abc
 import shutil
 import struct
 import traceback
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from functools import partial
 from pathlib import Path
 from typing import Iterable, List, Union
-from functools import partial
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 
 import fire
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
 from loguru import logger
-from qlib.utils import fname_to_code, code_to_fname, get_period_offset
+from tqdm import tqdm
+
 from qlib.config import C
+from qlib.utils import code_to_fname, fname_to_code, get_period_offset
 
 
 class DumpPitData:
@@ -237,7 +238,6 @@ class DumpPitData:
                     pass
 
             with open(data_file, "rb+") as fd, open(index_file, "rb+") as fi:
-
                 # update index if needed
                 for i, row in df_sub.iterrows():
                     # get index

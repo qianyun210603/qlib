@@ -1,25 +1,24 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
-from __future__ import division
-from __future__ import print_function
+from __future__ import division, print_function
+
+import copy
+from typing import Text, Union
 
 import numpy as np
 import pandas as pd
-from typing import Text, Union
-import copy
-from ...utils import get_or_create_path
-from ...log import get_module_logger
-
 import torch
 import torch.nn as nn
-import torch.optim as optim
 import torch.nn.functional as F
+import torch.optim as optim
 from torch.autograd import Function
 
-from .pytorch_utils import count_parameters
-from ...model.base import Model
 from ...data.dataset import DatasetH
 from ...data.dataset.handler import DataHandlerLP
+from ...log import get_module_logger
+from ...model.base import Model
+from ...utils import get_or_create_path
+from .pytorch_utils import count_parameters
 
 
 class TabnetModel(Model):
@@ -256,7 +255,6 @@ class TabnetModel(Model):
         indices = np.arange(len(x_values))
 
         for i in range(len(indices))[:: self.batch_size]:
-
             if len(indices) - i < self.batch_size:
                 break
             feature = x_values[indices[i : i + self.batch_size]].float().to(self.device)
@@ -283,7 +281,6 @@ class TabnetModel(Model):
         np.random.shuffle(indices)
 
         for i in range(len(indices))[:: self.batch_size]:
-
             if len(indices) - i < self.batch_size:
                 break
 
@@ -308,7 +305,6 @@ class TabnetModel(Model):
         self.tabnet_decoder.train()
 
         for i in range(len(indices))[:: self.batch_size]:
-
             if len(indices) - i < self.batch_size:
                 break
 
@@ -339,7 +335,6 @@ class TabnetModel(Model):
         losses = []
 
         for i in range(len(indices))[:: self.batch_size]:
-
             if len(indices) - i < self.batch_size:
                 break
 

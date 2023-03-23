@@ -1,16 +1,18 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from typing import Text, Union, cast
+
 import numpy as np
 import pandas as pd
-from typing import Text, Union, cast
-from qlib.data.dataset.weight import Reweighter
 from scipy.optimize import nnls
-from sklearn.linear_model import LinearRegression, Ridge, Lasso
+from sklearn.linear_model import Lasso, LinearRegression, Ridge
 
-from ...model.base import Model
+from qlib.data.dataset.weight import Reweighter
+
 from ...data.dataset import DatasetH
 from ...data.dataset.handler import DataHandlerLP
+from ...model.base import Model
 
 
 class LinearModel(Model):

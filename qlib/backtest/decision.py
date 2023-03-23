@@ -6,7 +6,6 @@ from __future__ import annotations
 from abc import abstractmethod
 from datetime import time
 from enum import IntEnum
-
 # try to fix circular imports when enabling type hints
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, List, Optional, Tuple, TypeVar, Union, cast
 

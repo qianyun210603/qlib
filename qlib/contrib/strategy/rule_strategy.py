@@ -6,6 +6,7 @@ from typing import IO, List, Tuple, Union
 
 import numpy as np
 import pandas as pd
+
 from qlib.backtest.utils import get_start_end_idx
 from qlib.data.dataset.utils import convert_index_format
 from qlib.utils import lazy_sort_index
@@ -522,7 +523,6 @@ class ACStrategy(BaseStrategy):
             _order_amount = min(_order_amount, self.trade_amount[order.stock_id])
 
             if _order_amount > 1e-5:
-
                 _order = Order(
                     stock_id=order.stock_id,
                     amount=_order_amount,

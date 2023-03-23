@@ -3,20 +3,19 @@
 
 # coding=utf-8
 import warnings
-from typing import Callable, Union, Tuple, List, Iterator, Optional
+from typing import Callable, Iterator, List, Optional, Tuple, Union
 
 import pandas as pd
 
 from qlib.typehint import Literal
-from ...log import get_module_logger, TimeInspector
-from ...utils import init_instance_by_config
-from ...utils.serial import Serializable
-from .utils import fetch_df_by_index, fetch_df_by_col
-from ...utils import lazy_sort_index
-from .loader import DataLoader
 
-from . import processor as processor_module
+from ...log import TimeInspector, get_module_logger
+from ...utils import init_instance_by_config, lazy_sort_index
+from ...utils.serial import Serializable
 from . import loader as data_loader_module
+from . import processor as processor_module
+from .loader import DataLoader
+from .utils import fetch_df_by_col, fetch_df_by_index
 
 
 # TODO: A more general handler interface which does not relies on internal pd.DataFrame is needed.

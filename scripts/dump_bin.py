@@ -4,17 +4,18 @@
 import abc
 import shutil
 import traceback
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from functools import partial
 from pathlib import Path
 from typing import Iterable, List, Union
-from functools import partial
-from concurrent.futures import ThreadPoolExecutor, as_completed, ProcessPoolExecutor
 
 import fire
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
 from loguru import logger
-from qlib.utils import fname_to_code, code_to_fname
+from tqdm import tqdm
+
+from qlib.utils import code_to_fname, fname_to_code
 
 
 class DumpDataBase:
@@ -195,7 +196,7 @@ class DumpDataBase:
     def data_merge_calendar(self, df: pd.DataFrame, calendars_list: List[pd.Timestamp]) -> pd.DataFrame:
         # calendars
         calendars_df = pd.DataFrame(data=calendars_list, columns=[self.date_field_name])
-        calendars_df[self.date_field_name] = calendars_df[self.date_field_name].astype('datetime64[ns]')
+        calendars_df[self.date_field_name] = calendars_df[self.date_field_name].astype("datetime64[ns]")
         cal_df = calendars_df[
             (calendars_df[self.date_field_name] >= df[self.date_field_name].min())
             & (calendars_df[self.date_field_name] <= df[self.date_field_name].max())

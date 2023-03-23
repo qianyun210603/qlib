@@ -1,5 +1,6 @@
-from ..utils.serial import Serializable
 from datetime import datetime
+
+from ..utils.serial import Serializable
 
 
 class BaseInstrumentInfo(Serializable):

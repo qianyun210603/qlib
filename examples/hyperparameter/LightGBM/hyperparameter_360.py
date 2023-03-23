@@ -1,9 +1,10 @@
-import qlib
 import optuna
+
+import qlib
 from qlib.constant import REG_CN
-from qlib.utils import init_instance_by_config
+from qlib.tests.config import CSI300_MARKET, DATASET_ALPHA360_CLASS, get_dataset_config
 from qlib.tests.data import GetData
-from qlib.tests.config import get_dataset_config, CSI300_MARKET, DATASET_ALPHA360_CLASS
+from qlib.utils import init_instance_by_config
 
 DATASET_CONFIG = get_dataset_config(market=CSI300_MARKET, dataset_class=DATASET_ALPHA360_CLASS)
 
@@ -38,7 +39,6 @@ def objective(trial):
 
 
 if __name__ == "__main__":
-
     provider_uri = "~/.qlib/qlib_data/cn_data"
     GetData().qlib_data(target_dir=provider_uri, region=REG_CN, exists_skip=True)
     qlib.init(provider_uri=provider_uri, region=REG_CN)

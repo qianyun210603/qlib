@@ -2,11 +2,11 @@
 #  Licensed under the MIT License.
 
 import unittest
+from multiprocessing import Pool
 
 import qlib
 from qlib.data import D
 from qlib.tests import TestAutoData
-from multiprocessing import Pool
 
 
 def get_features(fields):

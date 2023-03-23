@@ -5,11 +5,11 @@
     - To show the data modules of Qlib is Serializable, users can dump processed data to disk to avoid duplicated data preprocessing
 """
 
+import pickle
+import subprocess
 from copy import deepcopy
 from pathlib import Path
-import pickle
 from pprint import pprint
-import subprocess
 
 import yaml
 

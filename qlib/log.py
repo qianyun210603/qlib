@@ -3,11 +3,11 @@
 
 
 import logging
-from typing import Optional, Text, Dict, Any
 import re
+from contextlib import contextmanager
 from logging import config as logging_config
 from time import time
-from contextlib import contextmanager
+from typing import Any, Dict, Optional, Text
 
 from .config import C
 
@@ -84,7 +84,6 @@ get_module_logger = _QLibLoggerManager()
 
 
 class TimeInspector:
-
     timer_logger = get_module_logger("timer")
 
     time_marks = []

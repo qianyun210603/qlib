@@ -1,10 +1,11 @@
 import os
+from typing import Dict
 
 import numpy as np
 import pandas as pd
+
 from qlib.data.dataset.processor import Processor
 from qlib.data.dataset.utils import fetch_df_by_index
-from typing import Dict
 
 
 class HighFreqTrans(Processor):
@@ -29,7 +30,6 @@ class HighFreqNorm(Processor):
         feature_save_dir: str,
         norm_groups: Dict[str, int],
     ):
-
         self.fit_start_time = fit_start_time
         self.fit_end_time = fit_end_time
         self.feature_save_dir = feature_save_dir

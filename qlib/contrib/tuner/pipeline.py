@@ -4,22 +4,20 @@
 # pylint: skip-file
 # flake8: noqa
 
-import os
+import importlib
 import json
 import logging
-import importlib
+import os
 from abc import abstractmethod
 
-from ...log import get_module_logger, TimeInspector
+from ...log import TimeInspector, get_module_logger
 from ...utils import get_module_by_module_path
 
 
 class Pipeline:
-
     GLOBAL_BEST_PARAMS_NAME = "global_best_params.json"
 
     def __init__(self, tuner_config_manager):
-
         self.logger = get_module_logger("Pipeline", sh_level=logging.INFO)
 
         self.tuner_config_manager = tuner_config_manager
@@ -37,7 +35,6 @@ class Pipeline:
         self.best_tuner_index = None
 
     def run(self):
-
         TimeInspector.set_time_mark()
         for tuner_index, tuner_config in enumerate(self.pipeline_config):
             tuner = self.init_tuner(tuner_index, tuner_config)
@@ -77,7 +74,6 @@ class Pipeline:
         return tuner_class(tuner_config, self.optim_config)
 
     def save_tuner_exp_info(self):
-
         TimeInspector.set_time_mark()
         save_path = os.path.join(self.pipeline_ex_config.tuner_ex_dir, Pipeline.GLOBAL_BEST_PARAMS_NAME)
         with open(save_path, "w") as fp:

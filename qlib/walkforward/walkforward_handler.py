@@ -1,6 +1,6 @@
+from qlib.contrib.data.handler import check_transform_proc
 from qlib.data.dataset.handler import DataHandlerLP
 from qlib.data.dataset.loader import DataLoaderDH
-from qlib.contrib.data.handler import check_transform_proc
 
 
 class WFDataHandler(DataHandlerLP):

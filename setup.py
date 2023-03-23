@@ -1,9 +1,9 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 import os
-import numpy
 
-from setuptools import find_packages, setup, Extension
+import numpy
+from setuptools import Extension, find_packages, setup
 
 
 def read(rel_path: str) -> str:

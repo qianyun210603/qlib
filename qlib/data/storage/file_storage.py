@@ -3,17 +3,17 @@
 
 import struct
 from pathlib import Path
-from typing import Iterable, Union, Dict, Mapping, Tuple, List
+from typing import Dict, Iterable, List, Mapping, Tuple, Union
 
 import numpy as np
 import pandas as pd
 
-from qlib.utils.time import Freq
-from qlib.utils.resam import resam_calendar
 from qlib.config import C
 from qlib.data.cache import H
+from qlib.data.storage import CalendarStorage, CalVT, FeatureStorage, InstKT, InstrumentStorage, InstVT
 from qlib.log import get_module_logger
-from qlib.data.storage import CalendarStorage, InstrumentStorage, FeatureStorage, CalVT, InstKT, InstVT
+from qlib.utils.resam import resam_calendar
+from qlib.utils.time import Freq
 
 logger = get_module_logger("file_storage")
 
@@ -194,7 +194,6 @@ class FileCalendarStorage(FileStorageMixin, CalendarStorage):
 
 
 class FileInstrumentStorage(FileStorageMixin, InstrumentStorage):
-
     INSTRUMENT_SEP = "\t"
     INSTRUMENT_START_FIELD = "start_datetime"
     INSTRUMENT_END_FIELD = "end_datetime"
@@ -264,7 +263,6 @@ class FileInstrumentStorage(FileStorageMixin, InstrumentStorage):
         return self._read_instrument()[k]
 
     def update(self, *args, **kwargs) -> None:
-
         if len(args) > 1:
             raise TypeError(f"update expected at most 1 arguments, got {len(args)}")
         inst = self._read_instrument()
@@ -362,7 +360,6 @@ class FileFeatureStorage(FileStorageMixin, FeatureStorage):
         storage_end_index = self.end_index
         with self.uri.open("rb") as fp:
             if isinstance(i, int):
-
                 if storage_start_index > i:
                     raise IndexError(f"{i}: start index is {storage_start_index}")
                 fp.seek(4 * (i - storage_start_index) + 4)

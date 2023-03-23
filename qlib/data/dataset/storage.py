@@ -1,10 +1,10 @@
-import pandas as pd
+from typing import Callable, List, Union
+
 import numpy as np
+import pandas as pd
 
 from .handler import DataHandler
-from typing import Union, List, Callable
-
-from .utils import get_level_index, fetch_df_by_index, fetch_df_by_col
+from .utils import fetch_df_by_col, fetch_df_by_index, get_level_index
 
 
 class BaseHandlerStorage:

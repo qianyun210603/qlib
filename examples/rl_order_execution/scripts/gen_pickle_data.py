@@ -1,11 +1,12 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-import yaml
 import argparse
 import os
 import shutil
 from copy import deepcopy
+
+import yaml
 
 from qlib.contrib.data.highfreq_provider import HighFreqProvider
 

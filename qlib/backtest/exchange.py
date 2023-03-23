@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, Union, cast, Iterable
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Tuple, Type, Union, cast
 
 from ..utils.index_data import IndexData
 
@@ -134,12 +134,11 @@ class Exchange:
 
         self.trade_unit = kwargs.pop("trade_unit", C.trade_unit)
 
-
         # limit_threshold here shall be in kwargs to distinguish 'not provided' and `None` as `None` is a valid option here.
         # not setting in kwargs will lead to `None` explicitly provided here, which should shield the one in global config,
         # being overwrittin by the global config, which is counterintuitive.
         # Also allow input as list here since yaml cannot direct provide tuple, in such case explicitly convert to tuple.
-        self.limit_threshold = kwargs.pop('limit_threshold', C.limit_threshold)
+        self.limit_threshold = kwargs.pop("limit_threshold", C.limit_threshold)
         if isinstance(self.limit_threshold, list):
             self.limit_threshold = tuple(self.limit_threshold)
 
@@ -211,6 +210,7 @@ class Exchange:
             instrument_info_path = dpm_uri.joinpath("contract_specs")
             if instrument_info_path.exists():
                 import pickle
+
                 self.instrument_info.update(
                     {p.stem.upper(): pickle.load(open(p, "rb")) for p in instrument_info_path.glob("*.pkl")}
                 )
@@ -286,7 +286,7 @@ class Exchange:
 
     def _get_limit_type(self) -> str:
         """get limit type"""
-        assert hasattr(self, 'limit_threshold'), "self.limit_threshold must be set first in __init__."
+        assert hasattr(self, "limit_threshold"), "self.limit_threshold must be set first in __init__."
         if isinstance(self.limit_threshold, tuple):
             return self.LT_TP_EXP
         elif isinstance(self.limit_threshold, float):
@@ -297,8 +297,9 @@ class Exchange:
             raise NotImplementedError(f"This type of `limit_threshold` is not supported")
 
     def _update_limit(self) -> None:
-        assert hasattr(self, 'limit_type') and hasattr(self, 'limit_threshold'), \
-            "self.limit_type and self.limit_threshold must be set first."
+        assert hasattr(self, "limit_type") and hasattr(
+            self, "limit_threshold"
+        ), "self.limit_type and self.limit_threshold must be set first."
         # $close may contain NaN, the nan indicates that the stock is not tradable at that timestamp
         suspended = self.quote_df["$close"].isna()
         # check limit_threshold
@@ -666,7 +667,6 @@ class Exchange:
         random.seed(0)
         random.shuffle(sorted_ids)
         for stock_id in sorted_ids:
-
             # Do not generate order for the non-tradable stocks
             if not self.is_stock_tradable(stock_id=stock_id, start_time=start_time, end_time=end_time):
                 continue

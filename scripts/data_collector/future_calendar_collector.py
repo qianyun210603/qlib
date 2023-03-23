@@ -4,17 +4,15 @@
 import abc
 import importlib
 from pathlib import Path
-from typing import Union, Iterable, List
-
-import fire
-import numpy as np
-import pandas as pd
+from typing import Iterable, List, Union
 
 # pip install baostock
 import baostock as bs
-from loguru import logger
-
 import exchange_calendars as xcal
+import fire
+import numpy as np
+import pandas as pd
+from loguru import logger
 
 
 class CollectorFutureCalendar:
@@ -86,7 +84,7 @@ class CollectorFutureCalendarCN(CollectorFutureCalendar):
         calendar["is_trading_day"] = calendar["is_trading_day"].astype(int)
         trading_dates = pd.to_datetime(calendar[calendar["is_trading_day"] == 1]["calendar_date"]).to_list()
         if trading_dates[-1] - pd.Timestamp.now().normalize() < pd.Timedelta(60):
-            cal = xcal.get_calendar('XSHG')
+            cal = xcal.get_calendar("XSHG")
             trading_dates += cal.sessions_in_range(
                 trading_dates[-1] + pd.Timedelta(days=1), pd.Timestamp.now().normalize() + pd.Timedelta(days=60)
             ).to_list()

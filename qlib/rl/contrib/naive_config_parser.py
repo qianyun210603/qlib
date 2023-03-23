@@ -10,7 +10,6 @@ from importlib import import_module
 
 import yaml
 
-
 DELETE_KEY = "_delete_"
 
 

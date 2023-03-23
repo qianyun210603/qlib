@@ -3,8 +3,8 @@
 
 import pandas as pd
 
+from qlib.contrib.data.handler import _DEFAULT_LEARN_PROCESSORS, DataHandlerLP, check_transform_proc
 from qlib.data.dataset.loader import QlibDataLoader
-from qlib.contrib.data.handler import DataHandlerLP, _DEFAULT_LEARN_PROCESSORS, check_transform_proc
 
 
 class Avg15minLoader(QlibDataLoader):
@@ -48,7 +48,6 @@ class Avg15minHandler(DataHandlerLP):
         )
 
     def loader_config(self):
-
         # Results for dataset: df: pd.DataFrame
         #   len(df.columns) == 6 + 6 * 16, len(df.index.get_level_values(level="datetime").unique()) == T
         #   df.columns: close0, close1, ..., close16, open0, ..., open16, ..., vwap16

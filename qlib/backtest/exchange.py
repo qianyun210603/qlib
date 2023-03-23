@@ -229,11 +229,10 @@ class Exchange:
         )
         self.quote_df.columns = self.all_fields
         if not (C.get("ohlc_adjusted", True) or self.quote_df["$factor"].isna().all()):
-            self.quote_df["$open"] = self.quote_df["$open"] * self.quote_df["$factor"]
-            self.quote_df["$high"] = self.quote_df["$high"] * self.quote_df["$factor"]
-            self.quote_df["$low"] = self.quote_df["$low"] * self.quote_df["$factor"]
-            self.quote_df["$close"] = self.quote_df["$close"] * self.quote_df["$factor"]
-            self.quote_df["$volume"] = self.quote_df["$volume"] / self.quote_df["$factor"]
+            for f in {"$open", "$close", "$high", "$low"}.intersection(self.quote_df.columns):
+                self.quote_df[f] = self.quote_df[f] * self.quote_df["$factor"]
+            if "$volume" in self.quote_df:
+                self.quote_df["$volume"] = self.quote_df["$volume"] / self.quote_df["$factor"]
 
         # check buy_price data and sell_price data
         for attr in ("buy_price", "sell_price"):

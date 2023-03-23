@@ -97,17 +97,19 @@ pos  0.000000
 
 
 from copy import deepcopy
-import qlib
+
 import fire
 import pandas as pd
-from qlib.constant import REG_CN
-from qlib.config import HIGH_FREQ_CONFIG
-from qlib.data import D
-from qlib.utils import exists_qlib_data, init_instance_by_config, flatten_dict
-from qlib.workflow import R
-from qlib.workflow.record_temp import SignalRecord, PortAnaRecord
-from qlib.tests.data import GetData
+
+import qlib
 from qlib.backtest import collect_data
+from qlib.config import HIGH_FREQ_CONFIG
+from qlib.constant import REG_CN
+from qlib.data import D
+from qlib.tests.data import GetData
+from qlib.utils import exists_qlib_data, flatten_dict, init_instance_by_config
+from qlib.workflow import R
+from qlib.workflow.record_temp import PortAnaRecord, SignalRecord
 
 
 class NestedDecisionExecutionWorkflow:

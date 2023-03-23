@@ -1,19 +1,19 @@
 #  Copyright (c) Microsoft Corporation.
 #  Licensed under the MIT License.
 
-import qlib
-import fire
 import pickle
-
 from datetime import datetime
+
+import fire
+
+import qlib
 from qlib.constant import REG_CN
 from qlib.data.dataset.handler import DataHandlerLP
-from qlib.utils import init_instance_by_config
 from qlib.tests.data import GetData
+from qlib.utils import init_instance_by_config
 
 
 class RollingDataWorkflow:
-
     MARKET = "csi300"
     start_time = "2010-01-01"
     end_time = "2019-12-31"
@@ -93,7 +93,6 @@ class RollingDataWorkflow:
         dataset = init_instance_by_config(dataset_config)
 
         for rolling_offset in range(self.rolling_cnt):
-
             print(f"===========rolling{rolling_offset} start===========")
             if rolling_offset:
                 dataset.config(

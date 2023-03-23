@@ -6,8 +6,8 @@ import time
 
 import numpy as np
 import pandas as pd
+from torch.utils.data import DataLoader, Dataset
 
-from torch.utils.data import Dataset, DataLoader
 from qlib.rl.utils.data_queue import DataQueue
 
 

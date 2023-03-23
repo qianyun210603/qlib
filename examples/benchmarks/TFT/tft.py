@@ -1,24 +1,23 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+import datetime as dte
+import os
 from pathlib import Path
 from typing import Union
-import numpy as np
-import pandas as pd
-import tensorflow.compat.v1 as tf
+
 import data_formatters.base
 import expt_settings.configs
 import libs.hyperparam_opt
 import libs.tft_model
 import libs.utils as utils
-import os
-import datetime as dte
+import numpy as np
+import pandas as pd
+import tensorflow.compat.v1 as tf
 
-
-from qlib.model.base import ModelFT
 from qlib.data.dataset import DatasetH
 from qlib.data.dataset.handler import DataHandlerLP
-
+from qlib.model.base import ModelFT
 
 # To register new datasets, please add them here.
 ALLOW_DATASET = ["Alpha158", "Alpha360"]

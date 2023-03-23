@@ -2,20 +2,20 @@
 #  Licensed under the MIT License.
 
 
-import sys
 import shutil
+import sys
 import unittest
 from pathlib import Path
 
-import qlib
 import numpy as np
 import pandas as pd
+
+import qlib
 from qlib.data import D
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.joinpath("scripts")))
-from get_data import GetData
 from dump_bin import DumpDataAll, DumpDataFix
-
+from get_data import GetData
 
 DATA_DIR = Path(__file__).parent.joinpath("test_dump_data")
 SOURCE_DIR = DATA_DIR.joinpath("source")

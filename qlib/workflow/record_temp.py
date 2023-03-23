@@ -3,22 +3,22 @@
 
 import logging
 import warnings
-import pandas as pd
 from pprint import pprint
-from typing import Union, List, Optional
+from typing import List, Optional, Union
+
+import pandas as pd
 
 from qlib.utils.exceptions import LoadObjectError
-from ..contrib.evaluate import risk_analysis, indicator_analysis
 
+from ..backtest import backtest as normal_backtest
+from ..contrib.eva.alpha import calc_ic, calc_long_short_prec, calc_long_short_return
+from ..contrib.evaluate import indicator_analysis, risk_analysis
 from ..data.dataset import DatasetH
 from ..data.dataset.handler import DataHandlerLP
-from ..backtest import backtest as normal_backtest
 from ..log import get_module_logger
-from ..utils import fill_placeholder, flatten_dict, class_casting, get_date_by_shift
-from ..utils.time import Freq
+from ..utils import class_casting, fill_placeholder, flatten_dict, get_date_by_shift
 from ..utils.data import deepcopy_basic_type
-from ..contrib.eva.alpha import calc_ic, calc_long_short_return, calc_long_short_prec
-
+from ..utils.time import Freq
 
 logger = get_module_logger("workflow", logging.INFO)
 
@@ -136,7 +136,6 @@ class RecordTemp:
             whether the records are stored properly.
         """
         if include_self:
-
             # Some mlflow backend will not list the directly recursively.
             # So we force to the directly
             artifacts = {}

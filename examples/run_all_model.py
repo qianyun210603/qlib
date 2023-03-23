@@ -1,27 +1,28 @@
 #  Copyright (c) Microsoft Corporation.
 #  Licensed under the MIT License.
 
-import os
-import sys
-import fire
-import time
+import functools
 import glob
-import yaml
+import inspect
+import os
 import shutil
 import signal
-import inspect
-import tempfile
-import functools
 import statistics
 import subprocess
+import sys
+import tempfile
+import time
 from datetime import datetime
-from pathlib import Path
 from operator import xor
+from pathlib import Path
 from pprint import pprint
 
+import fire
+import yaml
+
 import qlib
-from qlib.workflow import R
 from qlib.tests.data import GetData
+from qlib.workflow import R
 
 
 # decorator to check the arguments

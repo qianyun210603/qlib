@@ -2,26 +2,27 @@
 # Licensed under the MIT License.
 
 
-from __future__ import division
-from __future__ import print_function
+from __future__ import division, print_function
 
+import copy
 import os
+import urllib.request
+from typing import Text, Union
+
 import numpy as np
 import pandas as pd
-from typing import Text, Union
-import urllib.request
-import copy
-from ...utils import get_or_create_path
-from ...log import get_module_logger
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from .pytorch_utils import count_parameters
-from ...model.base import Model
+
+from ...contrib.model.pytorch_gru import GRUModel
+from ...contrib.model.pytorch_lstm import LSTMModel
 from ...data.dataset import DatasetH
 from ...data.dataset.handler import DataHandlerLP
-from ...contrib.model.pytorch_lstm import LSTMModel
-from ...contrib.model.pytorch_gru import GRUModel
+from ...log import get_module_logger
+from ...model.base import Model
+from ...utils import get_or_create_path
+from .pytorch_utils import count_parameters
 
 
 class HIST(Model):
@@ -160,7 +161,6 @@ class HIST(Model):
         raise ValueError("unknown loss `%s`" % self.loss)
 
     def metric_fn(self, pred, label):
-
         mask = torch.isfinite(label)
 
         if self.metric == "ic":
@@ -189,7 +189,6 @@ class HIST(Model):
         return daily_index, daily_count
 
     def train_epoch(self, x_train, y_train, stock_index):
-
         stock2concept_matrix = np.load(self.stock2concept)
         x_train_values = x_train.values
         y_train_values = np.squeeze(y_train.values)
@@ -214,7 +213,6 @@ class HIST(Model):
             self.train_optimizer.step()
 
     def test_epoch(self, data_x, data_y, stock_index):
-
         # prepare training data
         stock2concept_matrix = np.load(self.stock2concept)
         x_values = data_x.values

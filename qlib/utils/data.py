@@ -1,8 +1,9 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 from typing import Union
-import pandas as pd
+
 import numpy as np
+import pandas as pd
 
 
 def robust_zscore(x: pd.Series, zscore=False):

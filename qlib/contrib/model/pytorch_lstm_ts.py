@@ -2,24 +2,23 @@
 # Licensed under the MIT License.
 
 
-from __future__ import division
-from __future__ import print_function
+from __future__ import division, print_function
+
+import copy
 
 import numpy as np
 import pandas as pd
-import copy
-from ...utils import get_or_create_path
-from ...log import get_module_logger
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-from ...model.base import Model
 from ...data.dataset.handler import DataHandlerLP
-from ...model.utils import ConcatDataset
 from ...data.dataset.weight import Reweighter
+from ...log import get_module_logger
+from ...model.base import Model
+from ...model.utils import ConcatDataset
+from ...utils import get_or_create_path
 
 
 class LSTM(Model):
@@ -150,7 +149,6 @@ class LSTM(Model):
         raise ValueError("unknown loss `%s`" % self.loss)
 
     def metric_fn(self, pred, label):
-
         mask = torch.isfinite(label)
 
         if self.metric in ("", "loss"):
@@ -159,10 +157,9 @@ class LSTM(Model):
         raise ValueError("unknown metric `%s`" % self.metric)
 
     def train_epoch(self, data_loader):
-
         self.LSTM_model.train()
 
-        for (data, weight) in data_loader:
+        for data, weight in data_loader:
             feature = data[:, :, 0:-1].to(self.device)
             label = data[:, -1, -1].to(self.device)
 
@@ -175,14 +172,12 @@ class LSTM(Model):
             self.train_optimizer.step()
 
     def test_epoch(self, data_loader):
-
         self.LSTM_model.eval()
 
         scores = []
         losses = []
 
-        for (data, weight) in data_loader:
-
+        for data, weight in data_loader:
             feature = data[:, :, 0:-1].to(self.device)
             # feature[torch.isnan(feature)] = 0
             label = data[:, -1, -1].to(self.device)
@@ -288,7 +283,6 @@ class LSTM(Model):
         preds = []
 
         for data in test_loader:
-
             feature = data[:, :, 0:-1].to(self.device)
 
             with torch.no_grad():

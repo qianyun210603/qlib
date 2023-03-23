@@ -2,40 +2,42 @@
 # Licensed under the MIT License.
 
 
-from __future__ import division
-from __future__ import print_function
+from __future__ import division, print_function
 
+import bisect
+import collections
+import collections.abc
+import contextlib
+import copy
+import datetime
+import difflib
+import hashlib
+import importlib
+import importlib.util
+import inspect
+import json
 import os
 import pickle
 import re
-import sys
-import copy
-import json
-from qlib.typehint import InstConf
-import yaml
-import redis
-import bisect
 import struct
-import difflib
-import inspect
-import hashlib
-import datetime
-import requests
-import importlib
-import importlib.util
-import contextlib
-import collections
-import collections.abc
+import sys
+from pathlib import Path
+from types import ModuleType
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from urllib.parse import urlparse
+
 import numpy as np
 import pandas as pd
-from pathlib import Path
-from typing import List, Dict, Union, Tuple, Any, Optional, Callable
-from types import ModuleType
-from urllib.parse import urlparse
+import redis
+import requests
+import yaml
 from packaging import version
-from .file import get_or_create_path, save_multiple_parts_file, unpack_archive_with_buffer, get_tmp_file_with_buffer
+
+from qlib.typehint import InstConf
+
 from ..config import C
 from ..log import get_module_logger, set_log_with_config
+from .file import get_or_create_path, get_tmp_file_with_buffer, save_multiple_parts_file, unpack_archive_with_buffer
 
 log = get_module_logger("utils")
 # MultiIndex.is_lexsorted() is a deprecated method in Pandas 1.3.0.
@@ -82,14 +84,14 @@ def get_period_list(periods, pit_mode: str) -> List[int]:
     List[int]
         the possible index between [first, last]
     """
-    if pit_mode == 'i':
+    if pit_mode == "i":
         return periods
     last = periods.max()  # return the latest quarter
     first = periods.min()
-    if pit_mode == 'a':
+    if pit_mode == "a":
         assert all(1900 <= x <= 2099 for x in (first, last)), "invalid arguments"
         return list(range(first, last + 1))
-    elif pit_mode == 'q':
+    elif pit_mode == "q":
         assert all(190000 <= x <= 209904 for x in (first, last)), "invalid arguments"
         res = []
         for year in range(first // 100, last // 100 + 1):
@@ -109,12 +111,13 @@ def get_period_list(periods, pit_mode: str) -> List[int]:
         return res
     raise ValueError(f"pit mode '{pit_mode}' not supported!")
 
+
 def get_period_offset(first_year: int, period: int, pit_mode: str):
-    if pit_mode == 'q':
+    if pit_mode == "q":
         return (period // 100 - first_year) * 4 + period % 100 - 1
-    if pit_mode == 'a':
+    if pit_mode == "a":
         return period - first_year
-    if pit_mode == 'm':
+    if pit_mode == "m":
         return (period // 100 - first_year) * 12 + period % 100 - 1
     return 0
 
@@ -767,7 +770,6 @@ def exists_qlib_data(qlib_dir):
             return False
     # check calendar bin
     for _calendar in calendars_dir.iterdir():
-
         if ("_future" not in _calendar.name) and (
             not list(features_dir.rglob(f"*.{_calendar.name.split('.')[0]}.bin"))
         ):

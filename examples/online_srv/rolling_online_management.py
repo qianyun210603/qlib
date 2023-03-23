@@ -11,14 +11,16 @@ Finally, the OnlineManager will finish second routine and update all strategies.
 """
 
 import os
+
 import fire
+
 import qlib
 from qlib.model.trainer import DelayTrainerR, DelayTrainerRM, TrainerR, TrainerRM, end_task_train, task_train
+from qlib.tests.config import CSI100_RECORD_LGB_TASK_CONFIG_ROLLING, CSI100_RECORD_XGBOOST_TASK_CONFIG_ROLLING
 from qlib.workflow import R
+from qlib.workflow.online.manager import OnlineManager
 from qlib.workflow.online.strategy import RollingStrategy
 from qlib.workflow.task.gen import RollingGen
-from qlib.workflow.online.manager import OnlineManager
-from qlib.tests.config import CSI100_RECORD_XGBOOST_TASK_CONFIG_ROLLING, CSI100_RECORD_LGB_TASK_CONFIG_ROLLING
 from qlib.workflow.task.manage import TaskManager
 
 

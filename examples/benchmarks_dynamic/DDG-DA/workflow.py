@@ -1,20 +1,21 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
-from pathlib import Path
-from qlib.model.meta.task import MetaTask
-from qlib.contrib.meta.data_selection.model import MetaModelDS
-from qlib.contrib.meta.data_selection.dataset import InternalData, MetaDatasetDS
-from qlib.data.dataset.handler import DataHandlerLP
-
-import pandas as pd
-import fire
-import sys
 import pickle
+import sys
+from pathlib import Path
+
+import fire
+import pandas as pd
+
 from qlib import auto_init
+from qlib.contrib.meta.data_selection.dataset import InternalData, MetaDatasetDS
+from qlib.contrib.meta.data_selection.model import MetaModelDS
+from qlib.data.dataset.handler import DataHandlerLP
+from qlib.model.meta.task import MetaTask
 from qlib.model.trainer import TrainerR
+from qlib.tests.data import GetData
 from qlib.utils import init_instance_by_config
 from qlib.workflow import R
-from qlib.tests.data import GetData
 
 DIRNAME = Path(__file__).absolute().resolve().parent
 sys.path.append(str(DIRNAME.parent / "baseline"))
@@ -79,7 +80,9 @@ class DDGDA:
 
         feature_selected = feature_df.loc[:, col_selected.index]
 
-        feature_selected = feature_selected.groupby("datetime", group_keys=False).apply(lambda df: (df - df.mean()).div(df.std()))
+        feature_selected = feature_selected.groupby("datetime", group_keys=False).apply(
+            lambda df: (df - df.mean()).div(df.std())
+        )
         feature_selected = feature_selected.fillna(0.0)
 
         df_all = {

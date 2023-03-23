@@ -1,13 +1,14 @@
 #  Copyright (c) Microsoft Corporation.
 #  Licensed under the MIT License.
 
-import sys
 import os
+import sys
 from pathlib import Path
 
-import qlib
 import fire
 import ruamel.yaml as yaml
+
+import qlib
 from qlib.config import C
 from qlib.model.trainer import task_train
 

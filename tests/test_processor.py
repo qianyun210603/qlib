@@ -2,10 +2,12 @@
 # Licensed under the MIT License.
 
 import unittest
+
 import numpy as np
+
 from qlib.data import D
+from qlib.data.dataset.processor import CSZFillna, CSZScoreNorm, MinMaxNorm, ZScoreNorm
 from qlib.tests import TestAutoData
-from qlib.data.dataset.processor import MinMaxNorm, ZScoreNorm, CSZScoreNorm, CSZFillna
 
 
 class TestProcessor(TestAutoData):

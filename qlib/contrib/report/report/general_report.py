@@ -1,10 +1,11 @@
+from pathlib import Path
+
 import pandas as pd
 from jinja2 import Environment, FileSystemLoader
-from qlib.workflow import R
-from pathlib import Path
-from qlib.contrib.report import analysis_position, analysis_model
-from qlib.contrib.report.utils import convert_fig_to_base64_str
 
+from qlib.contrib.report import analysis_model, analysis_position
+from qlib.contrib.report.utils import convert_fig_to_base64_str
+from qlib.workflow import R
 
 TEMPLATE_PATH = Path(__file__).resolve().parent.joinpath("template")
 
@@ -110,16 +111,16 @@ def generate_full_report_for_recorder(
 if __name__ == "__main__":
     import qlib
     from qlib.config import C
-    from qlib.data import D
     from qlib.constant import REG_CN
+    from qlib.data import D
 
     exp_mgr = C["exp_manager"]
-    exp_mgr["kwargs"]["uri"] = 'file:'+r"D:\Documents/TradeResearch/Stock/qlibmodels/all_model_Alpha101_csi500"
+    exp_mgr["kwargs"]["uri"] = "file:" + r"D:\Documents/TradeResearch/Stock/qlibmodels/all_model_Alpha101_csi500"
     provider_uri = r"D:\Documents\TradeResearch\qlib_test\rqdata"
     qlib.init(provider_uri=provider_uri, region=REG_CN, exp_manager=exp_mgr)
 
-    bench_price = D.features(["SH000905"], ['$close'], start_time='2018-12-20', end_time='2022-10-31', freq='day')
-    bench_ret = bench_price.loc['SH000905', '$close'] / bench_price.loc['SH000905', '$close'].shift(1) - 1
+    bench_price = D.features(["SH000905"], ["$close"], start_time="2018-12-20", end_time="2022-10-31", freq="day")
+    bench_ret = bench_price.loc["SH000905", "$close"] / bench_price.loc["SH000905", "$close"].shift(1) - 1
     my_html = generate_full_report_for_recorder(exp_name="LightGBM", recorder_id="e0e7c34fd7284f1ea37d976d7bc514d4")
     with open(r"E:\test_qlib_perf_report.html", "w") as f:
         f.write(my_html)

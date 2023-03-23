@@ -1,9 +1,8 @@
-from qlib.contrib.data.handler import check_transform_proc, _DEFAULT_LEARN_PROCESSORS
+from qlib.contrib.data.handler import _DEFAULT_LEARN_PROCESSORS, check_transform_proc
 from qlib.data.dataset.handler import DataHandlerLP
 
 
 class AlphaConvert1(DataHandlerLP):
-
     def __init__(
         self,
         instruments="converts",
@@ -51,17 +50,17 @@ class AlphaConvert1(DataHandlerLP):
         return self.parse_config_to_fields()
 
     @staticmethod
-    def get_label_config(return_field='open'):
+    def get_label_config(return_field="open"):
         return [f"Ref(${return_field}, -2)/Ref(${return_field}, -1) - 1"], ["LABEL0"]
 
     def parse_config_to_fields(self):
         """create factors from config"""
 
         alpha_components = {
-            "convertion_premium": '($rawclosestock * 100 / $conversionprice)/$close - 1',
-            'pure_bond_ytm': '$pure_bond_ytm',
-            'remaining_size': '$remaining_size',
-            'turnover_rate': '$turnover_rate',
+            "convertion_premium": "($rawclosestock * 100 / $conversionprice)/$close - 1",
+            "pure_bond_ytm": "$pure_bond_ytm",
+            "remaining_size": "$remaining_size",
+            "turnover_rate": "$turnover_rate",
             "ROC5": "Ref($close, 5)/$close",
             "MA10": "Mean($close, 10)/$close",
             "RESI30": "Resi($close, 30)/$close",

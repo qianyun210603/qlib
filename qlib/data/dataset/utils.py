@@ -1,10 +1,12 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 from __future__ import annotations
+
+from typing import TYPE_CHECKING, List, Union
+
 import pandas as pd
-from typing import Union, List
+
 from qlib.utils import init_instance_by_config
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from qlib.data.dataset import DataHandler
@@ -72,15 +74,11 @@ def fetch_df_by_index(
     if fetch_orig:
         for slc in idx_slc:
             if slc != slice(None, None):
-                return df.loc[
-                    pd.IndexSlice[idx_slc],
-                ]
+                return df.loc[pd.IndexSlice[idx_slc],]
         else:  # pylint: disable=W0120
             return df
     else:
-        return df.loc[
-            pd.IndexSlice[idx_slc],
-        ]
+        return df.loc[pd.IndexSlice[idx_slc],]
 
 
 def fetch_df_by_col(df: pd.DataFrame, col_set: Union[str, List[str]]) -> pd.DataFrame:

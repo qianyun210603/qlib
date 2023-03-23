@@ -1,12 +1,13 @@
-import unittest
 import time
-import numpy as np
-from qlib.data import D
-from qlib.tests import TestAutoData
+import unittest
 
-from qlib.data.dataset.handler import DataHandlerLP
+import numpy as np
+
 from qlib.contrib.data.handler import check_transform_proc
+from qlib.data import D
+from qlib.data.dataset.handler import DataHandlerLP
 from qlib.log import TimeInspector
+from qlib.tests import TestAutoData
 
 
 class TestHandler(DataHandlerLP):
@@ -21,7 +22,6 @@ class TestHandler(DataHandlerLP):
         fit_end_time=None,
         drop_raw=True,
     ):
-
         infer_processors = check_transform_proc(infer_processors, fit_start_time, fit_end_time)
         learn_processors = check_transform_proc(learn_processors, fit_start_time, fit_end_time)
 
@@ -51,7 +51,6 @@ class TestHandler(DataHandlerLP):
 
 
 class TestHandlerStorage(TestAutoData):
-
     market = "all"
 
     start_time = "2010-01-01"
@@ -82,7 +81,6 @@ class TestHandlerStorage(TestAutoData):
         )
 
         with TimeInspector.logt("random fetch with DataFrame Storage"):
-
             # single stock
             for i in range(100):
                 random_index = np.random.randint(len(instruments), size=1)[0]
@@ -96,7 +94,6 @@ class TestHandlerStorage(TestAutoData):
                 data_handler.fetch(selector=(fetch_stocks, slice(fetch_start_time, fetch_end_time)), level=None)
 
         with TimeInspector.logt("random fetch with HashingStock Storage"):
-
             # single stock
             for i in range(100):
                 random_index = np.random.randint(len(instruments), size=1)[0]

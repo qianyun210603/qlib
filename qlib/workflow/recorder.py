@@ -2,22 +2,23 @@
 # Licensed under the MIT License.
 
 import os
-import sys
-from typing import Optional
-import mlflow
-import shutil
 import pickle
-import tempfile
+import shutil
 import subprocess
-from pathlib import Path
+import sys
+import tempfile
 from datetime import datetime
+from pathlib import Path
+from typing import Optional
 
-from qlib.utils.serial import Serializable
+import mlflow
+from mlflow.store.artifact.azure_blob_artifact_repo import AzureBlobArtifactRepository
+
 from qlib.utils.exceptions import LoadObjectError
 from qlib.utils.paral import AsyncCaller
+from qlib.utils.serial import Serializable
 
 from ..log import TimeInspector, get_module_logger
-from mlflow.store.artifact.azure_blob_artifact_repo import AzureBlobArtifactRepository
 
 logger = get_module_logger("workflow")
 # mlflow limits the length of log_param to 500, but this caused errors when using qrun, so we extended the mlflow limit.

@@ -1,14 +1,18 @@
+import unittest
+from datetime import datetime
 from typing import List
 from unittest.case import TestCase
-import unittest
-import pandas as pd
+
 import numpy as np
-from datetime import datetime
+import pandas as pd
+
 from qlib import init
 from qlib.config import C
+from qlib.constant import REG_CN, REG_TW, REG_US
 from qlib.log import TimeInspector
-from qlib.constant import REG_CN, REG_US, REG_TW
-from qlib.utils.time import cal_sam_minute as cal_sam_minute_new, get_min_cal, CN_TIME, US_TIME, TW_TIME
+from qlib.utils.time import CN_TIME, TW_TIME, US_TIME
+from qlib.utils.time import cal_sam_minute as cal_sam_minute_new
+from qlib.utils.time import get_min_cal
 
 REG_MAP = {REG_CN: CN_TIME, REG_US: US_TIME, REG_TW: TW_TIME}
 

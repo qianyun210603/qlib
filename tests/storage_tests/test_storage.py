@@ -2,17 +2,15 @@
 # Licensed under the MIT License.
 
 
-from pathlib import Path
 from collections.abc import Iterable
+from pathlib import Path
 
 import numpy as np
-from qlib.tests import TestAutoData
 
-from qlib.data.storage.file_storage import (
-    FileCalendarStorage as CalendarStorage,
-    FileInstrumentStorage as InstrumentStorage,
-    FileFeatureStorage as FeatureStorage,
-)
+from qlib.data.storage.file_storage import FileCalendarStorage as CalendarStorage
+from qlib.data.storage.file_storage import FileFeatureStorage as FeatureStorage
+from qlib.data.storage.file_storage import FileInstrumentStorage as InstrumentStorage
+from qlib.tests import TestAutoData
 
 _file_name = Path(__file__).name.split(".")[0]
 DATA_DIR = Path(__file__).parent.joinpath(f"{_file_name}_data")
@@ -22,7 +20,6 @@ QLIB_DIR.mkdir(exist_ok=True, parents=True)
 
 class TestStorage(TestAutoData):
     def test_calendar_storage(self):
-
         calendar = CalendarStorage(freq="day", future=False, provider_uri=self.provider_uri)
         assert isinstance(calendar[:], Iterable), f"{calendar.__class__.__name__}.__getitem__(s: slice) is not Iterable"
         assert isinstance(calendar.data, Iterable), f"{calendar.__class__.__name__}.data is not Iterable"

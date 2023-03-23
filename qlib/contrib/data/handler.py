@@ -1,11 +1,12 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from inspect import getfullargspec
+
+from ...data.dataset import processor as processor_module
 from ...data.dataset.handler import DataHandlerLP
 from ...data.dataset.processor import Processor
 from ...utils import get_callable_kwargs
-from ...data.dataset import processor as processor_module
-from inspect import getfullargspec
 
 
 def check_transform_proc(proc_l, fit_start_time, fit_end_time):
@@ -57,7 +58,7 @@ class Alpha360(DataHandlerLP):
         fit_end_time=None,
         filter_pipe=None,
         inst_processors=None,
-        **kwargs
+        **kwargs,
     ):
         infer_processors = check_transform_proc(infer_processors, fit_start_time, fit_end_time)
         learn_processors = check_transform_proc(learn_processors, fit_start_time, fit_end_time)
@@ -82,7 +83,7 @@ class Alpha360(DataHandlerLP):
             data_loader=data_loader,
             learn_processors=learn_processors,
             infer_processors=infer_processors,
-            **kwargs
+            **kwargs,
         )
 
     def get_label_config(self):
@@ -153,7 +154,7 @@ class Alpha158(DataHandlerLP):
         process_type=DataHandlerLP.PTYPE_A,
         filter_pipe=None,
         inst_processors=None,
-        **kwargs
+        **kwargs,
     ):
         infer_processors = check_transform_proc(infer_processors, fit_start_time, fit_end_time)
         learn_processors = check_transform_proc(learn_processors, fit_start_time, fit_end_time)
@@ -178,7 +179,7 @@ class Alpha158(DataHandlerLP):
             infer_processors=infer_processors,
             learn_processors=learn_processors,
             process_type=process_type,
-            **kwargs
+            **kwargs,
         )
 
     def get_feature_config(self):

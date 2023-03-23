@@ -2,15 +2,16 @@
 # Licensed under the MIT License.
 
 
-from __future__ import division
-from __future__ import print_function
+from __future__ import division, print_function
+
+import pickle
 
 import socketio
 
 import qlib
+
 from ..config import C
 from ..log import get_module_logger
-import pickle
 
 
 class Client:

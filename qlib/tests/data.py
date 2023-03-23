@@ -1,16 +1,18 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-import re
-import sys
-import qlib
-import shutil
-import zipfile
-import requests
 import datetime
-from tqdm import tqdm
+import re
+import shutil
+import sys
+import zipfile
 from pathlib import Path
+
+import requests
 from loguru import logger
+from tqdm import tqdm
+
+import qlib
 from qlib.utils import exists_qlib_data
 
 

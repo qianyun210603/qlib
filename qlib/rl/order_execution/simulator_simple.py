@@ -4,10 +4,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, cast, Optional
+from typing import Any, Optional, cast
 
 import numpy as np
 import pandas as pd
+
 from qlib.backtest.decision import Order, OrderDir
 from qlib.constant import EPS, EPS_T, float_or_ndarray
 from qlib.rl.data.pickle_styled import DealPriceType, load_simple_intraday_backtest_data

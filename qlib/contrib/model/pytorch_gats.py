@@ -2,25 +2,25 @@
 # Licensed under the MIT License.
 
 
-from __future__ import division
-from __future__ import print_function
+from __future__ import division, print_function
+
+import copy
+from typing import Text, Union
 
 import numpy as np
 import pandas as pd
-from typing import Text, Union
-import copy
-from ...utils import get_or_create_path
-from ...log import get_module_logger
 import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from .pytorch_utils import count_parameters
-from ...model.base import Model
+from ...contrib.model.pytorch_gru import GRUModel
+from ...contrib.model.pytorch_lstm import LSTMModel
 from ...data.dataset import DatasetH
 from ...data.dataset.handler import DataHandlerLP
-from ...contrib.model.pytorch_lstm import LSTMModel
-from ...contrib.model.pytorch_gru import GRUModel
+from ...log import get_module_logger
+from ...model.base import Model
+from ...utils import get_or_create_path
+from .pytorch_utils import count_parameters
 
 
 class GATs(Model):
@@ -154,7 +154,6 @@ class GATs(Model):
         raise ValueError("unknown loss `%s`" % self.loss)
 
     def metric_fn(self, pred, label):
-
         mask = torch.isfinite(label)
 
         if self.metric in ("", "loss"):
@@ -175,7 +174,6 @@ class GATs(Model):
         return daily_index, daily_count
 
     def train_epoch(self, x_train, y_train):
-
         x_train_values = x_train.values
         y_train_values = np.squeeze(y_train.values)
         self.GAT_model.train()
@@ -197,7 +195,6 @@ class GATs(Model):
             self.train_optimizer.step()
 
     def test_epoch(self, data_x, data_y):
-
         # prepare training data
         x_values = data_x.values
         y_values = np.squeeze(data_y.values)
@@ -230,7 +227,6 @@ class GATs(Model):
         evals_result=dict(),
         save_path=None,
     ):
-
         df_train, df_valid, df_test = dataset.prepare(
             ["train", "valid", "test"],
             col_set=["feature", "label"],

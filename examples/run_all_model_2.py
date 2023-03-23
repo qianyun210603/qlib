@@ -1,26 +1,26 @@
 #  Copyright (c) Microsoft Corporation.
 #  Licensed under the MIT License.
 
+import functools
+import inspect
 import os
+import signal
+import statistics
 import sys
-import fire
+from operator import xor
+from pathlib import Path
+from pprint import pprint
 
+import fire
 import pandas as pd
 import ruamel.yaml as yaml
-import signal
-import inspect
-import functools
-import statistics
-from pathlib import Path
-from operator import xor
-from pprint import pprint
 from loguru import logger
+
 import qlib
 from qlib.config import C
+from qlib.model.trainer import _exe_task, _log_task_info
 from qlib.workflow import R
-
 from qlib.workflow.cli import sys_config
-from qlib.model.trainer import _log_task_info, _exe_task
 
 
 # decorator to check the arguments
@@ -86,7 +86,7 @@ def workflow(config_path, experiment_name="workflow", uri_folder="mlruns", force
     for rec_id, rec in existing_recorders.items():
         if force_rerun:
             this_exp.delete_recorder(recorder_id=rec_id)
-        elif rec.status != 'FINISHED':
+        elif rec.status != "FINISHED":
             logger.info(f"delete stale record {rec_id}")
             this_exp.delete_recorder(recorder_id=rec_id)
         elif num_valid_results >= target_run_num:
@@ -98,12 +98,10 @@ def workflow(config_path, experiment_name="workflow", uri_folder="mlruns", force
     while num_valid_results < target_run_num:
         with R.start(experiment_name=experiment_name):
             recorder = R.get_recorder()
-            logger.info(
-                f"Already have {num_valid_results} records, {target_run_num-num_valid_results} to run."
-            )
+            logger.info(f"Already have {num_valid_results} records, {target_run_num-num_valid_results} to run.")
             logger.info(f"Record id for this run: {recorder.id}")
-            _log_task_info(config['task'])
-            _exe_task(config['task'])
+            _log_task_info(config["task"])
+            _exe_task(config["task"])
             recorder.save_objects(config=config)
             num_valid_results += 1
 
@@ -176,7 +174,7 @@ def get_all_results(folders) -> dict:
 
 
 # function to generate and save Markdown table
-def gen_and_save_md_table(metrics, dataset, base_path='.'):
+def gen_and_save_md_table(metrics, dataset, base_path="."):
     table = "| Model Name | Dataset | IC | ICIR | Rank IC | Rank ICIR | Annualized Return | Information Ratio | Max Drawdown |\n"
     table += "|---|---|---|---|---|---|---|---|---|\n"
     for fn in metrics:
@@ -195,14 +193,15 @@ def gen_and_save_md_table(metrics, dataset, base_path='.'):
 
 
 # read yaml, remove seed kwargs of model, and then save file in the temp_dir
-def gen_yaml_files_from_example_templates(
-    yaml_path, temp_dir, provider_uri, train, valid, test
-):
+def gen_yaml_files_from_example_templates(yaml_path, temp_dir, provider_uri, train, valid, test):
     yaml_path = Path(yaml_path).expanduser()
     with open(yaml_path, "r") as fp:
         config = yaml.safe_load(fp)
-    file_name = yaml_path.name if config['market'] in yaml_path.name else \
-        yaml_path.stem.rstrip("_full") + '_' + config['market'] + yaml_path.suffix
+    file_name = (
+        yaml_path.name
+        if config["market"] in yaml_path.name
+        else yaml_path.stem.rstrip("_full") + "_" + config["market"] + yaml_path.suffix
+    )
 
     temp_path = Path(temp_dir).expanduser().joinpath(file_name)
     if temp_path.exists():
@@ -213,48 +212,47 @@ def gen_yaml_files_from_example_templates(
     except KeyError:
         pass
 
-    if 'sys' in config and 'rel_path' in config['sys']:
-        config['sys'].setdefault('path', []).extend(
-            str((yaml_path.parent / p).resolve().absolute()) for p in config['sys']['rel_path']
+    if "sys" in config and "rel_path" in config["sys"]:
+        config["sys"].setdefault("path", []).extend(
+            str((yaml_path.parent / p).resolve().absolute()) for p in config["sys"]["rel_path"]
         )
-        del config['sys']['rel_path']
+        del config["sys"]["rel_path"]
 
+    config["qlib_init"]["provider_uri"] = provider_uri
 
-    config['qlib_init']['provider_uri'] = provider_uri
-
-    config['task']['dataset']['kwargs']['handler']['kwargs']['start_time'] = train[0]
-    config['task']['dataset']['kwargs']['handler']['kwargs']['end_time'] = test[1]
-    if 'valid' in config['task']['dataset']['kwargs']['segments']:
-        config['task']['dataset']['kwargs']['handler']['kwargs']['fit_start_time'] = train[0]
-        config['task']['dataset']['kwargs']['handler']['kwargs']['fit_end_time'] = train[1]
-        config['task']['dataset']['kwargs']['segments']['train'] = train
-        config['task']['dataset']['kwargs']['segments']['valid'] = valid
-        config['task']['dataset']['kwargs']['segments']['test'] = test
+    config["task"]["dataset"]["kwargs"]["handler"]["kwargs"]["start_time"] = train[0]
+    config["task"]["dataset"]["kwargs"]["handler"]["kwargs"]["end_time"] = test[1]
+    if "valid" in config["task"]["dataset"]["kwargs"]["segments"]:
+        config["task"]["dataset"]["kwargs"]["handler"]["kwargs"]["fit_start_time"] = train[0]
+        config["task"]["dataset"]["kwargs"]["handler"]["kwargs"]["fit_end_time"] = train[1]
+        config["task"]["dataset"]["kwargs"]["segments"]["train"] = train
+        config["task"]["dataset"]["kwargs"]["segments"]["valid"] = valid
+        config["task"]["dataset"]["kwargs"]["segments"]["test"] = test
     else:
-        config['task']['dataset']['kwargs']['handler']['kwargs']['fit_start_time'] = train[0]
-        config['task']['dataset']['kwargs']['handler']['kwargs']['fit_end_time'] = valid[1]
-        config['task']['dataset']['kwargs']['segments']['train'] = [train[0], valid[1]]
-        config['task']['dataset']['kwargs']['segments']['test'] = test
+        config["task"]["dataset"]["kwargs"]["handler"]["kwargs"]["fit_start_time"] = train[0]
+        config["task"]["dataset"]["kwargs"]["handler"]["kwargs"]["fit_end_time"] = valid[1]
+        config["task"]["dataset"]["kwargs"]["segments"]["train"] = [train[0], valid[1]]
+        config["task"]["dataset"]["kwargs"]["segments"]["test"] = test
 
-    config['task']['record'][-1]['kwargs']['config']['backtest']['start_time'] = \
-        (pd.Timestamp(test[0]) + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
-    config['task']['record'][-1]['kwargs']['config']['backtest']['end_time'] = test[1]
-    if 'infer_processors' in config['task']['dataset']['kwargs']['handler']['kwargs']:
-        config['task']['dataset']['kwargs']['handler']['kwargs']['infer_processors'] = \
-            [
-                p for p in config['task']['dataset']['kwargs']['handler']['kwargs']['infer_processors']
-                if p['class'] != 'FilterCol'
-            ]
+    config["task"]["record"][-1]["kwargs"]["config"]["backtest"]["start_time"] = (
+        pd.Timestamp(test[0]) + pd.Timedelta(days=1)
+    ).strftime("%Y-%m-%d")
+    config["task"]["record"][-1]["kwargs"]["config"]["backtest"]["end_time"] = test[1]
+    if "infer_processors" in config["task"]["dataset"]["kwargs"]["handler"]["kwargs"]:
+        config["task"]["dataset"]["kwargs"]["handler"]["kwargs"]["infer_processors"] = [
+            p
+            for p in config["task"]["dataset"]["kwargs"]["handler"]["kwargs"]["infer_processors"]
+            if p["class"] != "FilterCol"
+        ]
 
-    if config['task']['model']['module_path'].endswith('_ts'):
-        config['task']['model']['module_path'] = config['task']['model']['module_path'][:-3]
-        if 'd_feat' in config['task']['model']['kwargs']:
-            config['task']['model']['kwargs']['d_feat'] = 79
+    if config["task"]["model"]["module_path"].endswith("_ts"):
+        config["task"]["model"]["module_path"] = config["task"]["model"]["module_path"][:-3]
+        if "d_feat" in config["task"]["model"]["kwargs"]:
+            config["task"]["model"]["kwargs"]["d_feat"] = 79
         else:
-            config['task']['model'].setdefault('try_kwargs', {}).update({'d_feat': 79})
-    if config['task']['dataset']['class'] == 'TSDatasetH':
-        config['task']['dataset']['class'] = 'DatasetH'
-
+            config["task"]["model"].setdefault("try_kwargs", {}).update({"d_feat": 79})
+    if config["task"]["dataset"]["class"] == "TSDatasetH":
+        config["task"]["dataset"]["class"] = "DatasetH"
 
     # otherwise, generating a new yaml without random seed
     with open(temp_path, "w") as fp:
@@ -264,9 +262,8 @@ def gen_yaml_files_from_example_templates(
 
 # noinspection GrazieInspection
 class ModelRunner:
-
     @staticmethod
-    def _init_qlib(exp_folder_name, basepath=None):  #, provider_uri="/home/booksword/traderesearch/qlib_data/rqdata"):
+    def _init_qlib(exp_folder_name, basepath=None):  # , provider_uri="/home/booksword/traderesearch/qlib_data/rqdata"):
         if basepath is None:
             basepath = Path(os.getcwd()).resolve()
         else:
@@ -366,10 +363,9 @@ class ModelRunner:
         for fn in folders:
             # get all files
             logger.info(f"Retrieving files in {fn} ...")
-            if fn == 'TFT' or \
-                fn == 'GATs': # GATs depends on lstm
+            if fn == "TFT" or fn == "GATs":  # GATs depends on lstm
                 continue
-            if universe == "" and fn == 'TRA':
+            if universe == "" and fn == "TRA":
                 universe = "full"
             temp_dir = base_folder.joinpath("temp_dir")
             if not temp_dir.exists():
@@ -386,8 +382,12 @@ class ModelRunner:
 
             # read yaml, remove seed kwargs of model, and then save file in the temp_dir
             yaml_path = gen_yaml_files_from_example_templates(
-                yaml_path, temp_dir, provider_uri=r'D:\Documents\TradeResearch\qlib_test\rqdata',
-                train=['2011-01-01', '2016-12-31'], valid=['2017-01-01', '2018-12-31'], test=['2018-12-31', '2022-10-31']
+                yaml_path,
+                temp_dir,
+                provider_uri=r"D:\Documents\TradeResearch\qlib_test\rqdata",
+                train=["2011-01-01", "2016-12-31"],
+                valid=["2017-01-01", "2018-12-31"],
+                test=["2018-12-31", "2022-10-31"],
             )
 
             for i in range(times):

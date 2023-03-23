@@ -1,24 +1,22 @@
 #  Copyright (c) Microsoft Corporation.
 #  Licensed under the MIT License.
 
+import pickle
+
 import fire
+from highfreq_ops import BFillNan, Cut, Date, DayLast, FFillNan, IsNull, Select, get_calendar_day
 
 import qlib
-import pickle
-from qlib.constant import REG_CN
 from qlib.config import HIGH_FREQ_CONFIG
-
-from qlib.utils import init_instance_by_config
+from qlib.constant import REG_CN
+from qlib.data.data import Cal
 from qlib.data.dataset.handler import DataHandlerLP
 from qlib.data.ops import Operators
-from qlib.data.data import Cal
 from qlib.tests.data import GetData
-
-from highfreq_ops import get_calendar_day, DayLast, FFillNan, BFillNan, Date, Select, IsNull, Cut
+from qlib.utils import init_instance_by_config
 
 
 class HighfreqWorkflow:
-
     SPEC_CONF = {"custom_ops": [DayLast, FFillNan, BFillNan, Date, Select, IsNull, Cut], "expression_cache": None}
 
     MARKET = "all"

@@ -208,6 +208,57 @@ class SignalRecord(RecordTemp):
         return ["pred.pkl", "label.pkl"]
 
 
+class SignalSeriesRecord(RecordTemp):
+    """
+    This is the Signal Record class that generates the signal prediction. This class inherits the ``RecordTemp`` class.
+    """
+
+    def __init__(self, models=(), datasets=(), recorder=None):
+        super().__init__(recorder=recorder)
+        self.models = models
+        self.datasets = datasets
+
+    @staticmethod
+    def generate_label(dataset):
+        with class_casting(dataset, DatasetH):
+            params = dict(segments="test", col_set="label", data_key=DataHandlerLP.DK_R)
+            try:
+                # Assume the backend handler is DataHandlerLP
+                raw_label = dataset.prepare(**params)
+            except TypeError:
+                # The argument number is not right
+                del params["data_key"]
+                # The backend handler should be DataHandler
+                raw_label = dataset.prepare(**params)
+            except AttributeError as e:
+                # The data handler is initialized with `drop_raw=True`...
+                # So raw_label is not available
+                logger.warning(f"Exception: {e}")
+                raw_label = None
+        return raw_label
+
+    def generate(self, **kwargs):
+        # generate prediction
+        pred = pd.concat(model.predict(dataset) for model, dataset in zip(self.models, self.datasets)).sort_index()
+        if isinstance(pred, pd.Series):
+            pred = pred.to_frame("score")
+        self.save(**{"pred.pkl": pred})
+
+        logger.info(
+            f"Signal record 'pred.pkl' has been saved as the artifact of the Experiment {self.recorder.experiment_id}"
+        )
+        # print out results
+        pprint(f"The following are prediction results of the {type(self.models[0]).__name__} model.")
+        pprint(pred.head(5))
+
+        if all(isinstance(dataset, DatasetH) for dataset in self.datasets):
+            raw_label = pd.concat(self.generate_label(dataset) for dataset in self.datasets).sort_index()
+            self.save(**{"label.pkl": raw_label})
+
+    def list(self):
+        return ["pred.pkl", "label.pkl"]
+
+
 class ACRecordTemp(RecordTemp):
     """Automatically checking record template"""
 
@@ -245,7 +296,7 @@ class HFSignalRecord(SignalRecord):
     artifact_path = "hg_sig_analysis"
     depend_cls = SignalRecord
 
-    def __init__(self, recorder, **kwargs):
+    def __init__(self, recorder):
         super().__init__(recorder=recorder)
 
     def generate(self):
@@ -369,8 +420,8 @@ class PortAnaRecord(ACRecordTemp):
         risk_analysis_freq: Union[List, str] = None,
         indicator_analysis_freq: Union[List, str] = None,
         indicator_analysis_method=None,
+        verbose=True,
         skip_existing=False,
-        **kwargs,
     ):
         """
         config["strategy"] : dict
@@ -385,8 +436,10 @@ class PortAnaRecord(ACRecordTemp):
             indicator analysis freq of report
         indicator_analysis_method : str, optional, default by None
             the candidate values include 'mean', 'amount_weighted', 'value_weighted'
+        verbose: bool
+            if print out summary in console
         """
-        super().__init__(recorder=recorder, skip_existing=skip_existing, **kwargs)
+        super().__init__(recorder=recorder, skip_existing=skip_existing)
 
         if config is None:
             config = {  # Default config for daily trading
@@ -445,6 +498,8 @@ class PortAnaRecord(ACRecordTemp):
         ]
         self.indicator_analysis_method = indicator_analysis_method
 
+        self.verbose = verbose
+
     def _get_report_freq(self, executor_config):
         ret_freq = []
         if executor_config["kwargs"].get("generate_portfolio_metrics", False):
@@ -470,7 +525,7 @@ class PortAnaRecord(ACRecordTemp):
             self.backtest_config["end_time"] = get_date_by_shift(dt_values.max(), 1)
 
         # custom strategy and get backtest
-        portfolio_metric_dict, indicator_dict = normal_backtest(
+        portfolio_metric_dict, indicator_dict, trades = normal_backtest(
             executor=self.executor_config, strategy=self.strategy_config, **self.backtest_config
         )
         for _freq, (report_normal, positions_normal) in portfolio_metric_dict.items():
@@ -480,6 +535,8 @@ class PortAnaRecord(ACRecordTemp):
         for _freq, indicators_normal in indicator_dict.items():
             self.save(**{f"indicators_normal_{_freq}.pkl": indicators_normal[0]})
             self.save(**{f"indicators_normal_{_freq}_obj.pkl": indicators_normal[1]})
+
+        self.save(**{"trades.pkl": trades})
 
         for _analysis_freq in self.risk_analysis_freq:
             if _analysis_freq not in portfolio_metric_dict:
@@ -506,12 +563,13 @@ class PortAnaRecord(ACRecordTemp):
                     f"Portfolio analysis record 'port_analysis_{_analysis_freq}.pkl' has been saved as the artifact of the Experiment {self.recorder.experiment_id}"
                 )
                 # print out results
-                pprint(f"The following are analysis results of benchmark return({_analysis_freq}).")
-                pprint(risk_analysis(report_normal["bench"], freq=_analysis_freq))
-                pprint(f"The following are analysis results of the excess return without cost({_analysis_freq}).")
-                pprint(analysis["excess_return_without_cost"])
-                pprint(f"The following are analysis results of the excess return with cost({_analysis_freq}).")
-                pprint(analysis["excess_return_with_cost"])
+                if self.verbose:
+                    pprint(f"The following are analysis results of benchmark return({_analysis_freq}).")
+                    pprint(risk_analysis(report_normal["bench"], freq=_analysis_freq))
+                    pprint(f"The following are analysis results of the excess return without cost({_analysis_freq}).")
+                    pprint(analysis["excess_return_without_cost"])
+                    pprint(f"The following are analysis results of the excess return with cost({_analysis_freq}).")
+                    pprint(analysis["excess_return_with_cost"])
 
         for _analysis_freq in self.indicator_analysis_freq:
             if _analysis_freq not in indicator_dict:
@@ -530,8 +588,9 @@ class PortAnaRecord(ACRecordTemp):
                 logger.info(
                     f"Indicator analysis record 'indicator_analysis_{_analysis_freq}.pkl' has been saved as the artifact of the Experiment {self.recorder.experiment_id}"
                 )
-                pprint(f"The following are analysis results of indicators({_analysis_freq}).")
-                pprint(analysis_df)
+                if self.verbose:
+                    pprint(f"The following are analysis results of indicators({_analysis_freq}).")
+                    pprint(analysis_df)
 
     def list(self):
         list_path = []

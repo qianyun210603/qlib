@@ -71,12 +71,12 @@ REQUIRED = [
     "tornado",
     "joblib>=0.17.0",
     "ruamel.yaml>=0.16.12",
-    "pymongo==3.7.2",  # For task management
+    "pymongo",  # For task management
     "scikit-learn>=0.22",
     "dill",
     "dataclasses;python_version<'3.7'",
     "filelock",
-    "jinja2<3.1.0",  # for passing the readthedocs workflow.
+    "jinja2",  # for passing the readthedocs workflow.
     "gym",
     # Installing the latest version of protobuf for python versions below 3.8 will cause unit tests to fail.
     "protobuf<=3.20.1;python_version<='3.8'",

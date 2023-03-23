@@ -52,7 +52,7 @@ class ALSTM(Model):
         optimizer="adam",
         GPU=0,
         seed=None,
-        **kwargs
+        **_
     ):
         # Set logger.
         self.logger = get_module_logger("ALSTM")
@@ -218,8 +218,8 @@ class ALSTM(Model):
         save_path=None,
     ):
 
-        df_train, df_valid, df_test = dataset.prepare(
-            ["train", "valid", "test"],
+        df_train, df_valid = dataset.prepare(
+            ["train", "valid"],
             col_set=["feature", "label"],
             data_key=DataHandlerLP.DK_L,
         )
@@ -231,7 +231,7 @@ class ALSTM(Model):
 
         save_path = get_or_create_path(save_path)
         stop_steps = 0
-        train_loss = 0
+        # train_loss = 0
         best_score = -np.inf
         best_epoch = 0
         evals_result["train"] = []
@@ -241,6 +241,7 @@ class ALSTM(Model):
         self.logger.info("training...")
         self.fitted = True
 
+        best_param = {}
         for step in range(self.n_epochs):
             self.logger.info("Epoch%d:", step)
             self.logger.info("training...")
@@ -248,7 +249,7 @@ class ALSTM(Model):
             self.logger.info("evaluating...")
             train_loss, train_score = self.test_epoch(x_train, y_train)
             val_loss, val_score = self.test_epoch(x_valid, y_valid)
-            self.logger.info("train %.6f, valid %.6f" % (train_score, val_score))
+            self.logger.info("train %.6f, valid %.6f" % (float(train_score), float(val_score)))
             evals_result["train"].append(train_score)
             evals_result["valid"].append(val_score)
 

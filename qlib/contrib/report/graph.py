@@ -177,7 +177,7 @@ class HeatmapGraph(BaseGraph):
                 x=self._df.columns,
                 y=self._df.index,
                 z=self._df.values.tolist(),
-                **self._graph_kwargs
+                **self._graph_kwargs,
             )
         ]
         return _data
@@ -214,7 +214,7 @@ class SubplotsGraph:
         sub_graph_layout: dict = None,
         sub_graph_data: list = None,
         subplots_kwargs: dict = None,
-        **kwargs
+        **kwargs,
     ):
         """
 
@@ -356,7 +356,7 @@ class SubplotsGraph:
                         df=self._df.loc[:, [column_name]],
                         name_dict={column_name: temp_name},
                         graph_kwargs=_graph_kwargs,
-                    )
+                    ),
                 )
             else:
                 raise TypeError()
@@ -365,10 +365,6 @@ class SubplotsGraph:
             col = column_map["col"]
 
             _graph_data = getattr(_graph_obj, "data")
-            # for _item in _graph_data:
-            #     _item.pop('xaxis', None)
-            #     _item.pop('yaxis', None)
-
             for _g_obj in _graph_data:
                 self._figure.add_trace(_g_obj, row=row, col=col)
 
@@ -383,3 +379,98 @@ class SubplotsGraph:
     @property
     def figure(self):
         return self._figure
+
+
+class BoxGraph(BaseGraph):
+    _name = "box"
+
+    def __init__(
+        self, df, data_column: str, category_column: str = None, layout: dict = None, graph_kwargs: dict = dict()
+    ):
+        name_dict = {"y": data_column}
+        mygraph_kwargs = {"boxmean": "sd", "showlegend": False}
+        mygraph_kwargs.update(graph_kwargs)
+        if category_column:
+            df.sort_values(by=category_column, inplace=True)
+            name_dict["x"] = category_column
+        super().__init__(df, layout, mygraph_kwargs, name_dict)
+
+    def _get_data(self) -> list:
+        """
+        :return:
+        """
+        quantiles = self._df.groupby("group")[self._name_dict["y"]].describe(
+            percentiles=[0.001, 0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99, 0.999]
+        )
+
+        _data = [
+            self.get_instance_with_graph_parameters(
+                graph_type=self._graph_type,
+                x=quantiles.index,
+                q1=quantiles["25%"],
+                median=quantiles["50%"],
+                q3=quantiles["75%"],
+                lowerfence=quantiles["0.1%"],
+                upperfence=quantiles["99.9%"],
+                mean=quantiles["mean"],
+                sd=quantiles["std"],
+                **self._graph_kwargs,
+            )
+        ]
+        return _data
+
+
+class TableGraph(BaseGraph):
+    _name = "table"
+
+    def __init__(
+        self,
+        df: pd.DataFrame = None,
+        layout: dict = dict(),
+        graph_kwargs: dict = dict(),
+        name_dict: dict = dict(),
+        **kwargs,
+    ):
+
+        self.header_kwargs = graph_kwargs.pop("header_kwargs", {})
+        self.cell_kwargs = graph_kwargs.pop("cell_kwargs", {})
+        self.header_height = self.header_kwargs.pop("height", 25)
+        self.cell_height = self.cell_kwargs.pop("height", 25)
+        min_top = 60 if "title" in layout else 30
+        suppose_length = len(df) * self.cell_height + self.header_height
+        if suppose_length + min_top + 30 <= 300:
+            v_margin_add = 150 - (suppose_length + min_top) // 2
+            mylayout = {"margin": dict(b=30 + v_margin_add, l=40, r=40, t=min_top + v_margin_add)}
+        else:
+            mylayout = {"height": min(1200, min_top + 30 + suppose_length), "margin": dict(b=30, l=40, r=40, t=min_top)}
+        mylayout.update(layout)
+        super().__init__(df, mylayout, graph_kwargs, name_dict, **kwargs)
+
+    def _get_data(self) -> list:
+        """
+        :return:
+        """
+        index_names = (
+            list(self._df.index.name)
+            if isinstance(self._df.index.name, (tuple, list))
+            else [str(self._df.index.name) if bool(self._df.index.name) else ""]
+        )
+
+        _data = [
+            self.get_instance_with_graph_parameters(
+                graph_type=self._graph_type,
+                header=dict(
+                    height=self.header_height,
+                    values=[f"<b>{x}</b>" for x in (index_names + self._df.columns.tolist())],
+                    **self.header_kwargs,
+                ),
+                cells=dict(
+                    height=self.cell_height,
+                    values=[self._df.index.get_level_values(l).tolist() for l in range(len(index_names))]
+                    + [self._df[col].tolist() for col in self._df.columns],
+                    **self.cell_kwargs,
+                ),
+                **self._graph_kwargs,
+            )
+        ]
+        return _data

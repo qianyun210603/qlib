@@ -188,7 +188,7 @@ def backtest_daily(
     benchmark: str
         the benchmark for reporting.
     account : Union[float, int, Position]
-        information for describing how to creating the account
+        information for describing how to create the account
 
         For `float` or `int`:
 
@@ -221,7 +221,7 @@ def backtest_daily(
         backtest report
     positions_normal: pd.DataFrame
         backtest positions
-
+    trades:
     """
     freq = "day"
     if executor is None:
@@ -241,7 +241,7 @@ def backtest_daily(
     if exchange_kwargs is not None:
         _exchange_kwargs.update(exchange_kwargs)
 
-    portfolio_metric_dict, indicator_dict = backtest_func(
+    portfolio_metric_dict, indicator_dict, trades = backtest_func(
         start_time=start_time,
         end_time=end_time,
         strategy=strategy,
@@ -255,7 +255,7 @@ def backtest_daily(
 
     report_normal, positions_normal = portfolio_metric_dict.get(analysis_freq)
 
-    return report_normal, positions_normal
+    return report_normal, positions_normal, trades
 
 
 def long_short_backtest(
@@ -285,7 +285,7 @@ def long_short_backtest(
     :param min_cost:    min transaction cost.
     :param subscribe_fields: subscribe fields.
     :param extract_codes:  bool.
-                       will we pass the codes extracted from the pred to the exchange.
+                       will we pass the codes extracted from the pred to the exchange?
                        NOTE: This will be faster with offline qlib.
     :return:            The result of backtest, it is represented by a dict.
                         { "long": long_returns(excess),
@@ -343,7 +343,7 @@ def long_short_backtest(
         all_profit = []
 
         for stock in long_stocks:
-            if not trade_exchange.is_stock_tradable(stock_id=stock, trade_date=date):
+            if not trade_exchange.is_stock_tradable(stock_id=stock, start_time=date, end_time=date):
                 continue
             profit = trade_exchange.get_quote_info(stock_id=stock, start_time=date, end_time=date, field=profit_str)
             if np.isnan(profit):
@@ -352,7 +352,7 @@ def long_short_backtest(
                 long_profit.append(profit)
 
         for stock in short_stocks:
-            if not trade_exchange.is_stock_tradable(stock_id=stock, trade_date=date):
+            if not trade_exchange.is_stock_tradable(stock_id=stock, start_time=date, end_time=date):
                 continue
             profit = trade_exchange.get_quote_info(stock_id=stock, start_time=date, end_time=date, field=profit_str)
             if np.isnan(profit):
@@ -361,8 +361,8 @@ def long_short_backtest(
                 short_profit.append(profit * -1)
 
         for stock in list(score.loc(axis=0)[pdate, :].index.get_level_values(level=0)):
-            # exclude the suspend stock
-            if trade_exchange.check_stock_suspended(stock_id=stock, trade_date=date):
+            # exclude the suspended stock
+            if trade_exchange.check_stock_suspended(stock_id=stock, start_time=date, end_time=date):
                 continue
             profit = trade_exchange.get_quote_info(stock_id=stock, start_time=date, end_time=date, field=profit_str)
             if np.isnan(profit):
@@ -393,7 +393,9 @@ def t_run():
         "n_drop": 5,
         "signal": pred,
     }
-    report_df, positions = backtest_daily(start_time="2017-01-01", end_time="2020-08-01", strategy=strategy_config)
+    report_df, positions, trades = backtest_daily(
+        start_time="2017-01-01", end_time="2020-08-01", strategy=strategy_config
+    )
     print(report_df.head())
     print(positions.keys())
     print(positions[list(positions.keys())[0]])

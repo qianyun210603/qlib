@@ -9,7 +9,7 @@ To calculate the feature value f_t at a specific observe time t,  data with form
 For example, the average earning of last 4 quarters (period_time) on 20190719 (observe_time)
 
 The calculation of both <period_time, feature> and <observe_time, feature> data rely on expression engine. It consists of 2 phases.
-1) calculation <period_time, feature> at each observation time t and it will collasped into a point (just like a normal feature)
+1) calculation <period_time, feature> at each observation time t, and it will collasped into a point (just like a normal feature)
 2) concatenate all th collasped data, we will get data with format <observe_time, feature>.
 Qlib will use the operator `P` to perform the collapse.
 """
@@ -21,8 +21,8 @@ from .data import Cal
 
 
 class P(ElemOperator):
-    def _load_internal(self, instrument, start_index, end_index, freq):
-
+    def _load_internal(self, instrument, start_index, end_index, *args):
+        freq = args[0]
         _calendar = Cal.calendar(freq=freq)
         resample_data = np.empty(end_index - start_index + 1, dtype="float32")
 

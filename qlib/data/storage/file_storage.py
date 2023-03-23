@@ -110,6 +110,10 @@ class FileCalendarStorage(FileStorageMixin, CalendarStorage):
 
         if not self.uri.exists():
             self._write_calendar(values=[])
+        # <<<<<<< HEAD
+        #         with self.uri.open("rb") as fp:
+        #             return [str(x) for x in np.loadtxt(fp, str, skiprows=skip_rows, max_rows=n_rows, encoding="utf-8", delimiter=',')]
+        # =======
 
         with self.uri.open("r") as fp:
             res = []

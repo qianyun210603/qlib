@@ -19,7 +19,7 @@ def get_level_index(df: pd.DataFrame, level=Union[str, int]) -> int:
     ----------
     df : pd.DataFrame
         data
-    level : Union[str, int]
+    level : str | int
         index level
 
     Returns

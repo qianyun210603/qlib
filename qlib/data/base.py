@@ -8,6 +8,7 @@ from __future__ import print_function
 import abc
 import pandas as pd
 from ..log import get_module_logger
+from ..config import C
 
 
 class Expression(abc.ABC):
@@ -20,14 +21,33 @@ class Expression(abc.ABC):
     - feature
     - time:  it  could be observation time or period time.
 
-        - period time is designed for Point-in-time database.  For example, the period time maybe 2014Q4, its value can observed for multiple times(different value may be observed at different time due to amendment).
+        - period time is designed for Point-in-time database.  For example, the period time maybe 2014Q4, its value can observe for multiple times(different value may be observed at different time due to amendment).
     """
+
+    def __init__(self):
+        self.__cs_dependant_level = -1
+
+    @property
+    def require_cs_info(self):
+        return False
+
+    def get_direct_dependents(self) -> list:
+        return list()
+
+    @property
+    def adjust_status(self):
+        return 0
 
     def __str__(self):
         return type(self).__name__
 
     def __repr__(self):
         return str(self)
+
+    def __neg__(self):
+        from .ops import Neg
+
+        return Neg(self)
 
     def __gt__(self, other):
         from .ops import Gt  # pylint: disable=C0415
@@ -165,7 +185,7 @@ class Expression(abc.ABC):
             feature end  index  [in calendar].
 
         *args may contain following information:
-        1) if it is used in basic expression engine data, it contains following arguments
+        1) if it is used in basic expression engine data, it contains following arguments:
             freq: str
                 feature frequency.
 
@@ -186,13 +206,18 @@ class Expression(abc.ABC):
         # cache
         cache_key = str(self), instrument, start_index, end_index, *args
         if cache_key in H["f"]:
+            # get_module_logger('data').info(f'cache hit in f for {str(cache_key)}')
             return H["f"][cache_key]
+        if H.has_shared_cache() and cache_key in H["fs"]:
+            # get_module_logger('data').info(f'cache hit in fs for {str(cache_key)}')
+            return H["fs"][cache_key]
         if start_index is not None and end_index is not None and start_index > end_index:
             raise ValueError("Invalid index range: {} {}".format(start_index, end_index))
         try:
+            # get_module_logger('data').info(f're-calculate for {str(cache_key)}')
             series = self._load_internal(instrument, start_index, end_index, *args)
         except Exception as e:
-            get_module_logger("data").debug(
+            get_module_logger("data").error(
                 f"Loading data error: instrument={instrument}, expression={str(self)}, "
                 f"start_index={start_index}, end_index={end_index}, args={args}. "
                 f"error info: {str(e)}"
@@ -214,7 +239,7 @@ class Expression(abc.ABC):
         the features in specific range at first.  However, situations like
         Ref(Ref($close, -1), 1) can not be handled rightly.
 
-        So this will only used for detecting the length of historical data needed.
+        So this will only be used for detecting the length of historical data needed.
         """
         # TODO: forward operator like Ref($close, -1) is not supported yet.
         raise NotImplementedError("This function must be implemented in your newly defined feature")
@@ -250,8 +275,14 @@ class Feature(Expression):
     def __str__(self):
         return "$" + self._name
 
-    def _load_internal(self, instrument, start_index, end_index, freq):
+    @property
+    def adjust_status(self):
+        fields_need_adjust = C.get("fields_need_adjust", {})
+        return fields_need_adjust.get(str(self), 0)
+
+    def _load_internal(self, instrument, start_index, end_index, *args):
         # load
+        freq = args[0]
         from .data import FeatureD  # pylint: disable=C0415
 
         return FeatureD.feature(instrument, str(self), start_index, end_index, freq)
@@ -267,15 +298,37 @@ class PFeature(Feature):
     def __str__(self):
         return "$$" + self._name
 
-    def _load_internal(self, instrument, start_index, end_index, cur_time, period=None):
+    @property
+    def adjust_status(self):
+        fields_need_adjust = C.get("fields_need_adjust", {})
+        return fields_need_adjust.get(str(self), 0)
+
+    def _load_internal(self, instrument, start_index, end_index, *args):
+        cur_time = args[0]
+        period = args[1] if len(args) > 1 else None
         from .data import PITD  # pylint: disable=C0415
 
         return PITD.period_feature(instrument, str(self), start_index, end_index, cur_time, period)
 
 
-class ExpressionOps(Expression):
+class ExpressionOps(Expression, abc.ABC):
     """Operator Expression
 
     This kind of feature will use operator for feature
     construction on the fly.
     """
+
+    def set_population(self, population):
+        if hasattr(self, "population") and self.population is None:
+            self.population = population
+
+        for _, member_var in vars(self).items():
+            if isinstance(member_var, ExpressionOps):
+                member_var.set_population(population)
+
+    def get_direct_dependents(self) -> list:
+        deps = list()
+        for v in self.__dict__.values():
+            if isinstance(v, Expression):
+                deps.append(v)
+        return deps

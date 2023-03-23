@@ -77,6 +77,23 @@ class Model(BaseModel):
         """
         raise NotImplementedError()
 
+    def predict_with_details(self, dataset: Dataset, segment: Union[Text, slice] = "test") -> object:
+        """give prediction given Dataset, with detail information
+
+        Parameters
+        ----------
+        dataset : Dataset
+            dataset will generate the processed dataset from model training.
+
+        segment : Text or slice
+            dataset will use this segment to prepare data. (default=test)
+
+        Returns
+        -------
+        Prediction results with certain type such as `pandas.Series`.
+        """
+        return None, None
+
 
 class ModelFT(Model):
     """Model (F)ine(t)unable"""

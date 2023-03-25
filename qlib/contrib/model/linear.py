@@ -3,7 +3,7 @@
 
 import numpy as np
 import pandas as pd
-from typing import Text, Union
+from typing import Text, Union, cast
 from qlib.data.dataset.weight import Reweighter
 from scipy.optimize import nnls
 from sklearn.linear_model import LinearRegression, Ridge, Lasso
@@ -49,6 +49,8 @@ class LinearModel(Model):
         self.fit_intercept = fit_intercept
 
         self.coef_ = None
+        self.intercept_ = 0.0
+        self.factor_names_ = None
 
     def fit(self, dataset: DatasetH, reweighter: Reweighter = None):
         df_train = dataset.prepare("train", col_set=["feature", "label"], data_key=DataHandlerLP.DK_L)
@@ -60,6 +62,7 @@ class LinearModel(Model):
         else:
             w = None
         X, y = df_train["feature"].values, np.squeeze(df_train["label"].values)
+        self.factor_names_ = df_train["feature"].columns
 
         if self.estimator in [self.OLS, self.RIDGE, self.LASSO]:
             self._fit(X, y, w)
@@ -69,6 +72,14 @@ class LinearModel(Model):
             raise ValueError(f"unknown estimator `{self.estimator}`")
 
         return self
+
+    @property
+    def coef(self):
+        return pd.Series(self.coef_, index=self.factor_names_)
+
+    @property
+    def intercept(self):
+        return self.intercept_
 
     def _fit(self, X, y, w):
         if self.estimator == self.OLS:
@@ -98,4 +109,15 @@ class LinearModel(Model):
         if self.coef_ is None:
             raise ValueError("model is not fitted yet!")
         x_test = dataset.prepare(segment, col_set="feature", data_key=DataHandlerLP.DK_I)
+        x_test = x_test[self.factor_names_]
         return pd.Series(x_test.values @ self.coef_ + self.intercept_, index=x_test.index)
+
+    def predict_with_details(self, dataset: DatasetH, segment: Union[Text, slice] = "test"):
+        if self.coef_ is None:
+            raise ValueError("model is not fitted yet!")
+        x_test = dataset.prepare(segment, col_set="feature", data_key=DataHandlerLP.DK_I)
+        x_test = x_test[self.factor_names_]
+        factor_contribution_df = pd.DataFrame(
+            x_test.values * self.coef_, index=x_test.index, columns=self.factor_names_
+        )
+        return factor_contribution_df.sum(axis=1) + self.intercept_, factor_contribution_df

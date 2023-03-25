@@ -2,6 +2,7 @@
 # Licensed under the MIT License.
 import matplotlib.pyplot as plt
 import pandas as pd
+import base64
 
 
 def sub_fig_generator(sub_fs=(3, 3), col_n=10, row_n=1, wspace=None, hspace=None, sharex=False, sharey=False):
@@ -44,6 +45,11 @@ def sub_fig_generator(sub_fs=(3, 3), col_n=10, row_n=1, wspace=None, hspace=None
                 res = res.item()
             yield res
         plt.show()
+
+
+def convert_fig_to_base64_str(fig, width=None, height=None, filetype="png"):
+    img = fig.to_image(filetype, width=width, height=height)
+    return f"data:image/{filetype};base64," + base64.b64encode(img).decode("utf8")
 
 
 def guess_plotly_rangebreaks(dt_index: pd.DatetimeIndex):

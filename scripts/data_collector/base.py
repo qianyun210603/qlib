@@ -46,7 +46,7 @@ class BaseCollector(abc.ABC):
 
         Parameters
         ----------
-        save_dir: str
+        save_dir: [str, Path]
             instrument save dir
         max_workers: int
             workers, default 1; Concurrent number, default is 1; when collecting data, it is recommended that max_workers be set to 1
@@ -61,12 +61,23 @@ class BaseCollector(abc.ABC):
         end: str
             end datetime, default None
         check_data_length: int
-            check data length, if not None and greater than 0, each symbol will be considered complete if its data length is greater than or equal to this value, otherwise it will be fetched again, the maximum number of fetches being (max_collector_count). By default None.
+            check data length, if not None and greater than 0, each symbol will be considered complete if its data length is greater than or equal to this value, otherwise it will be fetched again, the maximum number of fetches being (max_collector_count). By default, None.
         limit_nums: int
             using for debug, by default None
         """
         self.save_dir = Path(save_dir).expanduser().resolve()
-        self.save_dir.mkdir(parents=True, exist_ok=True)
+        if self.save_dir.exists():
+            old_file_list = list(self.save_dir.glob("*.csv"))
+            if bool(old_file_list):
+                logger.info("Cleaning up instrument save dir (previous period download etc)...")
+                for p in tqdm(old_file_list):
+                    try:
+                        p.unlink(missing_ok=True)
+                    except OSError:
+                        logger.error(f"Failed to clear {p.name}")
+                        continue
+        else:
+            self.save_dir.mkdir(parents=True, exist_ok=True)
 
         self.delay = delay
         self.max_workers = max_workers
@@ -83,7 +94,7 @@ class BaseCollector(abc.ABC):
         if limit_nums is not None:
             try:
                 self.instrument_list = self.instrument_list[: int(limit_nums)]
-            except Exception as e:
+            except Exception:
                 logger.warning(f"Cannot use limit_nums={limit_nums}, the parameter will be ignored")
 
     def normalize_start_datetime(self, start_datetime: [str, pd.Timestamp] = None):
@@ -278,6 +289,18 @@ class Normalize:
         self._source_dir = Path(source_dir).expanduser()
         self._target_dir = Path(target_dir).expanduser()
         self._target_dir.mkdir(parents=True, exist_ok=True)
+        if self._target_dir.exists():
+            old_file_list = list(self._target_dir.glob("*.csv"))
+            if bool(old_file_list):
+                logger.info("Cleaning up normalize target dir (previous)...")
+                for p in tqdm(old_file_list):
+                    try:
+                        p.unlink(missing_ok=True)
+                    except OSError:
+                        logger.error(f"Failed to clear {p.name}")
+                        continue
+        else:
+            self._target_dir.mkdir(parents=True, exist_ok=True)
         self._date_field_name = date_field_name
         self._symbol_field_name = symbol_field_name
         self._end_date = kwargs.get("end_date", None)
@@ -312,7 +335,6 @@ class Normalize:
 
     def normalize(self):
         logger.info("normalize data......")
-
         with ProcessPoolExecutor(max_workers=self._max_workers) as worker:
             file_list = list(self._source_dir.glob("*.csv"))
             with tqdm(total=len(file_list)) as p_bar:
@@ -345,7 +367,6 @@ class BaseRun(abc.ABC):
         self.normalize_dir = Path(normalize_dir).expanduser().resolve()
         self.normalize_dir.mkdir(parents=True, exist_ok=True)
 
-        self._cur_module = importlib.import_module("collector")
         self.max_workers = max_workers
         self.interval = interval
 
@@ -364,15 +385,18 @@ class BaseRun(abc.ABC):
     def default_base_dir(self) -> [Path, str]:
         raise NotImplementedError("rewrite default_base_dir")
 
+    @property
+    def _cur_module(self):
+        return importlib.import_module("collector")
+
     def download_data(
         self,
         max_collector_count=2,
         delay=0,
         start=None,
         end=None,
-        check_data_length: int = None,
+        check_data_length: int = 0,
         limit_nums=None,
-        **kwargs,
     ):
         """download data from Internet
 
@@ -387,7 +411,7 @@ class BaseRun(abc.ABC):
         end: str
             end datetime, default ``pd.Timestamp(datetime.datetime.now() + pd.Timedelta(days=1))``
         check_data_length: int
-            check data length, if not None and greater than 0, each symbol will be considered complete if its data length is greater than or equal to this value, otherwise it will be fetched again, the maximum number of fetches being (max_collector_count). By default None.
+            check data length, if not None and greater than 0, each symbol will be considered complete if its data length is greater than or equal to this value, otherwise it will be fetched again, the maximum number of fetches being (max_collector_count). By default, None.
         limit_nums: int
             using for debug, by default None
 
@@ -410,7 +434,6 @@ class BaseRun(abc.ABC):
             interval=self.interval,
             check_data_length=check_data_length,
             limit_nums=limit_nums,
-            **kwargs,
         ).collector_data()
 
     def normalize_data(self, date_field_name: str = "date", symbol_field_name: str = "symbol", **kwargs):

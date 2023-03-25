@@ -22,8 +22,10 @@ import hashlib
 import datetime
 import requests
 import importlib
+import importlib.util
 import contextlib
 import collections
+import collections.abc
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -64,26 +66,30 @@ def read_bin(file_path: Union[str, Path], start_index, end_index):
     return series
 
 
-def get_period_list(first: int, last: int, quarterly: bool) -> List[int]:
+def get_period_list(periods, pit_mode: str) -> List[int]:
     """
     This method will be used in PIT database.
-    It return all the possible values between `first` and `end`  (first and end is included)
+    It returns all the possible values between `first` and `end`  (first and end is included)
 
     Parameters
     ----------
-    quarterly : bool
-        will it return quarterly index or yearly index.
+    periods : series of periods
+    pit_mode : {'a', 'q', 'm', 'u'}
+        frequency
 
     Returns
     -------
     List[int]
         the possible index between [first, last]
     """
-
-    if not quarterly:
+    if pit_mode == 'i':
+        return periods
+    last = periods.max()  # return the latest quarter
+    first = periods.min()
+    if pit_mode == 'a':
         assert all(1900 <= x <= 2099 for x in (first, last)), "invalid arguments"
         return list(range(first, last + 1))
-    else:
+    elif pit_mode == 'q':
         assert all(190000 <= x <= 209904 for x in (first, last)), "invalid arguments"
         res = []
         for year in range(first // 100, last // 100 + 1):
@@ -92,30 +98,46 @@ def get_period_list(first: int, last: int, quarterly: bool) -> List[int]:
                 if first <= period <= last:
                     res.append(year * 100 + q)
         return res
+    elif pit_mode == "m":
+        assert all(190000 <= x <= 209912 for x in (first, last)), "invalid arguments"
+        res = []
+        for year in range(first // 100, last // 100 + 1):
+            for m in range(1, 13):
+                period = year * 100 + m
+                if first <= period <= last:
+                    res.append(year * 100 + m)
+        return res
+    raise ValueError(f"pit mode '{pit_mode}' not supported!")
+
+def get_period_offset(first_year: int, period: int, pit_mode: str):
+    if pit_mode == 'q':
+        return (period // 100 - first_year) * 4 + period % 100 - 1
+    if pit_mode == 'a':
+        return period - first_year
+    if pit_mode == 'm':
+        return (period // 100 - first_year) * 12 + period % 100 - 1
+    return 0
 
 
-def get_period_offset(first_year, period, quarterly):
-    if quarterly:
-        offset = (period // 100 - first_year) * 4 + period % 100 - 1
-    else:
-        offset = period - first_year
-    return offset
-
-
-def read_period_data(index_path, data_path, period, cur_date_int: int, quarterly, last_period_index: int = None):
+def read_period_data(index_path, data_path, period, cur_date_int: int, pit_mode: str, last_period_index: int = None):
     """
     At `cur_date`(e.g. 20190102), read the information at `period`(e.g. 201803).
     Only the updating info before cur_date or at cur_date will be used.
 
     Parameters
     ----------
+    index_path:
+    data_path
     period: int
         date period represented by interger, e.g. 201901 corresponds to the first quarter in 2019
     cur_date_int: int
         date which represented by interger, e.g. 20190102
+    pit_mode: str
+        num quarter instead of num of year
     last_period_index: int
-        it is a optional parameter; it is designed to avoid repeatedly access the .index data of PIT database when
-        sequentially observing the data (Because the latest index of a specific period of data certainly appear in after the one in last observation).
+        it is an optional parameter; it is designed to avoid repeatedly access the .index data of PIT database when
+        sequentially observing the data (Because the latest index of a specific period of data certainly appear in
+        after the one in last observation).
 
     Returns
     -------
@@ -141,7 +163,7 @@ def read_period_data(index_path, data_path, period, cur_date_int: int, quarterly
         with open(index_path, "rb") as fi:
             (first_year,) = struct.unpack(PERIOD_DTYPE, fi.read(struct.calcsize(PERIOD_DTYPE)))
             all_periods = np.fromfile(fi, dtype=INDEX_DTYPE)
-        offset = get_period_offset(first_year, period, quarterly)
+        offset = get_period_offset(first_year, period, pit_mode)
         _next = all_periods[offset]
     else:
         _next = last_period_index
@@ -229,10 +251,10 @@ def requests_with_retry(url, retry=5, **kwargs):
 
 #################### Parse ####################
 def parse_config(config):
-    # Check whether need parse, all object except str do not need to be parsed
+    # Check whether parsing needed, all object except str do not need to be parsed
     if not isinstance(config, str):
         return config
-    # Check whether config is file
+    # Check whether config is a file
     if os.path.exists(config):
         with open(config, "r") as f:
             return yaml.safe_load(f)
@@ -342,7 +364,7 @@ def get_callable_kwargs(config: InstConf, default_module: Union[str, ModuleType]
     default_module : Python module or str
         It should be a python module to load the class type
         This function will load class from the config['module_path'] first.
-        If config['module_path'] doesn't exists, it will load the class from default_module.
+        If config['module_path'] doesn't exist, it will load the class from default_module.
 
     Returns
     -------
@@ -388,7 +410,7 @@ def init_instance_by_config(
     config: InstConf,
     default_module=None,
     accept_types: Union[type, Tuple[type]] = (),
-    try_kwargs: Dict = {},
+    try_kwargs: Dict = None,
     **kwargs,
 ) -> Any:
     """
@@ -400,13 +422,13 @@ def init_instance_by_config(
 
     default_module : Python module
         Optional. It should be a python module.
-        NOTE: the "module_path" will be override by `module` arguments
+        NOTE: the "module_path" will be overriden by `module` arguments
 
         This function will load class from the config['module_path'] first.
-        If config['module_path'] doesn't exists, it will load the class from default_module.
+        If config['module_path'] doesn't exist, it will load the class from default_module.
 
     accept_types: Union[type, Tuple[type]]
-        Optional. If the config is a instance of specific type, return the config directly.
+        Optional. If the config is an instance of specific type, return the config directly.
         This will be passed into the second parameter of isinstance.
 
     try_kwargs: Dict
@@ -436,6 +458,7 @@ def init_instance_by_config(
     klass, cls_kwargs = get_callable_kwargs(config, default_module=default_module)
 
     try:
+        try_kwargs = {} if try_kwargs is None else try_kwargs
         return klass(**cls_kwargs, **try_kwargs, **kwargs)
     except (TypeError,):
         # TypeError for handling errors like
@@ -576,7 +599,8 @@ def get_date_by_shift(trading_date, shift, future=False, clip_shift=True, freq="
     clip_shift: bool
     align : Optional[str]
         When align is None, this function will raise ValueError if `trading_date` is not a trading date
-        when align is "left"/"right", it will try to align to left/right nearest trading date before shifting when `trading_date` is not a trading date
+        when align is "left"/"right", it will try to align to left/right nearest trading date before shifting when
+        `trading_date` is not a trading date
 
     """
     from qlib.data import D  # pylint: disable=C0415
@@ -781,6 +805,7 @@ def lazy_sort_index(df: pd.DataFrame, axis=0) -> pd.DataFrame:
     Parameters
     ----------
     df : pd.DataFrame
+    axis: index->0, columns->1
 
     Returns
     -------
@@ -837,7 +862,7 @@ def get_item_from_obj(config: dict, name_path: str) -> object:
     """
     Follow the name_path to get values from config
     For example:
-    If we follow the example in in the Parameters section,
+    If we follow the example in the Parameters section,
         Timestamp('2008-01-02 00:00:00') will be returned
 
     Parameters
@@ -885,7 +910,8 @@ def fill_placeholder(config: dict, config_extend: dict):
     The item of dict must be single item(int, str, etc), dict and list. Tuples are not supported.
     There are two type of variables:
     - user-defined variables :
-        e.g. when config_extend is `{"<MODEL>": model, "<DATASET>": dataset}`, "<MODEL>" and "<DATASET>" in `config` will be replaced with `model` `dataset`
+        e.g. when config_extend is `{"<MODEL>": model, "<DATASET>": dataset}`, "<MODEL>" and "<DATASET>" in `config`
+         will be replaced with `model` `dataset`
     - variables extracted from `config` :
         e.g. the variables like "<dataset.kwargs.segments.train.0>" will be replaced with the values from `config`
 
@@ -916,6 +942,8 @@ def fill_placeholder(config: dict, config_extend: dict):
             item_keys = range(len(now_item))
         elif isinstance(now_item, dict):
             item_keys = now_item.keys()
+        else:
+            item_keys = ()
         for key in item_keys:
             if isinstance(now_item[key], (list, dict)):
                 item_queue.append(now_item[key])
@@ -944,6 +972,8 @@ def auto_filter_kwargs(func: Callable, warning=True) -> Callable:
     ----------
     func : Callable
         The original function
+    warning: bool
+        warning if keys are ignored
 
     Returns
     -------
@@ -990,6 +1020,7 @@ def register_wrapper(wrapper, cls_or_obj, module_path=None):
 
     :param wrapper: A wrapper.
     :param cls_or_obj:  A class or class name or object instance.
+    :param module_path:  class path. e.g. "qlib.data"
     """
     if isinstance(cls_or_obj, str):
         module = get_module_by_module_path(module_path)
@@ -998,7 +1029,7 @@ def register_wrapper(wrapper, cls_or_obj, module_path=None):
     wrapper.register(obj)
 
 
-def load_dataset(path_or_obj, index_col=[0, 1]):
+def load_dataset(path_or_obj, index_col=(0, 1)):
     """load dataset from multiple file formats"""
     if isinstance(path_or_obj, pd.DataFrame):
         return path_or_obj
@@ -1055,4 +1086,8 @@ __all__ = [
     "get_tmp_file_with_buffer",
     "set_log_with_config",
     "init_instance_by_config",
+    "get_callable_kwargs",
+    "code_to_fname",
+    "get_pre_trading_date",
+    "load_dataset",
 ]

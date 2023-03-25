@@ -10,7 +10,9 @@ import numpy as np
 import pandas as pd
 
 from ..data.data import D
+from ..data.inst_info import ConvertInstrumentInfo
 from .decision import Order
+from ..log import get_module_logger
 
 
 class BasePosition:
@@ -20,6 +22,7 @@ class BasePosition:
     """
 
     def __init__(self, *args: Any, cash: float = 0.0, **kwargs: Any) -> None:
+        self.init_cash = cash
         self._settle_type = self.ST_NO
         self.position: dict = {}
 
@@ -260,11 +263,10 @@ class Position(BasePosition):
             if there is no price key in the dict of stocks, it will be filled by _fill_stock_value.
             by default {}.
         """
-        super().__init__()
+        super().__init__(cash=cash)
 
         # NOTE: The position dict must be copied!!!
-        # Otherwise the initial value
-        self.init_cash = cash
+        # Otherwise, the initial value
         self.position = position_dict.copy()
         for stock, value in self.position.items():
             if isinstance(value, int):
@@ -278,7 +280,7 @@ class Position(BasePosition):
             pass
 
     def fill_stock_value(self, start_time: Union[str, pd.Timestamp], freq: str, last_days: int = 30) -> None:
-        """fill the stock value by the close price of latest last_days from qlib.
+        """fill the stock value by the close price of the latest last_days from qlib.
 
         Parameters
         ----------
@@ -343,6 +345,7 @@ class Position(BasePosition):
         trade_amount = trade_val / trade_price
         if stock_id not in self.position:
             self._init_stock(stock_id=stock_id, amount=trade_amount, price=trade_price)
+            self.position[stock_id]["cost_basis"] = trade_val + cost
         else:
             # exist, add amount
             self.position[stock_id]["amount"] += trade_amount
@@ -363,6 +366,7 @@ class Position(BasePosition):
             else:
                 # decrease the amount of stock
                 self.position[stock_id]["amount"] -= trade_amount
+                self.position[stock_id]["cost_basis"] -= trade_amount - cost
                 # check if to delete
                 if self.position[stock_id]["amount"] < -1e-5:
                     raise ValueError(
@@ -387,8 +391,24 @@ class Position(BasePosition):
     def check_stock(self, stock_id: str) -> bool:
         return stock_id in self.position
 
+    def update_event(self, stock_id, inst_info, trade_start_time, trade_end_time):
+        if isinstance(inst_info, ConvertInstrumentInfo):
+            if not inst_info.cash_flow_schedule[trade_start_time:trade_end_time].empty:
+                unit_cash = inst_info.cash_flow_schedule[trade_start_time:trade_end_time].sum()
+                new_cash = self.position[stock_id]["amount"] * unit_cash
+                self.position["cash"] += new_cash
+                get_module_logger("position").debug(
+                    f"coupon or coupon+repayment for {stock_id}: "
+                    f"{unit_cash}*{self.position[stock_id]['amount']}={new_cash} "
+                    f"@ {trade_start_time.isoformat()} - {trade_end_time.isoformat()}"
+                )
+
+            if trade_end_time >= min(inst_info.maturity_date, inst_info.call_date):
+                self._del_stock(stock_id)
+                get_module_logger("position").debug(f"{stock_id}: matured/called @ {trade_start_time.isoformat()}")
+
     def update_order(self, order: Order, trade_val: float, cost: float, trade_price: float) -> None:
-        # handle order, order is a order class, defined in exchange.py
+        # handle order, order is an order class, defined in exchange.py
         if order.direction == Order.BUY:
             # BUY
             self._buy_stock(order.stock_id, trade_val, cost, trade_price)

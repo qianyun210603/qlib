@@ -459,6 +459,9 @@ class DataHandlerLP(DataHandler):
 
         self.process_type = process_type
         self.drop_raw = drop_raw
+        self._data = None
+        self._infer = None
+        self._learn = None
         super().__init__(instruments, start_time, end_time, data_loader, **kwargs)
 
     def get_all_processors(self):

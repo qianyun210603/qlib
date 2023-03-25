@@ -5,6 +5,7 @@
 from __future__ import division
 from __future__ import print_function
 
+import multiprocessing
 import re
 import abc
 import copy
@@ -12,6 +13,7 @@ import queue
 import bisect
 import numpy as np
 import pandas as pd
+from collections import deque
 from typing import List, Union, Optional
 
 # For supporting multiprocessing in outer code, joblib is used
@@ -37,7 +39,7 @@ from ..utils import (
     get_period_list,
 )
 from ..utils.paral import ParallelExt
-from .ops import Operators  # pylint: disable=W0611  # noqa: F401
+from .ops import Operators, ExpressionOps  # pylint: disable=W0611  # noqa: F401
 
 
 class ProviderBackendMixin:
@@ -45,6 +47,9 @@ class ProviderBackendMixin:
     This helper class tries to make the provider based on storage backend more convenient
     It is not necessary to inherent this class if that provider don't rely on the backend storage
     """
+
+    def __init__(self, backend={}):
+        self.backend = backend
 
     def get_default_backend(self):
         backend = {}
@@ -175,7 +180,8 @@ class CalendarProvider(abc.ABC):
             H["c"][flag] = _calendar, _calendar_index
         return H["c"][flag]
 
-    def _uri(self, start_time, end_time, freq, future=False):
+    @staticmethod
+    def _uri(start_time, end_time, freq, future=False):
         """Get the uri of calendar generation task."""
         return hash_args(start_time, end_time, freq, future)
 
@@ -285,7 +291,8 @@ class InstrumentProvider(abc.ABC):
         """
         raise NotImplementedError("Subclass of InstrumentProvider must implement `list_instruments` method")
 
-    def _uri(self, instruments, start_time=None, end_time=None, freq="day", as_list=False):
+    @staticmethod
+    def _uri(instruments, start_time=None, end_time=None, freq="day", as_list=False):
         return hash_args(instruments, start_time, end_time, freq, as_list)
 
     # instruments type
@@ -387,6 +394,7 @@ class ExpressionProvider(abc.ABC):
     """
 
     def __init__(self):
+        self.population = []
         self.expression_instance_cache = {}
 
     def get_expression_instance(self, field):
@@ -401,13 +409,13 @@ class ExpressionProvider(abc.ABC):
                 "ERROR: field [%s] contains invalid operator/variable [%s]" % (str(field), str(e).split()[1])
             )
             raise
-        except SyntaxError:
+        except (SyntaxError, TypeError):
             get_module_logger("data").exception("ERROR: field [%s] contains invalid syntax" % str(field))
             raise
         return expression
 
     @abc.abstractmethod
-    def expression(self, instrument, field, start_time=None, end_time=None, freq="day") -> pd.Series:
+    def expression(self, instrument, field, start_time=None, end_time=None, freq="day", **kwargs) -> pd.Series:
         """Get Expression data.
 
         The responsibility of `expression`
@@ -450,7 +458,7 @@ class DatasetProvider(abc.ABC):
     """
 
     @abc.abstractmethod
-    def dataset(self, instruments, fields, start_time=None, end_time=None, freq="day", inst_processors=[]):
+    def dataset(self, instruments, fields, start_time=None, end_time=None, freq="day", inst_processors=[], **kwargs):
         """Get dataset data.
 
         Parameters
@@ -475,8 +483,8 @@ class DatasetProvider(abc.ABC):
         """
         raise NotImplementedError("Subclass of DatasetProvider must implement `Dataset` method")
 
+    @staticmethod
     def _uri(
-        self,
         instruments,
         fields,
         start_time=None,
@@ -484,7 +492,7 @@ class DatasetProvider(abc.ABC):
         freq="day",
         disk_cache=1,
         inst_processors=[],
-        **kwargs,
+        **_,
     ):
         """Get task uri, used when generating rabbitmq task in qlib_server
 
@@ -546,31 +554,125 @@ class DatasetProvider(abc.ABC):
         return [ExpressionD.get_expression_instance(f) for f in fields]
 
     @staticmethod
+    def _analysis_features(column_names):
+        normalize_column_names = normalize_cache_fields(column_names)
+
+        def _parse_col_name(field):
+            feature_instance = ExpressionD.get_expression_instance(field)
+            return field, feature_instance, feature_instance.get_extended_window_size(), 0
+
+        feature_queue = deque(_parse_col_name(field) for field in reversed(normalize_column_names))
+        all_sub_features = {}
+        cs_level_summary = {}
+        feature_extended_windows = {}
+        while len(feature_queue) > 0:
+            this_feature_name, this_feature, extended_window, this_cs_level = feature_queue.pop()
+            cs_level_summary.setdefault(this_cs_level, {})[this_feature_name] = this_feature
+            all_sub_features.setdefault(str(this_feature), set()).add(this_cs_level)
+            feature_extended_windows.setdefault(str(this_feature), set()).add(extended_window)
+            next_cs_level = this_cs_level + 1 if this_feature.require_cs_info else this_cs_level
+            for next_feature in this_feature.get_direct_dependents():
+                feature_queue.append((str(next_feature), next_feature, extended_window, next_cs_level))
+
+        level_shared_features = {}
+        for feature, levels in all_sub_features.items():
+            if len(levels) > 1:
+                level_shared_features.setdefault(max(levels), set()).add(feature)
+
+        return normalize_column_names, cs_level_summary, level_shared_features, feature_extended_windows
+
+    @staticmethod
     def dataset_processor(instruments_d, column_names, start_time, end_time, freq, inst_processors=[]):
         """
         Load and process the data, return the data set.
         - default using multi-kernel method.
 
         """
-        normalize_column_names = normalize_cache_fields(column_names)
+        (
+            normalize_column_names,
+            cs_level_summary,
+            level_shared_features,
+            feature_extended_windows,
+        ) = DatasetProvider._analysis_features(column_names)
         # One process for one task, so that the memory will be freed quicker.
         workers = max(min(C.get_kernels(freq), len(instruments_d)), 1)
 
-        # create iterator
         if isinstance(instruments_d, dict):
+            if not (start_time is None and end_time is None):
+                for inst in list(instruments_d):
+                    spans = [s for s in instruments_d[inst] if start_time <= s[1] and s[0] <= end_time]
+                    if not spans:
+                        del instruments_d[inst]
+                    else:
+                        instruments_d[inst] = spans
             it = instruments_d.items()
         else:
-            it = zip(instruments_d, [None] * len(instruments_d))
+            it = list(zip(instruments_d, [None] * len(instruments_d)))
 
-        inst_l = []
-        task_l = []
-        for inst, spans in it:
-            inst_l.append(inst)
-            task_l.append(
-                delayed(DatasetProvider.inst_calculator)(
-                    inst, start_time, end_time, freq, normalize_column_names, spans, C, inst_processors
+        cs_levels = sorted(cs_level_summary, reverse=True)
+        shared_data_cache = {}
+        ts_cache = {}
+        cs_cache = {}
+        shared_mgr = None
+        if len(cs_levels) > 1 and C["joblib_backend"] == "multiprocessing":
+            shared_mgr = multiprocessing.Manager()
+            shared_data_cache = shared_mgr.dict()
+
+            for dep_level in cs_levels[:-1]:
+                expressions = cs_level_summary[dep_level]
+                level_shared_feature = level_shared_features.get(dep_level, set())
+                cache_task_l = [
+                    delayed(DatasetProvider.load_cache)(
+                        inst,
+                        start_time=start_time,
+                        end_time=end_time,
+                        freq=freq,
+                        expressions=expressions,
+                        feature_extended_windows=feature_extended_windows,
+                        g_config=C,
+                        population=instruments_d,
+                        cache_data={**ts_cache.get(inst, {}), **cs_cache},
+                        shared_cache=shared_data_cache,
+                    )
+                    for inst, _ in it
+                ]
+                cs_cache.clear()
+                shared_data_cache.clear()
+                result = ParallelExt(n_jobs=workers, backend=C.joblib_backend, maxtasksperchild=C.maxtasksperchild)(
+                    cache_task_l
                 )
+                for inst_cache in result:
+                    for k, v in inst_cache.items():
+                        if k[0] in expressions:
+                            if C["joblib_backend"] == "multiprocessing":
+                                shared_data_cache[k] = v
+                            else:
+                                cs_cache[k] = v
+                        elif k[0] in level_shared_feature:
+                            ts_cache.setdefault(k[1], {})[k[0]] = v
+
+        inst_l, task_l = zip(
+            *list(
+                (
+                    inst,
+                    delayed(DatasetProvider.inst_calculator)(
+                        inst,
+                        start_time=start_time,
+                        end_time=end_time,
+                        freq=freq,
+                        column_names=normalize_column_names,
+                        expressions=cs_level_summary[0],
+                        spans=spans,
+                        g_config=C,
+                        inst_processors=inst_processors,
+                        population=instruments_d,
+                        cache_data={**ts_cache.get(inst, {}), **cs_cache},
+                        shared_cache=shared_data_cache,
+                    ),
+                )
+                for inst, spans in it
             )
+        )
 
         data = dict(
             zip(
@@ -578,6 +680,10 @@ class DatasetProvider(abc.ABC):
                 ParallelExt(n_jobs=workers, backend=C.joblib_backend, maxtasksperchild=C.maxtasksperchild)(task_l),
             )
         )
+
+        if len(cs_levels) > 1 and C["joblib_backend"] == "multiprocessing":
+            del shared_data_cache
+            shared_mgr.shutdown()
 
         new_data = dict()
         for inst in sorted(data.keys()):
@@ -594,11 +700,56 @@ class DatasetProvider(abc.ABC):
                 columns=column_names,
                 dtype=np.float32,
             )
-
         return data
 
     @staticmethod
-    def inst_calculator(inst, start_time, end_time, freq, column_names, spans=None, g_config=None, inst_processors=[]):
+    def load_cache(
+        inst,
+        start_time,
+        end_time,
+        freq,
+        expressions,
+        feature_extended_windows={},
+        g_config=None,
+        population={},
+        shared_features=set(),
+        cache_data=None,
+        shared_cache=None,
+    ):
+
+        C.register_from_C(g_config)
+        if cache_data is not None:
+            H["f"].update(cache_data)
+        if shared_cache is not None:
+            H.create_shared_cache(shared_cache)
+        for field, expression in expressions.items():
+            #  The client does not have expression provider, the data will be loaded from cache using static method.
+            for ext_windows in feature_extended_windows.get(str(expression), {(0, 0)}):
+                ExpressionD.expression(
+                    inst, expression, start_time, end_time, freq, instrument_d=population, extend_windows=ext_windows
+                )
+
+        obj = {}
+        for k, v in H["f"].internal_data.items():
+            if k[1] in inst and (k[0] in expressions or k[0] in shared_features):
+                obj[k] = v
+        return obj
+
+    @staticmethod
+    def inst_calculator(
+        inst,
+        start_time,
+        end_time,
+        freq,
+        column_names,
+        expressions,
+        spans=None,
+        g_config=None,
+        inst_processors=(),
+        population={},
+        cache_data=None,
+        shared_cache=None,
+    ):
         """
         Calculate the expressions for **one** instrument, return a df result.
         If the expression has been calculated before, load from cache.
@@ -609,11 +760,18 @@ class DatasetProvider(abc.ABC):
         # FIXME: Windows OS or MacOS using spawn: https://docs.python.org/3.8/library/multiprocessing.html?highlight=spawn#contexts-and-start-methods
         # NOTE: This place is compatible with windows, windows multi-process is spawn
         C.register_from_C(g_config)
+        if cache_data is not None:
+            H["f"].update(cache_data)
+
+        if shared_cache is not None:
+            H.create_shared_cache(shared_cache)
 
         obj = dict()
         for field in column_names:
             #  The client does not have expression provider, the data will be loaded from cache using static method.
-            obj[field] = ExpressionD.expression(inst, field, start_time, end_time, freq)
+            obj[field] = ExpressionD.expression(
+                inst, expressions[field], start_time, end_time, freq, instrument_d=population
+            )
 
         data = pd.DataFrame(obj)
         if not data.empty and not np.issubdtype(data.index.dtype, np.dtype("M")):
@@ -643,8 +801,9 @@ class LocalCalendarProvider(CalendarProvider, ProviderBackendMixin):
 
     def __init__(self, remote=False, backend={}):
         super().__init__()
+        ProviderBackendMixin.__init__(self, backend)
         self.remote = remote
-        self.backend = backend
+        # self.backend = backend
 
     def load_calendar(self, freq, future):
         """Load original calendar timestamp from file.
@@ -675,7 +834,6 @@ class LocalCalendarProvider(CalendarProvider, ProviderBackendMixin):
 
         return [pd.Timestamp(x) for x in backend_obj]
 
-
 class LocalInstrumentProvider(InstrumentProvider, ProviderBackendMixin):
     """Local instrument data provider class
 
@@ -684,7 +842,8 @@ class LocalInstrumentProvider(InstrumentProvider, ProviderBackendMixin):
 
     def __init__(self, backend={}) -> None:
         super().__init__()
-        self.backend = backend
+        ProviderBackendMixin.__init__(self, backend)
+        # self.backend = backend
 
     def _load_instruments(self, market, freq):
         return self.backend_obj(market=market, freq=freq).data
@@ -733,7 +892,8 @@ class LocalFeatureProvider(FeatureProvider, ProviderBackendMixin):
     def __init__(self, remote=False, backend={}):
         super().__init__()
         self.remote = remote
-        self.backend = backend
+        ProviderBackendMixin.__init__(self, backend)
+        # self.backend = backend
 
     def feature(self, instrument, field, start_index, end_index, freq):
         # validate
@@ -777,13 +937,19 @@ class LocalPITProvider(PITProvider):
         #         self.period_index[field] = {}
         # For acceleration}
 
-        if not field.endswith("_q") and not field.endswith("_a"):
-            raise ValueError("period field must ends with '_q' or '_a'")
-        quarterly = field.endswith("_q")
+        _, pit_mode = field.rsplit('_', 1)
+        if pit_mode not in {"a", "q", "m", "i"}:
+            raise ValueError(
+            """period field must have with following suffix:
+            _a: annually data
+            _q: quarterly data
+            _m: monthly data
+            _i: indefinite frequency data
+            """)
         index_path = C.dpm.get_data_uri() / "financial" / instrument.lower() / f"{field}.index"
         data_path = C.dpm.get_data_uri() / "financial" / instrument.lower() / f"{field}.data"
         if not (index_path.exists() and data_path.exists()):
-            raise FileNotFoundError("No file is found. Raise exception and  ")
+            raise FileNotFoundError("No file is found.")
         # NOTE: The most significant performance loss is here.
         # Does the acceleration that makes the program complicated really matters?
         # - It makes parameters of the interface complicate
@@ -797,14 +963,13 @@ class LocalPITProvider(PITProvider):
         cur_time_int = int(cur_time.year) * 10000 + int(cur_time.month) * 100 + int(cur_time.day)
         loc = np.searchsorted(data["date"], cur_time_int, side="right")
         if loc <= 0:
-            return pd.Series()
-        last_period = data["period"][:loc].max()  # return the latest quarter
-        first_period = data["period"][:loc].min()
-        period_list = get_period_list(first_period, last_period, quarterly)
+            return pd.Series(dtype=C.pit_record_type["value"])
+
+        period_list = get_period_list(data["period"][:loc], pit_mode)
         if period is not None:
             # NOTE: `period` has higher priority than `start_index` & `end_index`
             if period not in period_list:
-                return pd.Series()
+                return pd.Series(dtype=C.pit_record_type["value"])
             else:
                 period_list = [period]
         else:
@@ -813,7 +978,7 @@ class LocalPITProvider(PITProvider):
         for i, p in enumerate(period_list):
             # last_period_index = self.period_index[field].get(period)  # For acceleration
             value[i], now_period_index = read_period_data(
-                index_path, data_path, p, cur_time_int, quarterly  # , last_period_index  # For acceleration
+                index_path, data_path, p, cur_time_int, pit_mode  # , last_period_index  # For acceleration
             )
             # self.period_index[field].update({period: now_period_index})  # For acceleration
         # NOTE: the index is period_list; So it may result in unexpected values(e.g. nan)
@@ -841,8 +1006,12 @@ class LocalExpressionProvider(ExpressionProvider):
         super().__init__()
         self.time2idx = time2idx
 
-    def expression(self, instrument, field, start_time=None, end_time=None, freq="day"):
-        expression = self.get_expression_instance(field)
+    def expression(
+        self, instrument, expression, start_time=None, end_time=None, freq="day", instrument_d={}, extend_windows=(0, 0)
+    ):
+        if isinstance(expression, str):
+            expression = self.get_expression_instance(expression)
+
         start_time = time_to_slc_point(start_time)
         end_time = time_to_slc_point(end_time)
 
@@ -852,23 +1021,34 @@ class LocalExpressionProvider(ExpressionProvider):
         if self.time2idx:
             _, _, start_index, end_index = Cal.locate_index(start_time, end_time, freq=freq, future=False)
             lft_etd, rght_etd = expression.get_extended_window_size()
+            lft_etd = max(extend_windows[0], lft_etd)
+            rght_etd = max(extend_windows[1], rght_etd)
             query_start, query_end = max(0, start_index - lft_etd), end_index + rght_etd
+            if isinstance(instrument_d, dict):
+                instrument_d = {
+                    inst: [Cal.locate_index(span[0], span[1], freq=freq, future=False)[2:] for span in spans]
+                    for inst, spans in instrument_d.items()
+                }
         else:
             start_index, end_index = query_start, query_end = start_time, end_time
+
+        if isinstance(expression, ExpressionOps):
+            expression.set_population(instrument_d)
 
         try:
             series = expression.load(instrument, query_start, query_end, freq)
         except Exception as e:
             get_module_logger("data").debug(
                 f"Loading expression error: "
-                f"instrument={instrument}, field=({field}), start_time={start_time}, end_time={end_time}, freq={freq}. "
+                f"instrument={instrument}, expression=({str(expression)}), start_time={start_time}, end_time={end_time},"
+                f" freq={freq}. "
                 f"error info: {str(e)}"
             )
             raise
         # Ensure that each column type is consistent
         # FIXME:
         # 1) The stock data is currently float. If there is other types of data, this part needs to be re-implemented.
-        # 2) The the precision should be configurable
+        # 2) The precision should be configurable
         try:
             series = series.astype(np.float32)
         except ValueError:
@@ -893,22 +1073,14 @@ class LocalDatasetProvider(DatasetProvider):
         align_time : bool
             Will we align the time to calendar
             the frequency is flexible in some dataset and can't be aligned.
-            For the data with fixed frequency with a shared calendar, the align data to the calendar will provides following benefits
+            For the data with fixed frequency with a shared calendar, the aligned data to the calendar will provide following benefits
 
             - Align queries to the same parameters, so the cache can be shared.
         """
         super().__init__()
         self.align_time = align_time
 
-    def dataset(
-        self,
-        instruments,
-        fields,
-        start_time=None,
-        end_time=None,
-        freq="day",
-        inst_processors=[],
-    ):
+    def dataset(self, instruments, fields, start_time=None, end_time=None, freq="day", inst_processors=[], **_):
         instruments_d = self.get_instruments_d(instruments, freq)
         column_names = self.get_column_names(fields)
         if self.align_time:
@@ -1045,10 +1217,11 @@ class ClientDatasetProvider(DatasetProvider):
         start_time=None,
         end_time=None,
         freq="day",
-        disk_cache=0,
         return_uri=False,
         inst_processors=[],
+        **kwargs,
     ):
+        disk_cache = kwargs.pop("disk_cache", 0)
         if Inst.get_inst_type(instruments) == Inst.DICT:
             get_module_logger("data").warning(
                 "Getting features from a dict of instruments is not recommended because the features will not be "
@@ -1147,10 +1320,12 @@ class BaseProvider:
     To keep compatible with old qlib provider.
     """
 
-    def calendar(self, start_time=None, end_time=None, freq="day", future=False):
+    @staticmethod
+    def calendar(start_time=None, end_time=None, freq="day", future=False):
         return Cal.calendar(start_time, end_time, freq, future=future)
 
-    def instruments(self, market="all", filter_pipe=None, start_time=None, end_time=None):
+    @staticmethod
+    def instruments(market="all", filter_pipe=None, start_time=None, end_time=None):
         if start_time is not None or end_time is not None:
             get_module_logger("Provider").warning(
                 "The instruments corresponds to a stock pool. "
@@ -1158,11 +1333,12 @@ class BaseProvider:
             )
         return InstrumentProvider.instruments(market, filter_pipe)
 
-    def list_instruments(self, instruments, start_time=None, end_time=None, freq="day", as_list=False):
+    @staticmethod
+    def list_instruments(instruments, start_time=None, end_time=None, freq="day", as_list=False):
         return Inst.list_instruments(instruments, start_time, end_time, freq, as_list)
 
+    @staticmethod
     def features(
-        self,
         instruments,
         fields,
         start_time=None,
@@ -1174,6 +1350,12 @@ class BaseProvider:
         """
         Parameters
         ----------
+        inst_processors
+        freq
+        end_time
+        start_time
+        fields
+        instruments
         disk_cache : int
             whether to skip(0)/use(1)/replace(2) disk_cache
 
@@ -1186,14 +1368,15 @@ class BaseProvider:
         fields = list(fields)  # In case of tuple.
         try:
             return DatasetD.dataset(
-                instruments, fields, start_time, end_time, freq, disk_cache, inst_processors=inst_processors
+                instruments, fields, start_time, end_time, freq, inst_processors=inst_processors, disk_cache=disk_cache
             )
         except TypeError:
             return DatasetD.dataset(instruments, fields, start_time, end_time, freq, inst_processors=inst_processors)
 
 
 class LocalProvider(BaseProvider):
-    def _uri(self, type, **kwargs):
+    @staticmethod
+    def _uri(type_, **kwargs):
         """_uri
         The server hope to get the uri of the request. The uri will be decided
         by the dataprovider. For ex, different cache layer has different uri.
@@ -1201,14 +1384,15 @@ class LocalProvider(BaseProvider):
         :param type: The type of resource for the uri
         :param **kwargs:
         """
-        if type == "calendar":
+        if type_ == "calendar":
             return Cal._uri(**kwargs)
-        elif type == "instrument":
+        elif type_ == "instrument":
             return Inst._uri(**kwargs)
-        elif type == "feature":
+        elif type_ == "feature":
             return DatasetD._uri(**kwargs)
 
-    def features_uri(self, instruments, fields, start_time, end_time, freq, disk_cache=1):
+    @staticmethod
+    def features_uri(instruments, fields, start_time, end_time, freq, disk_cache=1):
         """features_uri
 
         Return the uri of the generated cache of features/dataset

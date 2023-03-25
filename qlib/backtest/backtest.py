@@ -28,7 +28,7 @@ def backtest_loop(
     end_time: Union[pd.Timestamp, str],
     trade_strategy: BaseStrategy,
     trade_executor: BaseExecutor,
-) -> Tuple[PORT_METRIC, INDICATOR_METRIC]:
+) -> Tuple[PORT_METRIC, INDICATOR_METRIC, Dict]:
     """backtest function for the interaction of the outermost strategy and executor in the nested decision execution
 
     please refer to the docs of `collect_data_loop`
@@ -39,6 +39,7 @@ def backtest_loop(
         it records the trading portfolio_metrics information
     indicator_dict: INDICATOR_METRIC
         it computes the trading indicator
+    trades: dict
     """
     return_value: dict = {}
     for _decision in collect_data_loop(start_time, end_time, trade_strategy, trade_executor, return_value):
@@ -46,8 +47,8 @@ def backtest_loop(
 
     portfolio_dict = cast(PORT_METRIC, return_value.get("portfolio_dict"))
     indicator_dict = cast(INDICATOR_METRIC, return_value.get("indicator_dict"))
-
-    return portfolio_dict, indicator_dict
+    trades = return_value.get("execute_result")
+    return portfolio_dict, indicator_dict, trades
 
 
 def collect_data_loop(
@@ -87,7 +88,9 @@ def collect_data_loop(
         _execute_result = None
         while not trade_executor.finished():
             _trade_decision: BaseTradeDecision = trade_strategy.generate_trade_decision(_execute_result)
-            _execute_result = yield from trade_executor.collect_data(_trade_decision, level=0)
+            _execute_result = yield from trade_executor.collect_data(
+                _trade_decision, return_value=return_value, level=0
+            )
             trade_strategy.post_exe_step(_execute_result)
             bar.update(1)
         trade_strategy.post_upper_level_exe_step()

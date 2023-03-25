@@ -1,9 +1,9 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
-from functools import partial
 
 import pandas as pd
 import numpy as np
+from functools import partial
 
 import plotly.graph_objs as go
 
@@ -12,79 +12,85 @@ import matplotlib.pyplot as plt
 
 from scipy import stats
 
-from typing import Sequence
-from qlib.typehint import Literal
-
-from ..graph import ScatterGraph, SubplotsGraph, BarGraph, HeatmapGraph
+from ..graph import ScatterGraph, SubplotsGraph, BarGraph, HeatmapGraph, BoxGraph, TableGraph
 from ..utils import guess_plotly_rangebreaks
 
 
 def _group_return(pred_label: pd.DataFrame = None, reverse: bool = False, N: int = 5, **kwargs) -> tuple:
-    r"""
+    """
 
-    :param pred_label: index is **pd.MultiIndex**, index name is **[instrument, datetime]**; columns names is **[score, label]**.
-           It is usually same as the label of model training(e.g. "Ref($close, -2)/Ref($close, -1) - 1").
-    :param reverse: if `True`, `pred['score'] *= -1`.
-    :param N: group number, default 5.
-    :param \*\*kwargs: contains some parameters to control plot style in plotly. Currently, supports
-       - `rangebreaks`: https://plotly.com/python/time-series/#Hiding-Weekends-and-Holidays
-       - `benchmark`: pd.Series contains benchmark return, used in `group1-benchmark` cum-return plot. if not provided or `average`,
-                       use average of all instrument in population as benchmark.
+    :param pred_label:
+    :param reverse:
+    :param N:
     :return:
     """
     if reverse:
         pred_label["score"] *= -1
 
-    pred_label = pred_label.sort_values("score", ascending=False)
-
-    # Group1 ~ GroupN only consider the dropna values
+    # Groups only consider the dropna values
     pred_label_drop = pred_label.dropna(subset=["score"])
 
-    class _Stratifier:
-        def __init__(self, N):
-            self.N = N
-            self.cuts = {}
+    # assign group
+    def get_rank_cut(total, num_groups):
+        q, r = divmod(total, num_groups)
+        num_in_each_group = np.ones(num_groups, dtype=int) * q
+        if r > 0:
+            wing, r = divmod(r, 2)
+            num_in_each_group[:wing] += 1
+            num_in_each_group[-wing:] += 1
+            num_in_each_group[num_groups // 2] += r
+        return np.cumsum(num_in_each_group)
 
-        def __call__(self, x, i):
-            l = len(x)
-            if l not in self.cuts:
-                per_group_num, remain = divmod(l, N)
-                per_group_nums = np.ones(N, dtype=int) * per_group_num
-                if remain > 0:
-                    per_group_nums[: remain - remain // 2] += 1
-                    per_group_nums[-(remain // 2) :] += 1
-                self.cuts[l] = np.insert(np.cumsum(per_group_nums), 0, 0)
-            return x[self.cuts[l][i] : self.cuts[l][i + 1]].mean()
+    ref_reverse = kwargs.get("ref_reverse", False)
 
-    _stratifier = _Stratifier(N)
+    g_datetime = pred_label_drop.groupby(level="datetime")
+    if "ref" in pred_label.columns:
 
-    # Group
-    t_df = pd.DataFrame(
-        {
-            "Group%d"
-            % (i + 1): pred_label_drop.groupby(level="datetime")["label"].apply(
-                partial(_stratifier, i=i)
-                # lambda x: x[len(x) // N * i : len(x) // N * (i + 1)].mean()  -> this is incorrect, doesn't exhaust all population if len(x) % N != 0.
+        def _groupify(pred_label_day: pd.DataFrame, num_groups: int, reverse=False, ref_reverse=False):
+            pred_label_day = pred_label_day.droplevel(level="datetime").sort_values(
+                by=["score", "ref"], ascending=(reverse, ref_reverse)
             )
-            for i in range(N)
-        }
-    )
-    t_df.index = pd.to_datetime(t_df.index)
+            group_rank_bound = get_rank_cut(len(pred_label_day), num_groups)
+            return pd.Series(
+                [f"Group{gidx+1}" for gidx in np.searchsorted(group_rank_bound, np.arange(1, len(pred_label_day) + 1))],
+                index=pred_label_day.index,
+            )
 
-    # Long-Short
-    t_df["long-short"] = t_df["Group1"] - t_df["Group%d" % N]
+        pred_label_drop["group"] = g_datetime.apply(
+            partial(_groupify, num_groups=N, reverse=reverse, ref_reverse=ref_reverse)
+        )
+
+    else:
+
+        def _groupify(pred_label_day: pd.DataFrame, num_groups: int, reverse=False):
+            ranks = (
+                ((2 * float(reverse) - 1) * pred_label_day.droplevel(level="datetime")["score"])
+                .rank(method="dense")
+                .astype(int)
+            )
+            group_rank_bound = get_rank_cut(ranks.max(), num_groups)
+            return pd.Series(
+                [f"Group{gidx+1}" for gidx in np.searchsorted(group_rank_bound, ranks)], index=pred_label_day.index
+            )
+
+        pred_label_drop["group"] = g_datetime.apply(partial(_groupify, num_groups=N, reverse=reverse))
+
+    t_df = pred_label_drop.pivot_table(values="label", index="datetime", columns="group", aggfunc=np.mean)
 
     # Long-benchmark
-    benchmark = kwargs.get("benchmark", "average")
-    if isinstance(benchmark, str) and benchmark == "average":
+    benchmark = kwargs.get("benchmark", "mean")
+    if isinstance(benchmark, str):
         benchmark_name = benchmark
-        benchmark = pred_label.groupby(level="datetime")["label"].mean()
+        benchmark = getattr(g_datetime["label"], benchmark_name)()
     elif isinstance(benchmark, pd.Series):
         benchmark_name = benchmark.name if bool(benchmark.name) else "benchmark"
         benchmark = benchmark.reindex(t_df.index)
     else:
         raise TypeError(f"Invalid benchmark type: {type(benchmark)}")
     t_df[f"long-{benchmark_name}"] = t_df["Group1"] - benchmark
+
+    # Long-Short
+    t_df["long-short"] = t_df["Group1"] - t_df["Group%d" % N]
 
     t_df = t_df.dropna(how="all")  # for days which does not contain label
     # Cumulative Return By Group
@@ -96,20 +102,73 @@ def _group_return(pred_label: pd.DataFrame = None, reverse: bool = False, N: int
         ),
     ).figure
 
+    # statistics of returns of groups and long-short and long-bench
+    def _cal_statics(return_series):
+        n = len(return_series)
+        mean_ret = return_series.mean()
+        std_ret = return_series.std()
+        cum_ret = return_series.sort_index().cumsum()
+        max_dd = (cum_ret.cummax() - cum_ret).max()
+        years = (cum_ret.index[-1] - cum_ret.index[0]) / pd.Timedelta(days=365)
+
+        return pd.Series(
+            [
+                mean_ret,
+                std_ret,
+                return_series.skew(),
+                return_series.kurt(),
+                cum_ret[-1] / years,
+                mean_ret / std_ret * np.sqrt(n),
+                max_dd,
+                cum_ret[-1] / max_dd,
+            ],
+            index=[
+                "periodwise return mean",
+                "return std",
+                "return skew",
+                "return kurt",
+                "annual return",
+                "Sharp ratio",
+                "max drawdown",
+                "Calmar ratio",
+            ],
+        )
+
+    stats_df = t_df.agg(_cal_statics)
+    stats_table_figure = TableGraph(
+        stats_df,
+        graph_kwargs=dict(
+            cell_kwargs=dict(
+                format=[[None] * 8]
+                + [[".4%", ".4%", ".4f", ".4f", ".4%", ".4f", ".4%", ".4f"]] * (len(stats_df.columns))
+            )
+        ),
+        layout=dict(title="Group Return Summary"),
+    ).figure
+
     t_df = t_df.loc[:, ["long-short", f"long-{benchmark_name}"]]
-    _bin_size = float(((t_df.max() - t_df.min()) / 20).min())
+
+    pred_label_drop["excess"] = pred_label_drop["label"] - benchmark
+    box_figure = BoxGraph(pred_label_drop, data_column="excess", category_column="group").figure
+
+    _bin_size = float((t_df.std() / 5).min())
     group_hist_figure = SubplotsGraph(
         t_df,
-        kind_map=dict(kind="DistplotGraph", kwargs=dict(bin_size=_bin_size)),
+        # kind_map=dict(kind="DistplotGraph", kwargs=dict(bin_size=_bin_size)),
+        sub_graph_data=[
+            (box_figure, dict(row=1, col=3)),
+            ("long-short", dict(row=1, col=1, kind="DistplotGraph", graph_kwargs=dict(bin_size=_bin_size))),
+            (f"long-{benchmark_name}", dict(row=1, col=2, kind="DistplotGraph", graph_kwargs=dict(bin_size=_bin_size))),
+        ],
         subplots_kwargs=dict(
             rows=1,
-            cols=2,
+            cols=3,
             print_grid=False,
-            subplot_titles=["long-short", f"long-{benchmark_name}"],
+            subplot_titles=["long-short", f"long-{benchmark_name}", "group box plot"],
         ),
     ).figure
 
-    return group_scatter_figure, group_hist_figure
+    return group_scatter_figure, stats_table_figure, group_hist_figure
 
 
 def _plot_qq(data: pd.Series = None, dist=stats.norm) -> go.Figure:
@@ -150,36 +209,22 @@ def _plot_qq(data: pd.Series = None, dist=stats.norm) -> go.Figure:
     return fig
 
 
-def _pred_ic(
-    pred_label: pd.DataFrame = None, methods: Sequence[Literal["IC", "Rank IC"]] = ("IC", "Rank IC"), **kwargs
-) -> tuple:
+def _pred_ic(pred_label: pd.DataFrame = None, rank: bool = False, **kwargs) -> tuple:
     """
 
-    :param pred_label: pd.DataFrame
-    must contain one column of realized return with name `label` and one column of predicted score names `score`.
-    :param methods: Sequence[Literal["IC", "Rank IC"]]
-    IC series to plot.
-    IC is sectional pearson correlation between label and score
-    Rank IC is the spearman correlation between label and score
-    For the Monthly IC, IC histogram, IC Q-Q plot.  Only the first type of IC will be plotted.
+    :param pred_label:
+    :param rank:
     :return:
     """
-    _methods_mapping = {"IC": "pearson", "Rank IC": "spearman"}
+    if rank:
+        ic = pred_label.groupby(level="datetime").apply(
+            lambda x: x["label"].rank(pct=True).corr(x["score"].rank(pct=True))
+        )
+    else:
+        ic = pred_label.groupby(level="datetime").apply(lambda x: x["label"].corr(x["score"]))
 
-    def _corr_series(x, method):
-        return x["label"].corr(x["score"], method=method)
-
-    ic_df = pd.concat(
-        [
-            pred_label.groupby(level="datetime").apply(partial(_corr_series, method=_methods_mapping[m])).rename(m)
-            for m in methods
-        ],
-        axis=1,
-    )
-    _ic = ic_df.iloc(axis=1)[0]
-
-    _index = _ic.index.get_level_values(0).astype("str").str.replace("-", "").str.slice(0, 6)
-    _monthly_ic = _ic.groupby(_index).mean()
+    _index = ic.index.get_level_values(0).astype("str").str.replace("-", "").str.slice(0, 6)
+    _monthly_ic = ic.groupby(_index).mean()
     _monthly_ic.index = pd.MultiIndex.from_arrays(
         [_monthly_ic.index.str.slice(0, 4), _monthly_ic.index.str.slice(4, 6)],
         names=["year", "month"],
@@ -202,51 +247,67 @@ def _pred_ic(
 
     _monthly_ic = _monthly_ic.reindex(fill_index)
 
-    ic_bar_figure = ic_figure(ic_df, kwargs.get("show_nature_day", False))
-
+    _ic_df = ic.to_frame("ic")
+    ic_bar_figure = ic_figure(_ic_df, kwargs.get("show_nature_day", True))
     _monthly_ic_abs_max = _monthly_ic.abs().max()
     ic_heatmap_figure = HeatmapGraph(
         _monthly_ic.unstack(),
-        layout=dict(title="Monthly IC", xaxis=dict(dtick=1), yaxis=dict(tickformat="04d", dtick=1)),
+        layout=dict(title="Monthly IC", yaxis=dict(tickformat=",d")),
         graph_kwargs=dict(xtype="array", ytype="array", zmin=-_monthly_ic_abs_max, zmax=_monthly_ic_abs_max),
     ).figure
 
+    def _cal_statistic_ic(s):
+        mean = s.mean()
+        std = s.std()
+        skew = s.skew()
+        kurt = s.kurt()
+        t_stat, p_value = stats.ttest_1samp(s, 0)
+        return pd.Series(
+            [mean, std, mean / std, t_stat, p_value, skew, kurt],
+            index=["IC mean", "IC std", "Risk-adjusted IC", "t-stat(IC)", "p-value(IC)", "IC skew", "IC kurtosis"],
+        )
+
+    _stats_ic_df = _ic_df.agg(_cal_statistic_ic).rename(columns={"ic": "stats."})
+    _stats_ic_table_figure = TableGraph(_stats_ic_df, graph_kwargs=dict(cell_kwargs=dict(format=[None, ".4f"]))).figure
+
     dist = stats.norm
-    _qqplot_fig = _plot_qq(_ic, dist)
+    _qqplot_fig = _plot_qq(ic, dist)
 
     if isinstance(dist, stats.norm.__class__):
         dist_name = "Normal"
     else:
         dist_name = "Unknown"
 
-    _ic_df = _ic.to_frame("IC")
     _bin_size = ((_ic_df.max() - _ic_df.min()) / 20).min()
     _sub_graph_data = [
+        (_stats_ic_table_figure, dict(row=1, col=1)),
         (
-            "IC",
+            "ic",
             dict(
                 row=1,
-                col=1,
+                col=2,
                 name="",
                 kind="DistplotGraph",
                 graph_kwargs=dict(bin_size=_bin_size),
             ),
         ),
-        (_qqplot_fig, dict(row=1, col=2)),
+        (_qqplot_fig, dict(row=1, col=3)),
     ]
     ic_hist_figure = SubplotsGraph(
         _ic_df.dropna(),
         kind_map=dict(kind="HistogramGraph", kwargs=dict()),
         subplots_kwargs=dict(
             rows=1,
-            cols=2,
+            cols=3,
             print_grid=False,
-            subplot_titles=["IC", "IC %s Dist. Q-Q" % dist_name],
+            subplot_titles=["IC Stats.", "IC Hist", "IC %s Dist. Q-Q" % dist_name],
+            specs=[[{"type": "table"}, {"type": "scatter"}, {"type": "scatter"}]],
         ),
         sub_graph_data=_sub_graph_data,
         layout=dict(
             yaxis2=dict(title="Observed Quantile"),
             xaxis2=dict(title=f"{dist_name} Distribution Quantile"),
+            height=400,
         ),
     ).figure
 
@@ -258,6 +319,8 @@ def _pred_autocorr(pred_label: pd.DataFrame, lag=1, **kwargs) -> tuple:
     pred["score_last"] = pred.groupby(level="instrument")["score"].shift(lag)
     ac = pred.groupby(level="datetime").apply(lambda x: x["score"].rank(pct=True).corr(x["score_last"].rank(pct=True)))
     _df = ac.to_frame("value")
+    # _df.index = _df.index.strftime("%Y-%m-%d")
+
     ac_figure = ScatterGraph(
         _df,
         layout=dict(
@@ -300,17 +363,18 @@ def _pred_turnover(pred_label: pd.DataFrame, N=5, lag=1, **kwargs) -> tuple:
 
 
 def ic_figure(ic_df: pd.DataFrame, show_nature_day=True, **kwargs) -> go.Figure:
-    r"""IC figure
+    """IC figure
 
     :param ic_df: ic DataFrame
     :param show_nature_day: whether to display the abscissa of non-trading day
-    :param \*\*kwargs: contains some parameters to control plot style in plotly. Currently, supports
+    :param **kwargs: contains some parameters to control plot style in plotly. Currently, supports
        - `rangebreaks`: https://plotly.com/python/time-series/#Hiding-Weekends-and-Holidays
     :return: plotly.graph_objs.Figure
     """
     if show_nature_day:
         date_index = pd.date_range(ic_df.index.min(), ic_df.index.max())
         ic_df = ic_df.reindex(date_index)
+
     ic_bar_figure = BarGraph(
         ic_df,
         layout=dict(
@@ -321,21 +385,21 @@ def ic_figure(ic_df: pd.DataFrame, show_nature_day=True, **kwargs) -> go.Figure:
     return ic_bar_figure
 
 
-def model_performance_graph(
+def factor_performance_graph(
     pred_label: pd.DataFrame,
     lag: int = 1,
     N: int = 5,
     reverse=False,
     rank=False,
-    graph_names: list = ["group_return", "pred_ic", "pred_autocorr"],
+    graph_names: list = ["group_return", "pred_ic", "pred_autocorr", "pred_turnover"],
     show_notebook: bool = True,
-    show_nature_day: bool = False,
+    show_nature_day=True,
     **kwargs,
 ) -> [list, tuple]:
-    r"""Model performance
+    """Factor performance
 
-    :param pred_label: index is **pd.MultiIndex**, index name is **[instrument, datetime]**; columns names is **[score, label]**.
-           It is usually same as the label of model training(e.g. "Ref($close, -2)/Ref($close, -1) - 1").
+    :param pred_label: index is **pd.MultiIndex**, index name is **[instrument, datetime]**; columns names is **[score,
+    label]**. It is usually same as the label of model training(e.g. "Ref($close, -2)/Ref($close, -1) - 1").
 
 
             .. code-block:: python
@@ -355,10 +419,8 @@ def model_performance_graph(
     :param graph_names: graph names; default ['cumulative_return', 'pred_ic', 'pred_autocorr', 'pred_turnover'].
     :param show_notebook: whether to display graphics in notebook, the default is `True`.
     :param show_nature_day: whether to display the abscissa of non-trading day.
-    :param \*\*kwargs: contains some parameters to control plot style in plotly. Currently, supports
+    :param **kwargs: contains some parameters to control plot style in plotly. Currently, supports
        - `rangebreaks`: https://plotly.com/python/time-series/#Hiding-Weekends-and-Holidays
-       - `benchmark`: pd.Series contains benchmark return, used in `group1-benchmark` cum-return plot. if not provided or 'average', use average of all instrument in population as benchmark.
-
     :return: if show_notebook is True, display in notebook; else return `plotly.graph_objs.Figure` list.
     """
     figure_list = []

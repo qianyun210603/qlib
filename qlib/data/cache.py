@@ -5,6 +5,7 @@
 from __future__ import division
 from __future__ import print_function
 
+import multiprocessing
 import os
 import sys
 import stat
@@ -43,7 +44,7 @@ class QlibCacheException(RuntimeError):
 class MemCacheUnit(abc.ABC):
     """Memory Cache Unit."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *_, **kwargs):
         self.size_limit = kwargs.pop("size_limit", 0)
         self._size = 0
         self.od = OrderedDict()
@@ -57,16 +58,18 @@ class MemCacheUnit(abc.ABC):
         self.od.__setitem__(key, value)
 
         # move the key to end,make it latest
-        self.od.move_to_end(key)
+        if isinstance(self.od, OrderedDict):
+            self.od.move_to_end(key)
 
-        if self.limited:
-            # pop the oldest items beyond size limit
-            while self._size > self.size_limit:
-                self.popitem(last=False)
+            if self.limited:
+                # pop the oldest items beyond size limit
+                while self._size > self.size_limit:
+                    self.popitem(last=False)
 
     def __getitem__(self, key):
         v = self.od.__getitem__(key)
-        self.od.move_to_end(key)
+        if isinstance(self.od, OrderedDict):
+            self.od.move_to_end(key)
         return v
 
     def __contains__(self, key):
@@ -112,54 +115,78 @@ class MemCacheUnit(abc.ABC):
 
         self._size += self._get_value_size(value)
 
+    @property
+    def internal_data(self):
+        return self.od
+
+    def update(self, data):
+        self.od.update(data)
+        self._size += sum(self._get_value_size(v) for v in data.values())
+
     @abc.abstractmethod
     def _get_value_size(self, value):
         raise NotImplementedError
 
 
 class MemCacheLengthUnit(MemCacheUnit):
-    def __init__(self, size_limit=0):
-        super().__init__(size_limit=size_limit)
-
     def _get_value_size(self, value):
         return 1
 
 
 class MemCacheSizeofUnit(MemCacheUnit):
-    def __init__(self, size_limit=0):
-        super().__init__(size_limit=size_limit)
-
     def _get_value_size(self, value):
         return sys.getsizeof(value)
+
+
+class SharedMemMeta(type):
+    def __init__(cls, name, bases, dct):
+        super().__init__(name, bases, dct)
+        cls.lock = multiprocessing.RLock()
+
+
+class SharedMemCacheUnit(metaclass=SharedMemMeta):
+
+    def __init__(self, shared_cache_data):
+        self.od = shared_cache_data
+
+    def __setitem__(self, key, value):
+        self.od[key] = value
+
+    def __getitem__(self, key):
+        return self.od[key]
+
+    def __contains__(self, key):
+        return key in self.od
+
+    def __len__(self):
+        return self.od.__len__()
+
+    def keys(self):
+        return self.od.keys()
+
+    def values(self):
+        return self.od.values()
+
+    def items(self):
+        return self.od.items()
+
+    def clear(self):
+        try:
+            self.od.clear()
+        except Exception:
+            pass
 
 
 class MemCache:
     """Memory cache."""
 
-    def __init__(self, mem_cache_size_limit=None, limit_type="length"):
-        """
+    def __init__(self):
 
-        Parameters
-        ----------
-        mem_cache_size_limit:
-            cache max size.
-        limit_type:
-            length or sizeof; length(call fun: len), size(call fun: sys.getsizeof).
-        """
-
-        size_limit = C.mem_cache_size_limit if mem_cache_size_limit is None else mem_cache_size_limit
-        limit_type = C.mem_cache_limit_type if limit_type is None else limit_type
-
-        if limit_type == "length":
-            klass = MemCacheLengthUnit
-        elif limit_type == "sizeof":
-            klass = MemCacheSizeofUnit
-        else:
-            raise ValueError(f"limit_type must be length or sizeof, your limit_type is {limit_type}")
-
-        self.__calendar_mem_cache = klass(size_limit)
-        self.__instrument_mem_cache = klass(size_limit)
-        self.__feature_mem_cache = klass(size_limit)
+        self.initialized = False
+        self.__calendar_mem_cache = None
+        self.__instrument_mem_cache = None
+        self.__feature_mem_cache = None
+        self._feature_share_mem_cache = None
 
     def __getitem__(self, key):
         if key == "c":
@@ -168,13 +195,53 @@ class MemCache:
             return self.__instrument_mem_cache
         elif key == "f":
             return self.__feature_mem_cache
+        elif key == "fs":
+            return self._feature_share_mem_cache
         else:
             raise KeyError("Unknown memcache unit")
 
-    def clear(self):
-        self.__calendar_mem_cache.clear()
-        self.__instrument_mem_cache.clear()
-        self.__feature_mem_cache.clear()
+    def init_kernel(self, size_limit=None, limit_type=None):
+        """
+        Parameters
+        ----------
+        size_limit:
+            cache max size.
+        limit_type:
+            length or sizeof; length(call fun: len), size(call fun: sys.getsizeof).
+        """
+        # get_module_logger('data').info(f"trying to init data cache in {os.getpid()}")
+        if not self.initialized:
+            if size_limit is None:
+                size_limit = C.mem_cache_size_limit
+            if limit_type is None:
+                limit_type = C.mem_cache_limit_type
+
+            if limit_type == "length":
+                klass = MemCacheLengthUnit
+            elif limit_type == "sizeof":
+                klass = MemCacheSizeofUnit
+            else:
+                raise ValueError(f"limit_type must be length or sizeof, your limit_type is {limit_type}")
+            self.__calendar_mem_cache = klass(size_limit=size_limit)
+            self.__instrument_mem_cache = klass(size_limit=size_limit)
+            self.__feature_mem_cache = klass(size_limit=size_limit)
+            self.initialized = True
+
+    def has_shared_cache(self):
+        return self._feature_share_mem_cache is not None
+
+    def create_shared_cache(self, shared_cache_data):
+        self._feature_share_mem_cache = SharedMemCacheUnit(shared_cache_data)
+
+    def destroy_shared_cache(self):
+        del self._feature_share_mem_cache
+
+    def clear(self, key=("c", "i", "f")):
+        if isinstance(key, str):
+            key = (key,)
+        for k in key:
+            if self[k] is not None:
+                self[k].clear()
 
 
 class MemCacheExpire:
@@ -334,15 +401,15 @@ class ExpressionCache(BaseProviderCache):
     .. note:: Override the `_uri` and `_expression` method to create your own expression cache mechanism.
     """
 
-    def expression(self, instrument, field, start_time, end_time, freq):
+    def expression(self, instrument, expression, start_time, end_time, freq):
         """Get expression data.
 
         .. note:: Same interface as `expression` method in expression provider
         """
         try:
-            return self._expression(instrument, field, start_time, end_time, freq)
+            return self._expression(instrument, expression, start_time, end_time, freq)
         except NotImplementedError:
-            return self.provider.expression(instrument, field, start_time, end_time, freq)
+            return self.provider.expression(instrument, expression, start_time, end_time, freq)
 
     def _uri(self, instrument, field, start_time, end_time, freq):
         """Get expression cache file uri.
@@ -359,7 +426,7 @@ class ExpressionCache(BaseProviderCache):
         raise NotImplementedError("Implement this method if you want to use expression cache")
 
     def update(self, cache_uri: Union[str, Path], freq: str = "day"):
-        """Update expression cache to latest calendar.
+        """Update expression cache to the latest calendar.
 
         Override this method to define how to update expression cache corresponding to users' own cache mechanism.
 
@@ -445,7 +512,7 @@ class DatasetCache(BaseProviderCache):
         )
 
     def update(self, cache_uri: Union[str, Path], freq: str = "day"):
-        """Update dataset cache to latest calendar.
+        """Update dataset cache to the latest calendar.
 
         Override this method to define how to update dataset cache corresponding to users' own cache mechanism.
 
@@ -582,9 +649,9 @@ class DiskExpressionCache(ExpressionCache):
         r = np.hstack([df.index[0], expression_data]).astype("<f")
         r.tofile(str(cache_path))
 
-    def update(self, sid, cache_uri, freq: str = "day"):
+    def update(self, cache_uri, freq: str = "day"):
 
-        cp_cache_uri = self.get_cache_dir(freq).joinpath(sid).joinpath(cache_uri)
+        cp_cache_uri = self.get_cache_dir(freq).joinpath(cache_uri)
         meta_path = cp_cache_uri.with_suffix(".meta")
         if not self.check_cache_exists(cp_cache_uri, suffix_list=[".meta"]):
             self.logger.info(f"The cache {cp_cache_uri} has corrupted. It will be removed")
@@ -626,7 +693,7 @@ class DiskExpressionCache(ExpressionCache):
                 lft_etd, rght_etd = expr.get_extended_window_size()
                 # The expression used the future data after rght_etd days.
                 # So the last rght_etd data should be removed.
-                # There are most `ele_n` period of data can be remove
+                # There are most `ele_n` period of data can be removed
                 remove_n = min(rght_etd, ele_n)
                 assert new_calendar[1] == whole_calendar[current_index]
                 data = self.provider.expression(
@@ -881,7 +948,7 @@ class DiskDatasetCache(DatasetCache):
             - Each line contains two element <start_index, end_index> with a timestamp as its index.
             - It indicates the `start_index` (included) and `end_index` (excluded) of the data for `timestamp`
 
-        - meta data: cache/d41366901e25de3ec47297f12e2ba11d.meta
+        - metadata: cache/d41366901e25de3ec47297f12e2ba11d.meta
 
         - data     : cache/d41366901e25de3ec47297f12e2ba11d
 
@@ -945,7 +1012,7 @@ class DiskDatasetCache(DatasetCache):
         im.update(index_data)
 
         # rename the file after the cache has been generated
-        # this doesn't work well on windows, but our server won't use windows
+        # this doesn't work well on Windows, but our server won't use windows
         # temporarily
         cache_path.with_suffix(".data").rename(cache_path)
         # the fields of the cached features are converted to the original fields
@@ -1066,6 +1133,14 @@ class DiskDatasetCache(DatasetCache):
 class SimpleDatasetCache(DatasetCache):
     """Simple dataset cache that can be used locally or on client."""
 
+    def update(self, cache_uri: Union[str, Path], freq: str = "day"):
+        pass
+
+    def _dataset_uri(
+        self, instruments, fields, start_time=None, end_time=None, freq="day", disk_cache=1, inst_processors=[]
+    ):
+        pass
+
     def __init__(self, provider):
         super(SimpleDatasetCache, self).__init__(provider)
         try:
@@ -1119,6 +1194,19 @@ class SimpleDatasetCache(DatasetCache):
 
 class DatasetURICache(DatasetCache):
     """Prepared cache mechanism for server."""
+
+    def update(self, cache_uri: Union[str, Path], freq: str = "day"):
+        pass
+
+    def _dataset_uri(
+        self, instruments, fields, start_time=None, end_time=None, freq="day", disk_cache=1, inst_processors=[]
+    ):
+        pass
+
+    def _dataset(
+        self, instruments, fields, start_time=None, end_time=None, freq="day", disk_cache=1, inst_processors=[]
+    ):
+        pass
 
     def _uri(self, instruments, fields, start_time, end_time, freq, disk_cache=1, inst_processors=[], **kwargs):
         return hash_args(*self.normalize_uri_args(instruments, fields, freq), disk_cache, inst_processors)

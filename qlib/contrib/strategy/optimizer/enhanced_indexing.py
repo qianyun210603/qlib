@@ -1,14 +1,13 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-import numpy as np
+from typing import Any, Dict, List, Optional, Union
+
 import cvxpy as cp
-
-from typing import Union, Optional, Dict, Any, List
-
+import numpy as np
 from qlib.log import get_module_logger
-from .base import BaseOptimizer
 
+from .base import BaseOptimizer
 
 logger = get_module_logger("EnhancedIndexingOptimizer")
 
@@ -166,8 +165,8 @@ class EnhancedIndexingOptimizer(BaseOptimizer):
         # optimize
         # trial 1: use all constraints
         success = False
+        prob = cp.Problem(obj, cons + t_cons)
         try:
-            prob = cp.Problem(obj, cons + t_cons)
             prob.solve(solver=cp.ECOS, warm_start=True, **self.solver_kwargs)
             assert prob.status == "optimal"
             success = True
@@ -177,9 +176,9 @@ class EnhancedIndexingOptimizer(BaseOptimizer):
         # trial 2: remove turnover constraint
         if not success and len(t_cons):
             logger.info("try removing turnover constraint as the last optimization failed")
+            prob = cp.Problem(obj, cons)
             try:
                 w.value = wb
-                prob = cp.Problem(obj, cons)
                 prob.solve(solver=cp.ECOS, warm_start=True, **self.solver_kwargs)
                 assert prob.status in ["optimal", "optimal_inaccurate"]
                 success = True

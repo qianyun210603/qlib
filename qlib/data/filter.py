@@ -359,8 +359,8 @@ class ExpressionDFilter(SeriesDFilter):
     def from_config(config):
         return ExpressionDFilter(
             rule_expression=config["rule_expression"],
-            fstart_time=config["filter_start_time"],
-            fend_time=config["filter_end_time"],
+            fstart_time=config.get("filter_start_time", None),
+            fend_time=config.get("filter_end_time", None),
             keep=config["keep"],
         )
 

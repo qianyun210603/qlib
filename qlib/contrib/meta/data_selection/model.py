@@ -133,7 +133,7 @@ class MetaModelDS(MetaTaskModel):
         """
 
         if not self.fitted:
-            for k in {"lr", "step", "hist_step_n", "clip_method", "clip_weight", "criterion", "max_epoch"}:
+            for k in ["lr", "step", "hist_step_n", "clip_method", "clip_weight", "criterion", "max_epoch"]:
                 R.log_params(**{k: getattr(self, k)})
 
         # FIXME: get test tasks for just checking the performance

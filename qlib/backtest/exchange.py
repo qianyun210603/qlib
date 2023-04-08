@@ -217,10 +217,13 @@ class Exchange:
         if C.dpm.get_uri_type(dpm_uri) == "local":
             instrument_info_path = dpm_uri.joinpath("contract_specs")
             if instrument_info_path.exists():
-                import pickle
+                import pickle  # pylint: disable=import-outside-toplevel
 
                 self.instrument_info.update(
-                    {p.stem.upper(): pickle.load(open(p, "rb")) for p in instrument_info_path.glob("*.pkl")}
+                    {
+                        p.stem.upper(): pickle.load(open(p, "rb"))  # pylint: disable=consider-using-with
+                        for p in instrument_info_path.glob("*.pkl")
+                    }
                 )
 
     def get_quote_from_qlib(self) -> None:
@@ -289,7 +292,7 @@ class Exchange:
     LT_FLT = "float"  # float:  the trading limitation is based on `abs($change) < limit_threshold`
     LT_NONE = "none"  # none:  there is no trading limitation
 
-    def get_instrument_info(self, symbol: str):
+    def get_instrument_info(self, symbol: str) -> Optional[Dict]:
         return self.instrument_info.get(symbol, None)
 
     def _get_limit_type(self) -> str:
@@ -317,16 +320,14 @@ class Exchange:
             self.quote_df["limit_sell"] = suspended
         elif limit_type == self.LT_TP_EXP:
             # set limit
-            limit_threshold = cast(tuple, self.limit_threshold)
+            lb_row, ls_row = cast(tuple, self.limit_threshold)
             # astype bool is necessary, because quote_df is an expression and could be float
-            self.quote_df["limit_buy"] = self.quote_df[limit_threshold[0]].astype("bool") | suspended
-            self.quote_df["limit_sell"] = self.quote_df[limit_threshold[1]].astype("bool") | suspended
+            self.quote_df["limit_buy"] = self.quote_df[lb_row].astype("bool") | suspended
+            self.quote_df["limit_sell"] = self.quote_df[ls_row].astype("bool") | suspended
         elif limit_type == self.LT_FLT:
-            limit_threshold = cast(float, self.limit_threshold)
-            self.quote_df["limit_buy"] = self.quote_df["$change"].ge(limit_threshold) | suspended
-            self.quote_df["limit_sell"] = (
-                self.quote_df["$change"].le(-limit_threshold) | suspended
-            )  # pylint: disable=E1130
+            limit_ratio: float = cast(float, self.limit_threshold)
+            self.quote_df["limit_buy"] = self.quote_df["$change"].ge(limit_ratio) | suspended
+            self.quote_df["limit_sell"] = self.quote_df["$change"].le(-limit_ratio) | suspended  # pylint: disable=E1130
 
     @staticmethod
     def _get_vol_limit(volume_threshold: Union[tuple, dict, None]) -> Tuple[Optional[list], Optional[list], set]:

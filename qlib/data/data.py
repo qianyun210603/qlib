@@ -612,7 +612,7 @@ class DatasetProvider(abc.ABC):
         ts_cache = {}
         cs_cache = {}
         shared_mgr = None
-        if len(cs_levels) > 1 and C["joblib_backend"] == "multiprocessing":
+        if len(cs_levels) > 1 and C["joblib_backend"] == "multiprocessing":  # pylint: disable=R1702
             shared_mgr = multiprocessing.Manager()
             shared_data_cache = shared_mgr.dict()
 

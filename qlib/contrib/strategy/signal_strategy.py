@@ -116,7 +116,7 @@ class BaseTopkStrategy(BaseSignalStrategy):
             return pred_score, list(remain_holding), list(force_sell)
 
         def _days_to_remove(code):
-            if not code in self.instruments:
+            if code not in self.instruments:
                 return -100000
             prev_ed = pd.Timestamp(year=1970, month=1, day=1)
             for st, ed in sorted(self.instruments[code]):
@@ -136,7 +136,7 @@ class BaseTopkStrategy(BaseSignalStrategy):
 
         forbid_buy = np.array(
             [
-                (not code in remain_holding) and (_days_to_remove(code) <= self.forbid_buy_days or _check_delist(code))
+                (code not in remain_holding) and (_days_to_remove(code) <= self.forbid_buy_days or _check_delist(code))
                 for code in pred_score.index
             ]
         )

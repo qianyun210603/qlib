@@ -1,7 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from typing import Text, Union, cast
+from typing import Text, Union
 
 import numpy as np
 import pandas as pd

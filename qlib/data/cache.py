@@ -15,7 +15,7 @@ import time
 import traceback
 from collections import OrderedDict
 from pathlib import Path
-from typing import Iterable, Union
+from typing import Iterable, Union, Optional
 
 import numpy as np
 import pandas as pd
@@ -180,10 +180,10 @@ class MemCache:
 
     def __init__(self):
         self.initialized = False
-        self.__calendar_mem_cache = None
-        self.__instrument_mem_cache = None
-        self.__feature_mem_cache = None
-        self._feature_share_mem_cache = None
+        self.__calendar_mem_cache: Optional[MemCacheUnit] = None
+        self.__instrument_mem_cache: Optional[MemCacheUnit] = None
+        self.__feature_mem_cache: Optional[MemCacheUnit] = None
+        self._feature_share_mem_cache: Optional[SharedMemCacheUnit] = None
 
     def __getitem__(self, key):
         if key == "c":
@@ -196,6 +196,9 @@ class MemCache:
             return self._feature_share_mem_cache
         else:
             raise KeyError("Unknown memcache unit")
+
+    def __contains__(self, item):
+        return item in ["c", "i", "f", "fs"]
 
     def init_kernel(self, size_limit=None, limit_type=None):
         """

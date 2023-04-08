@@ -218,7 +218,7 @@ def backtest(
     account: Union[float, int, dict] = 1e9,
     exchange_kwargs: dict = {},
     pos_type: str = "Position",
-) -> Tuple[PORT_METRIC, INDICATOR_METRIC, Dict]:
+) -> Tuple[PORT_METRIC, INDICATOR_METRIC, Optional[Dict]]:
     """initialize the strategy and executor, then backtest function for the interaction of the outermost strategy and
     executor in the nested decision execution
 

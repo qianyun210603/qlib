@@ -25,15 +25,12 @@ class Expression(abc.ABC):
         - period time is designed for Point-in-time database.  For example, the period time maybe 2014Q4, its value can observe for multiple times(different value may be observed at different time due to amendment).
     """
 
-    def __init__(self):
-        self.__cs_dependant_level = -1
-
     @property
     def require_cs_info(self):
         return False
 
     def get_direct_dependents(self) -> list:
-        return list()
+        return []
 
     @property
     def adjust_status(self):
@@ -46,7 +43,7 @@ class Expression(abc.ABC):
         return str(self)
 
     def __neg__(self):
-        from .ops import Neg
+        from .ops import Neg  # pylint: disable=C0415
 
         return Neg(self)
 
@@ -320,7 +317,7 @@ class ExpressionOps(Expression, abc.ABC):
     """
 
     def set_population(self, population):
-        if hasattr(self, "population") and self.population is None:
+        if hasattr(self, "population") and self.population is None:  # pylint: disable=access-member-before-definition
             self.population = population
 
         for _, member_var in vars(self).items():
@@ -328,8 +325,4 @@ class ExpressionOps(Expression, abc.ABC):
                 member_var.set_population(population)
 
     def get_direct_dependents(self) -> list:
-        deps = list()
-        for v in self.__dict__.values():
-            if isinstance(v, Expression):
-                deps.append(v)
-        return deps
+        return [v for v in self.__dict__.values() if isinstance(v, ExpressionOps)]

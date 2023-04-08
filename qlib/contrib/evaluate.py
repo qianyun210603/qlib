@@ -216,7 +216,7 @@ def backtest_daily(
         backtest report
     positions_normal: pd.DataFrame
         backtest positions
-
+    trades: dict
     """
     freq = "day"
     if executor is None:
@@ -236,7 +236,7 @@ def backtest_daily(
     if exchange_kwargs is not None:
         _exchange_kwargs.update(exchange_kwargs)
 
-    portfolio_metric_dict, indicator_dict = backtest_func(
+    portfolio_metric_dict, indicator_dict, trades = backtest_func(
         start_time=start_time,
         end_time=end_time,
         strategy=strategy,

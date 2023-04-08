@@ -445,7 +445,7 @@ class SymmetricOrthogonalization(Processor):
 class GramSchmidtOrthogonalization(Processor):
     """Apply Gram-Schmidt Orthogonalization on features to remove collinearity"""
 
-    class GramSchmidtHelper(object):
+    class GramSchmidtHelper:
         def __init__(self, projection_order, orth_cols, label_cols=None, eps=1e-15):
             self.orth_cols = orth_cols
             self.projection_order = projection_order

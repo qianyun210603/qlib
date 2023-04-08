@@ -64,7 +64,7 @@ class Today(Expression):
     def _load_internal(self, instrument, start_index, end_index, *args):
         freq = args[0]
 
-        from .data import Cal
+        from .data import Cal  # pylint: disable=C0415
 
         _calendar = Cal.calendar(freq=freq)
         return pd.Series(
@@ -1567,6 +1567,7 @@ class Count(Rolling):
         series.loc[series.abs() < 1e-10] = 0
         return series
 
+    @property
     def adjust_status(self):
         return 0
 
@@ -1647,6 +1648,7 @@ class Slope(Rolling):
             series = pd.Series(rolling_slope(series.values, self.N), index=series.index)
         return series
 
+    @property
     def adjust_status(self):
         return 0
 
@@ -1683,6 +1685,7 @@ class Rsquare(Rolling):
             series.loc[np.isclose(_series.rolling(self.N, min_periods=1).std(), 0, atol=2e-05)] = np.nan
         return series
 
+    @property
     def adjust_status(self):
         return 0
 
@@ -2090,7 +2093,7 @@ class TrailingStop(ExpressionOps):
                             break
                     if pd.isna(series.loc[idx]):
                         series.loc[idx] = series_c.loc[idx - self.N] / series_c.loc[idx] - 1
-                except:
+                except Exception:
                     print(instrument, start_index, end_index)
                     raise
         return series

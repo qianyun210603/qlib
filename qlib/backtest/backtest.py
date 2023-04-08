@@ -27,7 +27,7 @@ def backtest_loop(
     end_time: Union[pd.Timestamp, str],
     trade_strategy: BaseStrategy,
     trade_executor: BaseExecutor,
-) -> Tuple[PORT_METRIC, INDICATOR_METRIC, Dict]:
+) -> Tuple[PORT_METRIC, INDICATOR_METRIC, Optional[Dict]]:
     """backtest function for the interaction of the outermost strategy and executor in the nested decision execution
 
     please refer to the docs of `collect_data_loop`
@@ -46,7 +46,7 @@ def backtest_loop(
 
     portfolio_dict = cast(PORT_METRIC, return_value.get("portfolio_dict"))
     indicator_dict = cast(INDICATOR_METRIC, return_value.get("indicator_dict"))
-    trades = return_value.get("execute_result")
+    trades: Optional[Dict] = return_value.get("execute_result")
     return portfolio_dict, indicator_dict, trades
 
 

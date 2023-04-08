@@ -29,22 +29,22 @@ def get_calendar_day(freq="1min", future=False):
         array of date.
     """
     flag = f"{freq}_future_{future}_day"
-    if flag in H["c"]:
+    if flag in H["c"]:  # pylint: disable=unsupported-membership-test
         _calendar = H["c"][flag]
     else:
         _calendar = np.array(list(map(lambda x: x.date(), Cal.load_calendar(freq, future))))
-        H["c"][flag] = _calendar
+        H["c"][flag] = _calendar  # pylint: disable=unsupported-assignment-operation
     return _calendar
 
 
 def get_calendar_minute(freq="day", future=False):
     """Load High-Freq Calendar Minute Using Memcache"""
     flag = f"{freq}_future_{future}_day"
-    if flag in H["c"]:
+    if flag in H["c"]:  # pylint: disable=unsupported-membership-test
         _calendar = H["c"][flag]
     else:
         _calendar = np.array(list(map(lambda x: x.minute // 30, Cal.load_calendar(freq, future))))
-        H["c"][flag] = _calendar
+        H["c"][flag] = _calendar  # pylint: disable=unsupported-assignment-operation
     return _calendar
 
 

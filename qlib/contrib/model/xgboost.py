@@ -1,15 +1,17 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from typing import Text, Union
+
 import numpy as np
 import pandas as pd
 import xgboost as xgb
-from typing import Text, Union
-from ...model.base import Model
+
 from ...data.dataset import DatasetH
 from ...data.dataset.handler import DataHandlerLP
-from ...model.interpret.base import FeatureInt
 from ...data.dataset.weight import Reweighter
+from ...model.base import Model
+from ...model.interpret.base import FeatureInt
 
 
 class XGBModel(Model, FeatureInt):
@@ -28,9 +30,8 @@ class XGBModel(Model, FeatureInt):
         verbose_eval=20,
         evals_result=dict(),
         reweighter=None,
-        **kwargs
+        **kwargs,
     ):
-
         df_train, df_valid = dataset.prepare(
             ["train", "valid"],
             col_set=["feature", "label"],
@@ -64,7 +65,7 @@ class XGBModel(Model, FeatureInt):
             early_stopping_rounds=early_stopping_rounds,
             verbose_eval=verbose_eval,
             evals_result=evals_result,
-            **kwargs
+            **kwargs,
         )
         evals_result["train"] = list(evals_result["train"].values())[0]
         evals_result["valid"] = list(evals_result["valid"].values())[0]

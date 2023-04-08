@@ -29,7 +29,11 @@ import pandas as pd
 from cachetools.keys import hashkey
 
 from qlib.backtest.decision import Order, OrderDir
-from qlib.rl.data.base import BaseIntradayBacktestData, BaseIntradayProcessedData, ProcessedDataProvider
+from qlib.rl.data.base import (
+    BaseIntradayBacktestData,
+    BaseIntradayProcessedData,
+    ProcessedDataProvider,
+)
 from qlib.typehint import Literal
 
 DealPriceType = Literal["bid_or_ask", "bid_or_ask_fill", "close"]

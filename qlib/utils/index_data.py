@@ -11,8 +11,8 @@ Motivation of index_data
 
 from __future__ import annotations
 
-from typing import Dict, Tuple, Union, Callable, List
 import bisect
+from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -351,7 +351,6 @@ class IndexData(metaclass=index_data_ops_creator):
     loc_idx_cls = LocIndexer
 
     def __init__(self, data: np.ndarray, *indices: Union[List, pd.Index, Index]):
-
         self.data = data
         self.indices = indices
 

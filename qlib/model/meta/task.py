@@ -2,6 +2,7 @@
 # Licensed under the MIT License.
 
 from qlib.data.dataset import Dataset
+
 from ...utils import init_instance_by_config
 
 
@@ -16,7 +17,7 @@ class MetaTask:
 
         - When training, the X, y, X_test, y_test in training tasks are necessary (# PROC_MODE_FULL #)
           but not necessary in test tasks. (# PROC_MODE_TEST #)
-        - When the meta model can be transferred into other dataset, only meta_info is necessary  (# PROC_MODE_TRANSFER #)
+        - When the metamodel can be transferred into other dataset, only meta_info is necessary  (# PROC_MODE_TRANSFER #)
     """
 
     PROC_MODE_FULL = "full"
@@ -34,10 +35,10 @@ class MetaTask:
         Parameters
         ----------
         task : dict
-            the task to be enhanced by meta model
+            the task to be enhanced by metamodel
 
         meta_info : object
-            the input for meta model
+            the input for metamodel
         """
         self.task = task
         self.meta_info = meta_info  # the original meta input information, it will be processed later

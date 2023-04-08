@@ -1,8 +1,9 @@
+import unittest
+
 import numpy as np
 import pandas as pd
-import qlib.utils.index_data as idd
 
-import unittest
+import qlib.utils.index_data as idd
 
 
 class IndexDataTest(unittest.TestCase):

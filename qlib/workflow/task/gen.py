@@ -5,10 +5,12 @@ TaskGenerator module can generate many tasks based on TaskGen and some task temp
 """
 import abc
 import copy
+from typing import Callable, Dict, List, Union
+
 import pandas as pd
-from typing import Dict, List, Union, Callable
 
 from qlib.utils import transform_end_date
+
 from .utils import TimeAdjuster
 
 
@@ -119,7 +121,7 @@ def handler_mod(task: dict, rolling_gen):
         # Maybe dataset do not have handler, then do nothing.
         pass
     except TypeError:
-        # May be the handler is a string. `"handler.pkl"["kwargs"]` will raise TypeError
+        # Maybe the handler is a string. `"handler.pkl"["kwargs"]` will raise TypeError
         # e.g. a dumped file like file:///<file>/
         pass
 
@@ -339,7 +341,6 @@ class MultiHorizonGenBase(TaskGen):
     def generate(self, task: dict):
         res = []
         for hr in self.horizon:
-
             # Add horizon
             t = copy.deepcopy(task)
             self.set_horizon(t, hr)

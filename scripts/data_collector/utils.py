@@ -1,26 +1,26 @@
 #  Copyright (c) Microsoft Corporation.
 #  Licensed under the MIT License.
 
-import re
-import importlib
-import time
 import bisect
+import functools
+import importlib
 import pickle
 import random
-import requests
-import functools
+import re
+import time
+from concurrent.futures import ProcessPoolExecutor
+from functools import partial
 from pathlib import Path
-from typing import Iterable, Tuple, List
+from typing import Iterable, List, Tuple
 
 import numpy as np
 import pandas as pd
-from lxml import etree
-from loguru import logger
-from yahooquery import Ticker
-from tqdm import tqdm
-from functools import partial
-from concurrent.futures import ProcessPoolExecutor
+import requests
 from bs4 import BeautifulSoup
+from loguru import logger
+from lxml import etree
+from tqdm import tqdm
+from yahooquery import Ticker
 
 HS_SYMBOLS_URL = "http://app.finance.ifeng.com/hq/list.php?type=stock_a&class={s_type}"
 
@@ -52,7 +52,7 @@ _CALENDAR_MAP = {}
 MINIMUM_SYMBOLS_NUM = 3900
 
 
-def get_calendar_list(bench_code="CSI300", start_date = pd.Timestamp("2005-01-01")) -> List[pd.Timestamp]:
+def get_calendar_list(bench_code="CSI300", start_date=pd.Timestamp("2005-01-01")) -> List[pd.Timestamp]:
     """get SH/SZ history calendar list
 
     Parameters
@@ -93,7 +93,9 @@ def get_calendar_list(bench_code="CSI300", start_date = pd.Timestamp("2005-01-01
                         raise ValueError(f"{month}-->{e}")
                     return _cal
 
-                month_range = pd.date_range(start=pd.Timestamp(start_date), end=pd.Timestamp.now() + pd.Timedelta(days=31), freq="M")
+                month_range = pd.date_range(
+                    start=pd.Timestamp(start_date), end=pd.Timestamp.now() + pd.Timedelta(days=31), freq="M"
+                )
                 calendar = []
                 with tqdm(total=len(month_range)) as pbar:
                     for _m in month_range:

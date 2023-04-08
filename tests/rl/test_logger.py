@@ -1,28 +1,27 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from random import randint, choice
-from pathlib import Path
-
 import re
+from pathlib import Path
+from random import choice, randint
 from typing import Any, Tuple
 
 import gym
 import numpy as np
 import pandas as pd
 from gym import spaces
-from tianshou.data import Collector, Batch
+from tianshou.data import Batch, Collector
 from tianshou.policy import BasePolicy
 
-from qlib.log import set_log_with_config
 from qlib.config import C
 from qlib.constant import INF
-from qlib.rl.interpreter import StateInterpreter, ActionInterpreter
+from qlib.log import set_log_with_config
+from qlib.rl.interpreter import ActionInterpreter, StateInterpreter
 from qlib.rl.simulator import Simulator
 from qlib.rl.utils.data_queue import DataQueue
-from qlib.rl.utils.env_wrapper import InfoDict, EnvWrapper
-from qlib.rl.utils.log import LogLevel, LogCollector, CsvWriter, ConsoleWriter
+from qlib.rl.utils.env_wrapper import EnvWrapper, InfoDict
 from qlib.rl.utils.finite_env import vectorize_env
+from qlib.rl.utils.log import ConsoleWriter, CsvWriter, LogCollector, LogLevel
 
 
 class SimpleEnv(gym.Env[int, int]):

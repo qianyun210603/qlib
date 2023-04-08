@@ -1,9 +1,9 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 import os
-import numpy
 
-from setuptools import find_packages, setup, Extension
+import numpy
+from setuptools import Extension, find_packages, setup
 
 
 def read(rel_path: str) -> str:
@@ -166,7 +166,7 @@ setup(
             # so we restricted the version of tianshou.
             # References:
             # https://github.com/thu-ml/tianshou/releases
-            "tianshou<=0.4.10",
+            "tianshou",
             "gym>=0.24",  # If you do not put gym at the end, gym will degrade causing pytest results to fail.
         ],
         "rl": [

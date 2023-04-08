@@ -23,11 +23,12 @@ import pymongo
 from bson.binary import Binary
 from bson.objectid import ObjectId
 from pymongo.errors import InvalidDocument
-from qlib import auto_init, get_module_logger
 from tqdm.cli import tqdm
 
-from .utils import get_mongodb
+from qlib import auto_init, get_module_logger
+
 from ...config import C
+from .utils import get_mongodb
 
 
 class TaskManager:

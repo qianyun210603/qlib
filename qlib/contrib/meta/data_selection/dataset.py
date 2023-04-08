@@ -1,23 +1,25 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
-import pandas as pd
-import numpy as np
 from copy import deepcopy
+from typing import Dict, List, Text, Tuple, Union
+
+import numpy as np
+import pandas as pd
 from joblib import Parallel, delayed  # pylint: disable=E0401
-from typing import Dict, List, Union, Text, Tuple
-from qlib.data.dataset.utils import init_task_handler
-from qlib.data.dataset import DatasetH
+from tqdm.auto import tqdm
+
 from qlib.contrib.torch import data_to_tensor
-from qlib.model.meta.task import MetaTask
-from qlib.model.meta.dataset import MetaTaskDataset
-from qlib.model.trainer import TrainerR
+from qlib.data.dataset import DatasetH
+from qlib.data.dataset.utils import init_task_handler
 from qlib.log import get_module_logger
+from qlib.model.meta.dataset import MetaTaskDataset
+from qlib.model.meta.task import MetaTask
+from qlib.model.trainer import TrainerR
 from qlib.utils import auto_filter_kwargs, get_date_by_shift, init_instance_by_config
 from qlib.utils.data import deepcopy_basic_type
 from qlib.workflow import R
 from qlib.workflow.task.gen import RollingGen, task_generator
 from qlib.workflow.task.utils import TimeAdjuster
-from tqdm.auto import tqdm
 
 
 class InternalData:
@@ -218,7 +220,7 @@ class MetaDatasetDS(MetaTaskDataset):
         task_tpl : Union[dict, list]
             Decide what tasks are used.
             - dict : the task template, the prepared task is generated with `step`, `trunc_days` and `RollingGen`
-            - list : when list, use the list of tasks directly
+            - list : when of list type, use the list of tasks directly
                      the list is supposed to be sorted according timeline
         step : int
             the rolling step

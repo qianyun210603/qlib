@@ -1,24 +1,27 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
-from pathlib import Path
-from qlib.model.meta.task import MetaTask
-from qlib.contrib.meta.data_selection.model import MetaModelDS
-from qlib.contrib.meta.data_selection.dataset import InternalData, MetaDatasetDS
-from qlib.data.dataset.handler import DataHandlerLP
-
-import pandas as pd
-import fire
-import sys
 import pickle
+import sys
+from pathlib import Path
+
+import fire
+import pandas as pd
+
 from qlib import auto_init
+from qlib.contrib.meta.data_selection.dataset import InternalData, MetaDatasetDS
+from qlib.contrib.meta.data_selection.model import MetaModelDS
+from qlib.data.dataset.handler import DataHandlerLP
+from qlib.model.meta.task import MetaTask
 from qlib.model.trainer import TrainerR
+from qlib.tests.data import GetData
 from qlib.utils import init_instance_by_config
 from qlib.workflow import R
-from qlib.tests.data import GetData
 
 DIRNAME = Path(__file__).absolute().resolve().parent
 sys.path.append(str(DIRNAME.parent / "baseline"))
-from rolling_benchmark import RollingBenchmark  # NOTE: sys.path is changed for import RollingBenchmark
+from rolling_benchmark import (
+    RollingBenchmark,  # NOTE: sys.path is changed for import RollingBenchmark
+)
 
 
 class DDGDA:
@@ -79,7 +82,9 @@ class DDGDA:
 
         feature_selected = feature_df.loc[:, col_selected.index]
 
-        feature_selected = feature_selected.groupby("datetime", group_keys=False).apply(lambda df: (df - df.mean()).div(df.std()))
+        feature_selected = feature_selected.groupby("datetime", group_keys=False).apply(
+            lambda df: (df - df.mean()).div(df.std())
+        )
         feature_selected = feature_selected.fillna(0.0)
 
         df_all = {
@@ -149,7 +154,7 @@ class DDGDA:
         # The test date of first task will be 2011-01-01. Each test segment will be about 20days
         # The tasks include all training tasks and test tasks.
 
-        # 2) preparing meta dataset
+        # 2) preparing meta dataset  !!! task here is using reduced dataset !!!
         kwargs = dict(
             task_tpl=proxy_forecast_model_task,
             step=self.step,
@@ -165,7 +170,7 @@ class DDGDA:
         # So the misalignment will not affect the effectiveness of the method.
         with self._internal_data_path.open("rb") as f:
             internal_data = pickle.load(f)
-        md = MetaDatasetDS(exp_name=internal_data, **kwargs)
+        md = MetaDatasetDS(exp_name=internal_data, **kwargs)  # internal_data was trained by full 158 factors
 
         # 3) train and logging metamodel
         with R.start(experiment_name=self.meta_exp_name):
@@ -242,10 +247,10 @@ class DDGDA:
         # 1) file: handler_proxy.pkl
         self.dump_data_for_proxy_model()
         # 2)
-        # file: internal_data_s20.pkl
+        # file: internal_data_s20.pkl (is this generated using full ds or 30 features? ans: full 158 features)
         # mlflow: data_sim_s20, models for calculating meta_ipt
         self.dump_meta_ipt()
-        # 3) meta model will be stored in `DDG-DA`
+        # 3) metamodel will be stored in `DDG-DA` requires internal_data_s20.pkl and handler_proxy.pkl. Note that the former was trained with full 158 factors but the latter contains only 30 most important factors
         self.train_meta_model()
         # 4) new_tasks are saved in "tasks_s20.pkl" (reweighter is added)
         self.meta_inference()

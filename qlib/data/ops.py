@@ -2,25 +2,24 @@
 # Licensed under the MIT License.
 
 
-from __future__ import division
-from __future__ import print_function
+from __future__ import division, print_function
 
+import abc
 from abc import ABC
+from typing import List, Type, Union
 
 import numpy as np
 import pandas as pd
-import abc
-from typing import Union, List, Type
 from scipy.stats import percentileofscore
-from .base import Expression, ExpressionOps, Feature, PFeature
+
+from ..config import C
 from ..log import get_module_logger
 from ..utils import get_callable_kwargs
-from ..config import C
-
+from .base import Expression, ExpressionOps, Feature, PFeature
 
 try:
-    from ._libs.rolling import rolling_slope, rolling_rsquare, rolling_resi
-    from ._libs.expanding import expanding_slope, expanding_rsquare, expanding_resi
+    from ._libs.expanding import expanding_resi, expanding_rsquare, expanding_slope
+    from ._libs.rolling import rolling_resi, rolling_rsquare, rolling_slope
 except ImportError:
     print(
         "#### Do not import qlib package in the repository directory in case of importing qlib from . without compiling #####"
@@ -35,6 +34,7 @@ except ValueError:
 
 
 np.seterr(invalid="ignore")
+
 
 #################### Special Operator ####################
 class Today(Expression):
@@ -1995,7 +1995,6 @@ class XSectionOperator(ElemOperator):
         return H["fs"][cache_key]
 
     def _load_all_instruments(self, start_index, end_index, *args) -> pd.DataFrame:
-
         if isinstance(self.population, dict):
 
             def mask_data(series, spans):

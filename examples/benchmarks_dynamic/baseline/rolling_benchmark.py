@@ -1,19 +1,21 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
-from qlib.model.ens.ensemble import RollingEnsemble
-from qlib.utils import init_instance_by_config
+from pathlib import Path
+
 import fire
 import yaml
+
 from qlib import auto_init
-from pathlib import Path
+from qlib.model.ens.ensemble import RollingEnsemble
 from qlib.model.trainer import TrainerR
-from qlib.workflow import R
 from qlib.tests.data import GetData
+from qlib.utils import init_instance_by_config
+from qlib.workflow import R
 
 DIRNAME = Path(__file__).absolute().resolve().parent
-from qlib.workflow.task.gen import task_generator, RollingGen
-from qlib.workflow.task.collect import RecorderCollector
 from qlib.workflow.record_temp import PortAnaRecord, SigAnaRecord
+from qlib.workflow.task.collect import RecorderCollector
+from qlib.workflow.task.gen import RollingGen, task_generator
 
 
 class RollingBenchmark:
@@ -25,8 +27,8 @@ class RollingBenchmark:
     """
 
     def __init__(self, rolling_exp="rolling_models", model_type="linear") -> None:
-        self.step = 20
-        self.horizon = 20
+        self.step = 20  # rolling period
+        self.horizon = 20  # return period, 20 means 20 trading day return
         self.rolling_exp = rolling_exp
         self.model_type = model_type
 

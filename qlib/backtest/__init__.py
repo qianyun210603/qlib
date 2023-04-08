@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Generator, List, Optional, Tuple, Union, Dict
+from typing import TYPE_CHECKING, Any, Dict, Generator, List, Optional, Tuple, Union
 
 import pandas as pd
 
@@ -179,7 +179,6 @@ def get_strategy_executor(
     exchange_kwargs: dict = {},
     pos_type: str = "Position",
 ) -> Tuple[BaseStrategy, BaseExecutor]:
-
     # NOTE:
     # - for avoiding recursive import
     # - typing annotations is not reliable

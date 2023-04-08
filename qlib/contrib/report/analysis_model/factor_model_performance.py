@@ -1,18 +1,23 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-import pandas as pd
-import numpy as np
 from functools import partial
 
-import plotly.graph_objs as go
-
-import statsmodels.api as sm
 import matplotlib.pyplot as plt
-
+import numpy as np
+import pandas as pd
+import plotly.graph_objs as go
+import statsmodels.api as sm
 from scipy import stats
 
-from ..graph import ScatterGraph, SubplotsGraph, BarGraph, HeatmapGraph, BoxGraph, TableGraph
+from ..graph import (
+    BarGraph,
+    BoxGraph,
+    HeatmapGraph,
+    ScatterGraph,
+    SubplotsGraph,
+    TableGraph,
+)
 from ..utils import guess_plotly_rangebreaks
 
 

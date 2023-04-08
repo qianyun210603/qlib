@@ -1,17 +1,18 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from typing import Text, Union
+
 import numpy as np
 import pandas as pd
-from typing import Text, Union
-from catboost import Pool, CatBoost
+from catboost import CatBoost, Pool
 from catboost.utils import get_gpu_device_count
 
-from ...model.base import Model
 from ...data.dataset import DatasetH
 from ...data.dataset.handler import DataHandlerLP
-from ...model.interpret.base import FeatureInt
 from ...data.dataset.weight import Reweighter
+from ...model.base import Model
+from ...model.interpret.base import FeatureInt
 
 
 class CatBoostModel(Model, FeatureInt):
@@ -33,7 +34,7 @@ class CatBoostModel(Model, FeatureInt):
         verbose_eval=20,
         evals_result=dict(),
         reweighter=None,
-        **kwargs
+        **kwargs,
     ):
         df_train, df_valid = dataset.prepare(
             ["train", "valid"],

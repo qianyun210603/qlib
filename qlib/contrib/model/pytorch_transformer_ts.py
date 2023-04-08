@@ -2,24 +2,23 @@
 # Licensed under the MIT License.
 
 
-from __future__ import division
-from __future__ import print_function
+from __future__ import division, print_function
+
+import copy
+import math
 
 import numpy as np
 import pandas as pd
-import copy
-import math
-from ...utils import get_or_create_path
-from ...log import get_module_logger
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-from ...model.base import Model
 from ...data.dataset import DatasetH
 from ...data.dataset.handler import DataHandlerLP
+from ...log import get_module_logger
+from ...model.base import Model
+from ...utils import get_or_create_path
 
 
 class TransformerModel(Model):
@@ -41,9 +40,8 @@ class TransformerModel(Model):
         n_jobs=10,
         GPU=0,
         seed=None,
-        **kwargs
+        **kwargs,
     ):
-
         # set hyper-parameters.
         self.d_model = d_model
         self.dropout = dropout
@@ -93,7 +91,6 @@ class TransformerModel(Model):
         raise ValueError("unknown loss `%s`" % self.loss)
 
     def metric_fn(self, pred, label):
-
         mask = torch.isfinite(label)
 
         if self.metric in ("", "loss"):
@@ -102,7 +99,6 @@ class TransformerModel(Model):
         raise ValueError("unknown metric `%s`" % self.metric)
 
     def train_epoch(self, data_loader):
-
         self.model.train()
 
         for data in data_loader:
@@ -118,14 +114,12 @@ class TransformerModel(Model):
             self.train_optimizer.step()
 
     def test_epoch(self, data_loader):
-
         self.model.eval()
 
         scores = []
         losses = []
 
         for data in data_loader:
-
             feature = data[:, :, 0:-1].to(self.device)
             label = data[:, -1, -1].to(self.device)
 
@@ -145,7 +139,6 @@ class TransformerModel(Model):
         evals_result=dict(),
         save_path=None,
     ):
-
         dl_train = dataset.prepare("train", col_set=["feature", "label"], data_key=DataHandlerLP.DK_L)
         dl_valid = dataset.prepare("valid", col_set=["feature", "label"], data_key=DataHandlerLP.DK_L)
 

@@ -2,12 +2,13 @@
 # Licensed under the MIT License.
 
 from contextlib import contextmanager
-from typing import Text, Optional, Any, Dict
-from .expm import ExpManager
-from .exp import Experiment
-from .recorder import Recorder
+from typing import Any, Dict, Optional, Text
+
 from ..utils import Wrapper
 from ..utils.exceptions import RecorderInitializationError
+from .exp import Experiment
+from .expm import ExpManager
+from .recorder import Recorder
 
 
 class QlibRecorder:
@@ -144,7 +145,7 @@ class QlibRecorder:
 
         Parameters
         ----------
-        status : str
+        recorder_status : str
             The status of a recorder, which can be SCHEDULED, RUNNING, FINISHED, FAILED.
         """
         self.exp_manager.end_exp(recorder_status)

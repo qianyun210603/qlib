@@ -1,11 +1,11 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
+import shutil
 import unittest
 from pathlib import Path
-import shutil
 
-from qlib.workflow import R
 from qlib.tests import TestAutoData
+from qlib.workflow import R
 
 
 class WorkflowTest(TestAutoData):

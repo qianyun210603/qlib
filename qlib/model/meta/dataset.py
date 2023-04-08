@@ -2,8 +2,10 @@
 # Licensed under the MIT License.
 
 import abc
+from typing import Dict, List, Text, Tuple, Union
+
 from qlib.model.meta.task import MetaTask
-from typing import Dict, Union, List, Tuple, Text
+
 from ...utils.serial import Serializable
 
 
@@ -15,28 +17,28 @@ class MetaTaskDataset(Serializable, metaclass=abc.ABCMeta):
 
     - input tasks(e.g. Qlib tasks) and prepare meta tasks
 
-        - meta task contains more information than normal tasks (e.g. input data for meta model)
+        - meta task contains more information than normal tasks (e.g. input data for metamodel)
 
     The learnt pattern could transfer to other meta dataset. The following cases should be supported
 
-    - A meta-model trained on meta-dataset A and then applied to meta-dataset B
+    - A metamodel trained on meta-dataset A and then applied to meta-dataset B
 
-        - Some pattern are shared between meta-dataset A and B, so meta-input on meta-dataset A are used when meta model are applied on meta-dataset-B
+        - Some pattern are shared between meta-dataset A and B, so meta-input on meta-dataset A are used when metamodel are applied on meta-dataset-B
     """
 
     def __init__(self, segments: Union[Dict[Text, Tuple], float], *args, **kwargs):
         """
         The meta-dataset maintains a list of meta-tasks when it is initialized.
 
-        The segments indicates the way to divide the data
+        The segments indicate the way to divide the data
 
         The duty of the `__init__` function of MetaTaskDataset
         - initialize the tasks
         """
-        super().__init__(*args, **kwargs)
+        super().__init__()
         self.segments = segments
 
-    def prepare_tasks(self, segments: Union[List[Text], Text], *args, **kwargs) -> List[MetaTask]:
+    def prepare_tasks(self, segments: Union[List[Text], Text]) -> Union[List[MetaTask], List[List[MetaTask]]]:
         """
         Prepare the data in each meta-task and ready for training.
 
@@ -55,7 +57,7 @@ class MetaTaskDataset(Serializable, metaclass=abc.ABCMeta):
         Returns
         -------
         list:
-            A list of the prepared data of each meta-task for training the meta-model. For multiple segments [seg1, seg2, ... , segN], the returned list will be [[tasks in seg1], [tasks in seg2], ... , [tasks in segN]].
+            A list of the prepared data of each meta-task for training the metamodel. For multiple segments [seg1, seg2, ... , segN], the returned list will be [[tasks in seg1], [tasks in seg2], ... , [tasks in segN]].
             Each task is a meta task
         """
         if isinstance(segments, (list, tuple)):
@@ -72,6 +74,6 @@ class MetaTaskDataset(Serializable, metaclass=abc.ABCMeta):
 
         Parameters
         ----------
-        seg : Text
+        segment : Text
             the name of the segment
         """

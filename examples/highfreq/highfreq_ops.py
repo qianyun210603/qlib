@@ -1,11 +1,13 @@
+import importlib
+
 import numpy as np
 import pandas as pd
-import importlib
-from qlib.data.ops import ElemOperator, PairOperator
+
 from qlib.config import C
+from qlib.contrib.ops.high_freq import get_calendar_day
 from qlib.data.cache import H
 from qlib.data.data import Cal
-from qlib.contrib.ops.high_freq import get_calendar_day
+from qlib.data.ops import ElemOperator, PairOperator
 
 
 class DayLast(ElemOperator):

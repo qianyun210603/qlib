@@ -1,25 +1,25 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
-import os
 import copy
+import os
 import warnings
+from abc import ABC
+from typing import Dict, List, Text, Tuple, Union, cast
+
 import numpy as np
 import pandas as pd
 
-from typing import Dict, List, Text, Tuple, Union, cast
-from abc import ABC
-
-from qlib.data import D
-from qlib.data.dataset import Dataset
-from qlib.model.base import BaseModel
-from qlib.strategy.base import BaseStrategy
+from qlib.backtest.decision import Order, OrderDir, TradeDecisionWO
 from qlib.backtest.position import Position
 from qlib.backtest.signal import Signal, create_signal_from
-from qlib.backtest.decision import Order, OrderDir, TradeDecisionWO
-from qlib.log import get_module_logger
-from qlib.utils import get_pre_trading_date, load_dataset
-from qlib.contrib.strategy.order_generator import OrderGenerator, OrderGenWOInteract
 from qlib.contrib.strategy.optimizer import EnhancedIndexingOptimizer
+from qlib.contrib.strategy.order_generator import OrderGenerator, OrderGenWOInteract
+from qlib.data import D
+from qlib.data.dataset import Dataset
+from qlib.log import get_module_logger
+from qlib.model.base import BaseModel
+from qlib.strategy.base import BaseStrategy
+from qlib.utils import get_pre_trading_date, load_dataset
 
 
 class BaseSignalStrategy(BaseStrategy, ABC):
@@ -589,7 +589,6 @@ class EnhancedIndexingStrategy(WeightStrategyBase):
         self._riskdata_cache = {}
 
     def get_risk_data(self, date):
-
         if date in self._riskdata_cache:
             return self._riskdata_cache[date]
 
@@ -616,7 +615,6 @@ class EnhancedIndexingStrategy(WeightStrategyBase):
         return self._riskdata_cache[date]
 
     def generate_target_weight_position(self, score, current, trade_start_time, trade_end_time):
-
         trade_date = trade_start_time
         pre_date = get_pre_trading_date(trade_date, future=True)  # previous trade date
 

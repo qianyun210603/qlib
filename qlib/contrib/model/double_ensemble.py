@@ -1,15 +1,17 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from typing import Text, Union
+
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
-from typing import Text, Union
-from ...model.base import Model
+
 from ...data.dataset import DatasetH
 from ...data.dataset.handler import DataHandlerLP
-from ...model.interpret.base import FeatureInt
 from ...log import get_module_logger
+from ...model.base import Model
+from ...model.interpret.base import FeatureInt
 
 
 class DEnsembleModel(Model, FeatureInt):
@@ -31,7 +33,7 @@ class DEnsembleModel(Model, FeatureInt):
         sub_weights=None,
         epochs=100,
         early_stopping_rounds=None,
-        **kwargs
+        **kwargs,
     ):
         self.base_model = base_model  # "gbm" or "mlp", specifically, we use lgbm for "gbm"
         self.num_models = num_models  # the number of sub-models

@@ -4,10 +4,10 @@
 from __future__ import annotations
 
 import collections
-from types import GeneratorType
-from typing import Any, Callable, cast, Dict, Generator, List, Optional, Tuple, Union
-
 import warnings
+from types import GeneratorType
+from typing import Any, Callable, Dict, Generator, List, Optional, Tuple, Union, cast
+
 import numpy as np
 import pandas as pd
 import torch
@@ -15,7 +15,12 @@ from tianshou.data import Batch
 from tianshou.policy import BasePolicy
 
 from qlib.backtest import CommonInfrastructure, Order
-from qlib.backtest.decision import BaseTradeDecision, TradeDecisionWithDetails, TradeDecisionWO, TradeRange
+from qlib.backtest.decision import (
+    BaseTradeDecision,
+    TradeDecisionWithDetails,
+    TradeDecisionWO,
+    TradeRange,
+)
 from qlib.backtest.exchange import Exchange
 from qlib.backtest.executor import BaseExecutor
 from qlib.backtest.utils import LevelInfrastructure, get_start_end_idx

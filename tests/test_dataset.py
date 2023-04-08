@@ -1,14 +1,16 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-import unittest
-import pytest
 import sys
-from qlib.tests import TestAutoData
-from qlib.data.dataset import TSDatasetH
-import numpy as np
 import time
+import unittest
+
+import numpy as np
+import pytest
+
+from qlib.data.dataset import TSDatasetH
 from qlib.data.dataset.handler import DataHandlerLP
+from qlib.tests import TestAutoData
 
 
 class TestDataset(TestAutoData):
@@ -81,6 +83,7 @@ class TestDataset(TestAutoData):
             # 3) get both index and data
             # NOTE: We don't want to reply on pytorch, so this test can't be included. It is just a example
             from torch.utils.data import DataLoader
+
             from qlib.model.utils import IndexSampler
 
             i = len(tsds) - 1

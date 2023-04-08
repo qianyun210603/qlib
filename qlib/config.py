@@ -12,17 +12,16 @@ Two modes are supported
 """
 from __future__ import annotations
 
-import os
-import re
 import copy
 import logging
-import platform
 import multiprocessing
+import os
+import platform
+import re
 from pathlib import Path
-from typing import Callable, Optional, Union
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Optional, Union
 
-from qlib.constant import REG_CN, REG_US, REG_TW
+from qlib.constant import REG_CN, REG_TW, REG_US
 
 if TYPE_CHECKING:
     from qlib.utils.time import Freq
@@ -176,10 +175,6 @@ _default_config = {
         # To let qlib work with other packages, we shouldn't disable existing loggers.
         # Note that this param is default to True according to the documentation of logging.
         "disable_existing_loggers": False,
-        "loggers": {"qlib": {"level": logging.DEBUG, "handlers": ["console"]}},
-        # To let qlib work with other packages, we shouldn't disable existing loggers.
-        # Note that this param is default to True according to the documentation of logging.
-        "disable_existing_loggers": False,
     },
     # Default config for experiment manager
     "exp_manager": {
@@ -306,7 +301,6 @@ class QlibConfig(Config):
         """
 
         def __init__(self, provider_uri: Union[str, Path, dict], mount_path: Union[str, Path, dict]):
-
             """
             The relation of `provider_uri` and `mount_path`
             - `mount_path` is used only if provider_uri is an NFS path
@@ -416,7 +410,11 @@ class QlibConfig(Config):
         default_conf : str
             the default config template chosen by user: "server", "client"
         """
-        from .utils import set_log_with_config, get_module_logger, can_use_cache  # pylint: disable=C0415
+        from .utils import (  # pylint: disable=C0415
+            can_use_cache,
+            get_module_logger,
+            set_log_with_config,
+        )
 
         self.reset()
 
@@ -458,13 +456,13 @@ class QlibConfig(Config):
                     )
 
     def register(self):
-        from .utils import init_instance_by_config  # pylint: disable=C0415
-        from .data.ops import register_all_ops  # pylint: disable=C0415
-        from .data.data import register_all_wrappers  # pylint: disable=C0415
         from .data.cache import H  # pylint: disable=C0415
-        from .workflow import R, QlibRecorder  # pylint: disable=C0415
-        from .workflow.utils import experiment_exit_handler  # pylint: disable=C0415
+        from .data.data import register_all_wrappers  # pylint: disable=C0415
+        from .data.ops import register_all_ops  # pylint: disable=C0415
+        from .utils import init_instance_by_config  # pylint: disable=C0415
+        from .workflow import QlibRecorder, R  # pylint: disable=C0415
         from .workflow.expm import ExpManager  # pylint: disable=C0415
+        from .workflow.utils import experiment_exit_handler  # pylint: disable=C0415
 
         register_all_ops(self)
         register_all_wrappers(self)

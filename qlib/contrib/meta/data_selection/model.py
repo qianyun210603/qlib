@@ -1,25 +1,25 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-import pandas as pd
-import numpy as np
-import torch
-from torch import nn
-from torch import optim
-from tqdm.auto import tqdm
 import copy
-from typing import Union, List
+from typing import List, Union, cast
+
+import numpy as np
+import pandas as pd
+import torch
+from torch import nn, optim
+from tqdm.auto import tqdm
+
+from qlib.contrib.meta.data_selection.net import PredNet
+from qlib.data.dataset.weight import Reweighter
+from qlib.log import get_module_logger
+from qlib.model.meta.task import MetaTask
 
 from ....model.meta.dataset import MetaTaskDataset
 from ....model.meta.model import MetaTaskModel
 from ....workflow import R
-from .utils import ICLoss
 from .dataset import MetaDatasetDS
-
-from qlib.log import get_module_logger
-from qlib.model.meta.task import MetaTask
-from qlib.data.dataset.weight import Reweighter
-from qlib.contrib.meta.data_selection.net import PredNet
+from .utils import ICLoss
 
 logger = get_module_logger("data selection")
 
@@ -32,7 +32,7 @@ class TimeReweighter(Reweighter):
         # TODO: handling TSDataSampler
         w_s = pd.Series(1.0, index=data.index)
         for k, w in self.time_weight.items():
-            w_s.loc[slice(*k)] = w
+            w_s.loc[slice(*tuple(k))] = w
         logger.info(f"Reweighting result: {w_s}")
         return w_s
 
@@ -92,6 +92,8 @@ class MetaModelDS(MetaTaskModel):
                 except ValueError as e:
                     get_module_logger("MetaModelDS").warning(f"Exception `{e}` when calculating IC loss")
                     continue
+            else:
+                raise ValueError(f"Unknown loss type {self.criterion}")
 
             assert not np.isnan(loss.detach().item()), "NaN loss!"
 
@@ -166,7 +168,7 @@ class MetaModelDS(MetaTaskModel):
         meta_ipt = task.get_meta_input()
         weights = self.tn.twm(meta_ipt["time_perf"])
 
-        weight_s = pd.Series(weights.detach().cpu().numpy(), index=task.meta_info.columns)
+        weight_s = pd.Series(weights.detach().cpu().numpy(), index=cast(pd.DataFrame, task.meta_info).columns)
         task = copy.copy(task.task)  # NOTE: this is a shallow copy.
         task["reweighter"] = TimeReweighter(weight_s)
         return task

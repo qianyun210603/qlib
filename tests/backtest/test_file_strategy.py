@@ -2,12 +2,14 @@
 # Licensed under the MIT License.
 
 import unittest
-from qlib.backtest import backtest
-from qlib.tests import TestAutoData
-import pandas as pd
 from pathlib import Path
-from qlib.data import D
+
 import numpy as np
+import pandas as pd
+
+from qlib.backtest import backtest
+from qlib.data import D
+from qlib.tests import TestAutoData
 
 DIRNAME = Path(__file__).absolute().resolve().parent
 

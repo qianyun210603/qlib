@@ -6,22 +6,22 @@
     - !!!!!!!!!!!!!!!TODO!!!!!!!!!!!!!!!!!!!:
         - Its structure is not well designed and very ugly, your contribution is welcome to make importing dataset easier
 """
-from datetime import date, datetime as dt
 import os
-from pathlib import Path
 import random
 import shutil
 import time
 import traceback
+from datetime import date
+from datetime import datetime as dt
+from pathlib import Path
 
-from arctic import Arctic, chunkstore
 import arctic
-from arctic import Arctic, CHUNK_STORE
-from arctic.chunkstore.chunkstore import CHUNK_SIZE
 import fire
-from joblib import Parallel, delayed, parallel
 import numpy as np
 import pandas as pd
+from arctic import CHUNK_STORE, Arctic, chunkstore
+from arctic.chunkstore.chunkstore import CHUNK_SIZE
+from joblib import Parallel, delayed, parallel
 from pandas import DataFrame
 from pandas.core.indexes.datetimes import date_range
 from pymongo.mongo_client import MongoClient

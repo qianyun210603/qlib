@@ -4,11 +4,11 @@
 from __future__ import annotations
 
 import multiprocessing
-from multiprocessing.sharedctypes import Synchronized
 import os
 import threading
 import time
 import warnings
+from multiprocessing.sharedctypes import Synchronized
 from queue import Empty
 from typing import Any, Generator, Generic, Sequence, TypeVar, cast
 
@@ -166,7 +166,10 @@ class DataQueue(Generic[T]):
 
     def _producer(self) -> None:
         # pytorch dataloader is used here only because we need its sampler and multi-processing
-        from torch.utils.data import DataLoader, Dataset  # pylint: disable=import-outside-toplevel
+        from torch.utils.data import (  # pylint: disable=import-outside-toplevel
+            DataLoader,
+            Dataset,
+        )
 
         try:
             dataloader = DataLoader(

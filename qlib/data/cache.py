@@ -2,37 +2,36 @@
 # Licensed under the MIT License.
 
 
-from __future__ import division
-from __future__ import print_function
+from __future__ import division, print_function
 
+import abc
+import contextlib
 import multiprocessing
 import os
-import sys
-import stat
-import time
 import pickle
+import stat
+import sys
+import time
 import traceback
-import redis_lock
-import contextlib
-import abc
+from collections import OrderedDict
 from pathlib import Path
+from typing import Iterable, Union
+
 import numpy as np
 import pandas as pd
-from typing import Union, Iterable
-from collections import OrderedDict
+import redis_lock
 
 from ..config import C
+from ..log import get_module_logger
 from ..utils import (
-    hash_args,
     get_redis_connection,
-    read_bin,
-    parse_field,
-    remove_fields_space,
+    hash_args,
     normalize_cache_fields,
     normalize_cache_instruments,
+    parse_field,
+    read_bin,
+    remove_fields_space,
 )
-
-from ..log import get_module_logger
 from .base import Feature
 from .ops import Operators  # pylint: disable=W0611  # noqa: F401
 
@@ -145,7 +144,6 @@ class SharedMemMeta(type):
 
 
 class SharedMemCacheUnit(metaclass=SharedMemMeta):
-
     def __init__(self, shared_cache_data):
         self.od = shared_cache_data
 
@@ -181,7 +179,6 @@ class MemCache:
     """Memory cache."""
 
     def __init__(self):
-
         self.initialized = False
         self.__calendar_mem_cache = None
         self.__instrument_mem_cache = None
@@ -650,7 +647,6 @@ class DiskExpressionCache(ExpressionCache):
         r.tofile(str(cache_path))
 
     def update(self, cache_uri, freq: str = "day"):
-
         cp_cache_uri = self.get_cache_dir(freq).joinpath(cache_uri)
         meta_path = cp_cache_uri.with_suffix(".meta")
         if not self.check_cache_exists(cp_cache_uri, suffix_list=[".meta"]):
@@ -763,7 +759,6 @@ class DiskDatasetCache(DatasetCache):
     def _dataset(
         self, instruments, fields, start_time=None, end_time=None, freq="day", disk_cache=0, inst_processors=[]
     ):
-
         if disk_cache == 0:
             # In this case, data_set cache is configured but will not be used.
             return self.provider.dataset(
@@ -868,7 +863,6 @@ class DiskDatasetCache(DatasetCache):
         KEY = "df"
 
         def __init__(self, cache_path: Union[str, Path]):
-
             self.index_path = cache_path.with_suffix(".index")
             self._data = None
             self.logger = get_module_logger(self.__class__.__name__)
@@ -1214,7 +1208,6 @@ class DatasetURICache(DatasetCache):
     def dataset(
         self, instruments, fields, start_time=None, end_time=None, freq="day", disk_cache=0, inst_processors=[]
     ):
-
         if "local" in C.dataset_provider.lower():
             # use LocalDatasetProvider
             return self.provider.dataset(
@@ -1277,7 +1270,6 @@ class MemoryCalendarCache(CalendarCache):
         uri = self._uri(start_time, end_time, freq, future)
         result, expire = MemCacheExpire.get_cache(H["c"], uri)
         if result is None or expire:
-
             result = self.provider.calendar(start_time, end_time, freq, future)
             MemCacheExpire.set_cache(H["c"], uri, result)
 

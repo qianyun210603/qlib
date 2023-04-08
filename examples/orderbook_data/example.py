@@ -1,10 +1,12 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+import unittest
+
 from arctic.arctic import Arctic
+
 import qlib
 from qlib.data import D
-import unittest
 
 
 class TestClass(unittest.TestCase):

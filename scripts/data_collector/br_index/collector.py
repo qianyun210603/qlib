@@ -1,15 +1,15 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
-from functools import partial
-import sys
-from pathlib import Path
-import importlib
 import datetime
+import importlib
+import sys
+from functools import partial
+from pathlib import Path
 
 import fire
 import pandas as pd
-from tqdm import tqdm
 from loguru import logger
+from tqdm import tqdm
 
 CUR_DIR = Path(__file__).resolve().parent
 sys.path.append(str(CUR_DIR.parent.parent))
@@ -21,7 +21,6 @@ quarter_dict = {"1Q": "01-03", "2Q": "05-01", "3Q": "09-01"}
 
 
 class IBOVIndex(IndexBase):
-
     ibov_index_composition = "https://raw.githubusercontent.com/igor17400/IBOV-HCI/main/historic_composition/{}.csv"
     years_4_month_periods = []
 

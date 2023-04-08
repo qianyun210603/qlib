@@ -8,7 +8,18 @@ from datetime import time
 from enum import IntEnum
 
 # try to fix circular imports when enabling type hints
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, List, Optional, Tuple, TypeVar, Union, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    ClassVar,
+    Generic,
+    List,
+    Optional,
+    Tuple,
+    TypeVar,
+    Union,
+    cast,
+)
 
 from qlib.backtest.utils import TradeCalendarManager
 from qlib.data.data import Cal

@@ -15,9 +15,20 @@ from typing import List
 import cachetools
 import numpy as np
 import pandas as pd
+
 import qlib
 from qlib.constant import REG_CN
-from qlib.contrib.ops.high_freq import BFillNan, Cut, Date, DayCumsum, DayLast, FFillNan, IsInf, IsNull, Select
+from qlib.contrib.ops.high_freq import (
+    BFillNan,
+    Cut,
+    Date,
+    DayCumsum,
+    DayLast,
+    FFillNan,
+    IsInf,
+    IsNull,
+    Select,
+)
 from qlib.data.dataset import DatasetH
 
 dataset = None

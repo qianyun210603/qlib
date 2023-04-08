@@ -1,11 +1,13 @@
+import unittest
 from typing import List, Tuple, Union
-from qlib.backtest.position import Position
+
+import pandas as pd
+
+import qlib
 from qlib.backtest import collect_data, format_decisions
 from qlib.backtest.decision import BaseTradeDecision, TradeRangeByTime
-import qlib
+from qlib.backtest.position import Position
 from qlib.tests import TestAutoData
-import unittest
-import pandas as pd
 
 
 @unittest.skip("This test takes a lot of time due to the large size of high-frequency data")
@@ -27,7 +29,6 @@ class TestHFBacktest(TestAutoData):
         return pd.DataFrame(orders, columns=headers)
 
     def test_trading(self):
-
         # date = "2020-02-03"
         # inst = "SH600068"
         # pos = 2.0167

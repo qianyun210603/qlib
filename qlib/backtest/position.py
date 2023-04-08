@@ -11,8 +11,8 @@ import pandas as pd
 
 from ..data.data import D
 from ..data.inst_info import ConvertInstrumentInfo
-from .decision import Order
 from ..log import get_module_logger
+from .decision import Order
 
 
 class BasePosition:

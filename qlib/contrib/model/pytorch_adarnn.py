@@ -1,8 +1,6 @@
 # Copyright (c) Microsoft Corporation.
-import os
-from torch.utils.data import Dataset, DataLoader
-
 import copy
+import os
 from typing import Text, Union
 
 import numpy as np
@@ -12,6 +10,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.autograd import Function
+from torch.utils.data import DataLoader, Dataset
+
 from qlib.contrib.model.pytorch_utils import count_parameters
 from qlib.data.dataset import DatasetH
 from qlib.data.dataset.handler import DataHandlerLP
@@ -56,7 +56,7 @@ class ADARNN(Model):
         n_splits=2,
         GPU=0,
         seed=None,
-        **_
+        **_,
     ):
         # Set logger.
         self.logger = get_module_logger("ADARNN")
@@ -246,7 +246,6 @@ class ADARNN(Model):
         evals_result=dict(),
         save_path=None,
     ):
-
         df_train, df_valid = dataset.prepare(
             ["train", "valid"],
             col_set=["feature", "label"],
@@ -318,7 +317,6 @@ class ADARNN(Model):
         preds = []
 
         for begin in range(sample_num)[:: self.batch_size]:
-
             if sample_num - begin < self.batch_size:
                 end = sample_num
             else:

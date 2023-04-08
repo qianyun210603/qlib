@@ -1,21 +1,18 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 from functools import partial
+from typing import Sequence
 
-import pandas as pd
-import numpy as np
-
-import plotly.graph_objs as go
-
-import statsmodels.api as sm
 import matplotlib.pyplot as plt
-
+import numpy as np
+import pandas as pd
+import plotly.graph_objs as go
+import statsmodels.api as sm
 from scipy import stats
 
-from typing import Sequence
 from qlib.typehint import Literal
 
-from ..graph import ScatterGraph, SubplotsGraph, BarGraph, HeatmapGraph
+from ..graph import BarGraph, HeatmapGraph, ScatterGraph, SubplotsGraph
 from ..utils import guess_plotly_rangebreaks
 
 

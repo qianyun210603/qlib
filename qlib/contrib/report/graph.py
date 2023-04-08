@@ -1,21 +1,18 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-import math
 import importlib
+import math
 from typing import Iterable
 
 import pandas as pd
-
-import plotly.offline as py
 import plotly.graph_objs as go
-
-from plotly.subplots import make_subplots
+import plotly.offline as py
 from plotly.figure_factory import create_distplot
+from plotly.subplots import make_subplots
 
 
 class BaseGraph:
-
     _name = None
 
     def __init__(
@@ -431,7 +428,6 @@ class TableGraph(BaseGraph):
         name_dict: dict = dict(),
         **kwargs,
     ):
-
         self.header_kwargs = graph_kwargs.pop("header_kwargs", {})
         self.cell_kwargs = graph_kwargs.pop("cell_kwargs", {})
         self.header_height = self.header_kwargs.pop("height", 25)

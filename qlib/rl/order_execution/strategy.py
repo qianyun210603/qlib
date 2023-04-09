@@ -15,12 +15,7 @@ from tianshou.data import Batch
 from tianshou.policy import BasePolicy
 
 from qlib.backtest import CommonInfrastructure, Order
-from qlib.backtest.decision import (
-    BaseTradeDecision,
-    TradeDecisionWithDetails,
-    TradeDecisionWO,
-    TradeRange,
-)
+from qlib.backtest.decision import BaseTradeDecision, TradeDecisionWithDetails, TradeDecisionWO, TradeRange
 from qlib.backtest.exchange import Exchange
 from qlib.backtest.executor import BaseExecutor
 from qlib.backtest.utils import LevelInfrastructure, get_start_end_idx

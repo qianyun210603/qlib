@@ -10,11 +10,7 @@ from typing import Union
 __all__ = ["Literal", "TypedDict", "final", "InstConf"]
 
 if sys.version_info >= (3, 8):
-    from typing import (  # type: ignore  # pylint: disable=no-name-in-module
-        Literal,
-        TypedDict,
-        final,
-    )
+    from typing import Literal, TypedDict, final  # type: ignore  # pylint: disable=no-name-in-module
 else:
     from typing_extensions import Literal, TypedDict, final
 

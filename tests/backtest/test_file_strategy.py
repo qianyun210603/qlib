@@ -102,7 +102,7 @@ class FileStrTest(TestAutoData):
                 },
             },
         }
-        report_dict, indicator_dict = backtest(
+        report_dict, indicator_dict, *_ = backtest(
             executor=executor_config,
             strategy=strategy_config,
             **backtest_config,

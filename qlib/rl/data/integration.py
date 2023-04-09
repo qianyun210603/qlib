@@ -18,17 +18,7 @@ import pandas as pd
 
 import qlib
 from qlib.constant import REG_CN
-from qlib.contrib.ops.high_freq import (
-    BFillNan,
-    Cut,
-    Date,
-    DayCumsum,
-    DayLast,
-    FFillNan,
-    IsInf,
-    IsNull,
-    Select,
-)
+from qlib.contrib.ops.high_freq import BFillNan, Cut, Date, DayCumsum, DayLast, FFillNan, IsInf, IsNull, Select
 from qlib.data.dataset import DatasetH
 
 dataset = None
@@ -128,6 +118,7 @@ def init_qlib(qlib_config: dict, part: str | None = None) -> None:
         kernels=1,
         redis_port=-1,
         clear_mem_cache=False,  # init_qlib will be called for multiple times. Keep the cache for improving performance
+        ohlc_adjusted=qlib_config.get("ohlc_adjusted", True),
     )
 
     if part == "skip":

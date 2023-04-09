@@ -15,7 +15,7 @@ import time
 import traceback
 from collections import OrderedDict
 from pathlib import Path
-from typing import Iterable, Union, Optional
+from typing import Iterable, Optional, Union
 
 import numpy as np
 import pandas as pd

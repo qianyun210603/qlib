@@ -4,16 +4,7 @@
 import pickle
 
 import fire
-from highfreq_ops import (
-    BFillNan,
-    Cut,
-    Date,
-    DayLast,
-    FFillNan,
-    IsNull,
-    Select,
-    get_calendar_day,
-)
+from highfreq_ops import BFillNan, Cut, Date, DayLast, FFillNan, IsNull, Select, get_calendar_day
 
 import qlib
 from qlib.config import HIGH_FREQ_CONFIG

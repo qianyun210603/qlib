@@ -4,28 +4,13 @@
 from __future__ import annotations
 
 import weakref
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Generic,
-    Iterable,
-    Iterator,
-    Optional,
-    Tuple,
-    cast,
-)
+from typing import Any, Callable, Dict, Generic, Iterable, Iterator, Optional, Tuple, cast
 
 import gym
 from gym import Space
 
 from qlib.rl.aux_info import AuxiliaryInfoCollector
-from qlib.rl.interpreter import (
-    ActionInterpreter,
-    ObsType,
-    PolicyActType,
-    StateInterpreter,
-)
+from qlib.rl.interpreter import ActionInterpreter, ObsType, PolicyActType, StateInterpreter
 from qlib.rl.reward import Reward
 from qlib.rl.simulator import ActType, InitialStateType, Simulator, StateType
 from qlib.typehint import TypedDict

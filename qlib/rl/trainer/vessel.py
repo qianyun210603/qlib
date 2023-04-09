@@ -4,18 +4,7 @@
 from __future__ import annotations
 
 import weakref
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    ContextManager,
-    Dict,
-    Generic,
-    Iterable,
-    Sequence,
-    TypeVar,
-    cast,
-)
+from typing import TYPE_CHECKING, Any, Callable, ContextManager, Dict, Generic, Iterable, Sequence, TypeVar, cast
 
 import numpy as np
 from tianshou.data import Collector, VectorReplayBuffer
@@ -24,14 +13,7 @@ from tianshou.policy import BasePolicy
 
 from qlib.constant import INF
 from qlib.log import get_module_logger
-from qlib.rl.interpreter import (
-    ActionInterpreter,
-    ActType,
-    ObsType,
-    PolicyActType,
-    StateInterpreter,
-    StateType,
-)
+from qlib.rl.interpreter import ActionInterpreter, ActType, ObsType, PolicyActType, StateInterpreter, StateType
 from qlib.rl.reward import Reward
 from qlib.rl.simulator import InitialStateType, Simulator
 from qlib.rl.utils import DataQueue

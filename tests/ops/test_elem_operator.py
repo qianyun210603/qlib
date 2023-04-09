@@ -50,15 +50,13 @@ class TestOperatorDataSetting(TestOperatorData):
 class TestInstElementOperator(TestOperatorData):
     def setUp(self) -> None:
         freq = "day"
-        expressions = [
-            "$change",
-            "Abs($change)",
-        ]
-        columns = ["change", "abs"]
+        expressions = {
+            "change": "$change",
+            "abs": "Abs($change)",
+        }
         self.data = DatasetProvider.inst_calculator(
-            self.inst, self.start_time, self.end_time, freq, expressions, self.spans, C, []
+            self.inst, self.start_time, self.end_time, freq, list(expressions.keys()), expressions, self.spans, C, []
         )
-        self.data.columns = columns
 
     @pytest.mark.slow
     def test_abs(self):

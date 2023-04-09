@@ -14,15 +14,7 @@ import torch
 
 from qlib.log import get_module_logger
 from qlib.rl.simulator import InitialStateType
-from qlib.rl.utils import (
-    EnvWrapper,
-    FiniteEnvType,
-    LogBuffer,
-    LogCollector,
-    LogLevel,
-    LogWriter,
-    vectorize_env,
-)
+from qlib.rl.utils import EnvWrapper, FiniteEnvType, LogBuffer, LogCollector, LogLevel, LogWriter, vectorize_env
 from qlib.rl.utils.finite_env import FiniteVectorEnv
 from qlib.typehint import Literal
 

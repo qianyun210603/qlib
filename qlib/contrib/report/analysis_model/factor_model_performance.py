@@ -10,14 +10,7 @@ import plotly.graph_objs as go
 import statsmodels.api as sm
 from scipy import stats
 
-from ..graph import (
-    BarGraph,
-    BoxGraph,
-    HeatmapGraph,
-    ScatterGraph,
-    SubplotsGraph,
-    TableGraph,
-)
+from ..graph import BarGraph, BoxGraph, HeatmapGraph, ScatterGraph, SubplotsGraph, TableGraph
 from ..utils import guess_plotly_rangebreaks
 
 

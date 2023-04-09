@@ -11,19 +11,7 @@ from __future__ import annotations
 import copy
 import warnings
 from contextlib import contextmanager
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Generator,
-    List,
-    Optional,
-    Set,
-    Tuple,
-    Type,
-    Union,
-    cast,
-)
+from typing import Any, Callable, Dict, Generator, List, Optional, Set, Tuple, Type, Union, cast
 
 import gym
 import numpy as np

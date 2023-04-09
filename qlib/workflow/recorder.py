@@ -361,8 +361,6 @@ class MLflowRecorder(Recorder):
         Mlflow only log the commit id of the current repo. But usually, user will have a lot of uncommitted changes.
         So this tries to automatically to log them all.
         """
-        curr_folder = os.getcwd()  # record original folder
-        os.chdir(Path(__file__).parent.parent.parent)  # switch to qlib root folder to run git
         # TODO: the sub-directories maybe git repos.
         # So it will be better if we can walk the sub-directories and log the uncommitted changes.
         for cmd, fname in [
@@ -375,7 +373,6 @@ class MLflowRecorder(Recorder):
                 self.client.log_text(self.id, out.decode(), fname)  # this behaves same as above
             except subprocess.CalledProcessError:
                 logger.info(f"Fail to log the uncommitted code of $CWD({os.getcwd()}) when run {cmd}.")
-        os.chdir(curr_folder)  # cd to original folder
 
     def end_run(self, status: str = Recorder.STATUS_S):
         assert status in [
@@ -388,7 +385,7 @@ class MLflowRecorder(Recorder):
         if self.status != Recorder.STATUS_S:
             self.status = status
         if self.async_log is not None:
-            # Waiting Queue should go before mlflow.end_run. Otherwise mlflow will raise error
+            # Waiting Queue should go before mlflow.end_run. Otherwise, mlflow will raise error
             with TimeInspector.logt("waiting `async_log`"):
                 self.async_log.wait()
         self.async_log = None

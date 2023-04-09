@@ -14,10 +14,7 @@ import qlib
 from qlib.contrib.evaluate import backtest_daily, risk_analysis
 from qlib.contrib.strategy import TopkDropoutStrategy
 from qlib.model.trainer import DelayTrainerR, DelayTrainerRM, TrainerR, TrainerRM
-from qlib.tests.config import (
-    CSI100_RECORD_LGB_TASK_CONFIG_ONLINE,
-    CSI100_RECORD_XGBOOST_TASK_CONFIG_ONLINE,
-)
+from qlib.tests.config import CSI100_RECORD_LGB_TASK_CONFIG_ONLINE, CSI100_RECORD_XGBOOST_TASK_CONFIG_ONLINE
 from qlib.workflow import R
 from qlib.workflow.online.manager import OnlineManager
 from qlib.workflow.online.strategy import RollingStrategy

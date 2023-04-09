@@ -3,18 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Tuple,
-    Type,
-    Union,
-    cast,
-)
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Tuple, Type, Union, cast
 
 from ..utils.index_data import IndexData
 
@@ -213,9 +202,11 @@ class Exchange:
         self.quote: BaseQuote = self.quote_cls(self.quote_df, freq)
 
         self.instrument_info = {}
-        dpm_uri = C.dpm.get_data_uri()
-        if C.dpm.get_uri_type(dpm_uri) == "local":
-            instrument_info_path = dpm_uri.joinpath("contract_specs")
+        dpm_uri = C.dpm.provider_uri.get("day", C.dpm.provider_uri.get(C.DEFAULT_FREQ, None))
+        if dpm_uri is not None and C.dpm.get_uri_type(dpm_uri) == "local":
+            from pathlib import Path  # pylint: disable=import-outside-toplevel
+
+            instrument_info_path = Path(dpm_uri).joinpath("contract_specs")
             if instrument_info_path.exists():
                 import pickle  # pylint: disable=import-outside-toplevel
 

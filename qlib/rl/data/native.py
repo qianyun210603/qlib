@@ -11,11 +11,7 @@ from qlib.backtest import Exchange, Order
 from qlib.backtest.decision import TradeRange, TradeRangeByTime
 from qlib.rl.order_execution.utils import get_ticks_slice
 
-from .base import (
-    BaseIntradayBacktestData,
-    BaseIntradayProcessedData,
-    ProcessedDataProvider,
-)
+from .base import BaseIntradayBacktestData, BaseIntradayProcessedData, ProcessedDataProvider
 from .integration import fetch_features
 
 

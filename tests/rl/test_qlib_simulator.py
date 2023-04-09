@@ -103,6 +103,7 @@ def get_simulator(order: Order) -> SingleAssetOrderExecution:
             "$open_1", "$high_1", "$low_1", "$close_1", "$vwap_1", "$bid_1", "$ask_1", "$volume_1",
             "$bidV_1", "$bidV1_1", "$bidV3_1", "$bidV5_1", "$askV_1", "$askV1_1", "$askV3_1", "$askV5_1",
         ],
+        "ohlc_adjusted": True,
     }
     # fmt: on
 

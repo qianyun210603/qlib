@@ -21,12 +21,7 @@ from qlib.data.dataset import Dataset
 from qlib.data.dataset.weight import Reweighter
 from qlib.log import get_module_logger
 from qlib.model.base import Model
-from qlib.utils import (
-    auto_filter_kwargs,
-    fill_placeholder,
-    flatten_dict,
-    init_instance_by_config,
-)
+from qlib.utils import auto_filter_kwargs, fill_placeholder, flatten_dict, init_instance_by_config
 from qlib.utils.paral import call_in_subproc
 from qlib.workflow import R
 from qlib.workflow.recorder import Recorder

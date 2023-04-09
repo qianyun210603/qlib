@@ -1,20 +1,17 @@
 import unittest
-from typing import List, Tuple, Union
 
 import pandas as pd
 
-import qlib
 from qlib.backtest import collect_data, format_decisions
-from qlib.backtest.decision import BaseTradeDecision, TradeRangeByTime
-from qlib.backtest.position import Position
+from qlib.backtest.decision import TradeRangeByTime
 from qlib.tests import TestAutoData
 
 
 @unittest.skip("This test takes a lot of time due to the large size of high-frequency data")
 class TestHFBacktest(TestAutoData):
     @classmethod
-    def setUpClass(cls) -> None:
-        super().setUpClass(enable_1min=True, enable_1d_type="full")
+    def setUpClass(cls, enable_1d_type="full", enable_1min=True) -> None:
+        super().setUpClass(enable_1min=enable_1min, enable_1d_type=enable_1d_type)
 
     def _gen_orders(self, inst, date, pos) -> pd.DataFrame:
         headers = [

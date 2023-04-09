@@ -8,14 +8,7 @@ import pandas as pd
 from qlib.data import D
 from qlib.data.data import Cal, DatasetD
 from qlib.data.filter import NameDFilter
-from qlib.data.storage import (
-    CalendarStorage,
-    CalVT,
-    FeatureStorage,
-    InstKT,
-    InstrumentStorage,
-    InstVT,
-)
+from qlib.data.storage import CalendarStorage, CalVT, FeatureStorage, InstKT, InstrumentStorage, InstVT
 
 from .. import init
 from ..constant import REG_CN, REG_TW
@@ -23,7 +16,7 @@ from .data import GetData
 
 
 class TestAutoData(unittest.TestCase):
-    _setup_kwargs = {}
+    _setup_kwargs = {"ohlc_adjusted": True}
     provider_uri = "~/.qlib/qlib_data/cn_data_simple"  # target_dir
     provider_uri_1day = "~/.qlib/qlib_data/cn_data"  # target_dir
     provider_uri_1min = "~/.qlib/qlib_data/cn_data_1min"
@@ -290,6 +283,7 @@ class TestMockData(unittest.TestCase):
             "module_path": "qlib.data.data",
             "kwargs": {"backend": {"class": "MockFeatureStorage", "module_path": "qlib.tests"}},
         },
+        "ohlc_adjusted": True,
     }
 
     @classmethod

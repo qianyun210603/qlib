@@ -15,10 +15,7 @@ import qlib
 from qlib.constant import REG_CN
 from qlib.model.ens.group import RollingGroup
 from qlib.model.trainer import TrainerR, TrainerRM, task_train
-from qlib.tests.config import (
-    CSI100_RECORD_LGB_TASK_CONFIG,
-    CSI100_RECORD_XGBOOST_TASK_CONFIG,
-)
+from qlib.tests.config import CSI100_RECORD_LGB_TASK_CONFIG, CSI100_RECORD_XGBOOST_TASK_CONFIG
 from qlib.workflow import R
 from qlib.workflow.task.collect import RecorderCollector
 from qlib.workflow.task.gen import RollingGen, task_generator

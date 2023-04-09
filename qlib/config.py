@@ -410,11 +410,7 @@ class QlibConfig(Config):
         default_conf : str
             the default config template chosen by user: "server", "client"
         """
-        from .utils import (  # pylint: disable=C0415
-            can_use_cache,
-            get_module_logger,
-            set_log_with_config,
-        )
+        from .utils import can_use_cache, get_module_logger, set_log_with_config  # pylint: disable=C0415
 
         self.reset()
 

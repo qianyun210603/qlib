@@ -166,10 +166,7 @@ class DataQueue(Generic[T]):
 
     def _producer(self) -> None:
         # pytorch dataloader is used here only because we need its sampler and multi-processing
-        from torch.utils.data import (  # pylint: disable=import-outside-toplevel
-            DataLoader,
-            Dataset,
-        )
+        from torch.utils.data import DataLoader, Dataset  # pylint: disable=import-outside-toplevel
 
         try:
             dataloader = DataLoader(

@@ -10,14 +10,7 @@ import pandas as pd
 
 from qlib.config import C
 from qlib.data.cache import H
-from qlib.data.storage import (
-    CalendarStorage,
-    CalVT,
-    FeatureStorage,
-    InstKT,
-    InstrumentStorage,
-    InstVT,
-)
+from qlib.data.storage import CalendarStorage, CalVT, FeatureStorage, InstKT, InstrumentStorage, InstVT
 from qlib.log import get_module_logger
 from qlib.utils.resam import resam_calendar
 from qlib.utils.time import Freq

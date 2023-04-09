@@ -37,12 +37,7 @@ from qlib.typehint import InstConf
 
 from ..config import C
 from ..log import get_module_logger, set_log_with_config
-from .file import (
-    get_or_create_path,
-    get_tmp_file_with_buffer,
-    save_multiple_parts_file,
-    unpack_archive_with_buffer,
-)
+from .file import get_or_create_path, get_tmp_file_with_buffer, save_multiple_parts_file, unpack_archive_with_buffer
 
 log = get_module_logger("utils")
 # MultiIndex.is_lexsorted() is a deprecated method in Pandas 1.3.0.

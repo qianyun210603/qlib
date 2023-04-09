@@ -3,11 +3,7 @@
 
 import pandas as pd
 
-from qlib.contrib.data.handler import (
-    _DEFAULT_LEARN_PROCESSORS,
-    DataHandlerLP,
-    check_transform_proc,
-)
+from qlib.contrib.data.handler import _DEFAULT_LEARN_PROCESSORS, DataHandlerLP, check_transform_proc
 from qlib.data.dataset.loader import QlibDataLoader
 
 

@@ -172,8 +172,8 @@ class DumpPitData:
 
         Parameters
         ----------
-        symbol: str
-            stock symbol
+        file_path: str
+            path of dump file
         interval: str
             data interval
         overwrite: bool
@@ -194,7 +194,7 @@ class DumpPitData:
             ## calculate first & last period
             start_year = df_sub[self.period_column_name].min()
             end_year = df_sub[self.period_column_name].max()
-            if interval == self.INTERVAL_quarterly:
+            if interval[0] in {"q", "m"}:
                 start_year //= 100
                 end_year //= 100
 
@@ -203,8 +203,10 @@ class DumpPitData:
                 with open(index_file, "rb") as fi:
                     (first_year,) = struct.unpack(self.PERIOD_DTYPE, fi.read(self.PERIOD_DTYPE_SIZE))
                     n_years = len(fi.read()) // self.INDEX_DTYPE_SIZE
-                    if interval == self.INTERVAL_quarterly:
+                    if interval[0] == "q":
                         n_years //= 4
+                    elif interval[0] == "m":
+                        n_years //= 12
                     start_year = first_year + n_years
             else:
                 with open(index_file, "wb") as f:
@@ -219,8 +221,10 @@ class DumpPitData:
             # dump index filled with NA
             with open(index_file, "ab") as fi:
                 for year in range(start_year, end_year + 1):
-                    if interval == self.INTERVAL_quarterly:
+                    if interval[0] == "q":
                         fi.write(struct.pack(self.INDEX_DTYPE * 4, *[self.NA_INDEX] * 4))
+                    elif interval[0] == "m":
+                        fi.write(struct.pack(self.INDEX_DTYPE * 12, *[self.NA_INDEX] * 12))
                     else:
                         fi.write(struct.pack(self.INDEX_DTYPE, self.NA_INDEX))
 
@@ -241,7 +245,7 @@ class DumpPitData:
                 # update index if needed
                 for i, row in df_sub.iterrows():
                     # get index
-                    offset = get_period_offset(first_year, row.period, interval == self.INTERVAL_quarterly)
+                    offset = get_period_offset(first_year, row.period, interval[0])
 
                     fi.seek(self.PERIOD_DTYPE_SIZE + self.INDEX_DTYPE_SIZE * offset)
                     (cur_index,) = struct.unpack(self.INDEX_DTYPE, fi.read(self.INDEX_DTYPE_SIZE))

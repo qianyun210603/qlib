@@ -21,12 +21,7 @@ CUR_DIR = Path(__file__).resolve().parent
 sys.path.append(str(CUR_DIR.parent.parent))
 
 from data_collector.index import IndexBase
-from data_collector.utils import (
-    deco_retry,
-    get_calendar_list,
-    get_instruments,
-    get_trading_date_by_shift,
-)
+from data_collector.utils import deco_retry, get_calendar_list, get_instruments, get_trading_date_by_shift
 
 NEW_COMPANIES_URL = "https://csi-web-dev.oss-cn-shanghai-finance-1-pub.aliyuncs.com/static/html/csindex/public/uploads/file/autofile/cons/{index_code}cons.xls"
 

@@ -17,13 +17,7 @@ from ...log import get_module_logger
 from ...utils import get_pre_trading_date, is_tradable_date
 from ..backtest.backtest import update_account
 from ..evaluate import risk_analysis
-from .executor import (
-    SimulatorExecutor,
-    load_order_list,
-    load_score_series,
-    save_order_list,
-    save_score_series,
-)
+from .executor import SimulatorExecutor, load_order_list, load_score_series, save_order_list, save_score_series
 from .manager import UserManager
 from .utils import create_user_folder, prepare
 

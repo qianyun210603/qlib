@@ -1,28 +1,13 @@
 import bisect
 from copy import copy, deepcopy
 from inspect import getfullargspec
-from typing import (
-    Callable,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Sequence,
-    Text,
-    Tuple,
-    Union,
-)
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Text, Tuple, Union
 
 import numpy as np
 import pandas as pd
 
 from ...log import get_module_logger
-from ...utils import (
-    init_instance_by_config,
-    lazy_sort_index,
-    np_ffill,
-    time_to_slc_point,
-)
+from ...utils import init_instance_by_config, lazy_sort_index, np_ffill, time_to_slc_point
 from ...utils.serial import Serializable
 from .handler import DataHandler, DataHandlerLP
 from .utils import get_level_index

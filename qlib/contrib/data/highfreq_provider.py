@@ -9,17 +9,7 @@ from joblib import Parallel, delayed
 import qlib
 from qlib import get_module_logger
 from qlib.config import REG_CN
-from qlib.contrib.ops.high_freq import (
-    BFillNan,
-    Cut,
-    Date,
-    DayLast,
-    FFillNan,
-    IsInf,
-    IsNull,
-    Select,
-    get_calendar_day,
-)
+from qlib.contrib.ops.high_freq import BFillNan, Cut, Date, DayLast, FFillNan, IsInf, IsNull, Select, get_calendar_day
 from qlib.data import D
 from qlib.data.data import Cal
 from qlib.data.dataset.handler import DataHandlerLP

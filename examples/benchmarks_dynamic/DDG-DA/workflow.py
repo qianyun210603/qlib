@@ -19,9 +19,7 @@ from qlib.workflow import R
 
 DIRNAME = Path(__file__).absolute().resolve().parent
 sys.path.append(str(DIRNAME.parent / "baseline"))
-from rolling_benchmark import (
-    RollingBenchmark,  # NOTE: sys.path is changed for import RollingBenchmark
-)
+from rolling_benchmark import RollingBenchmark  # NOTE: sys.path is changed for import RollingBenchmark
 
 
 class DDGDA:

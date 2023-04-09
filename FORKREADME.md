@@ -1,6 +1,6 @@
 [![Python Versions](https://img.shields.io/pypi/pyversions/pyqlib.svg?logo=python&logoColor=white)](https://pypi.org/project/pyqlib/#files)
 [![Platform](https://img.shields.io/badge/platform-linux%20%7C%20windows-lightgrey)](https://pypi.org/project/pyqlib/#files)
-[![Github Actions Test Status](https://github.com/qianyun210603/qlib/workflows/Test/badge.svg?branch=main)](https://github.com/qianyun210603/qlib/actions)
+[![Github Actions Test Status](https://github.com/qianyun210603/qlib/actions/workflows/Tests.yml/badge.svg)](https://github.com/qianyun210603/qlib/actions)
 [![Documentation Status](https://readthedocs.org/projects/qlib/badge/?version=latest)](https://qlib.readthedocs.io/en/latest/?badge=latest)
 [![License](https://img.shields.io/pypi/l/pyqlib)](LICENSE)
 
@@ -63,7 +63,7 @@ Also, users can install the latest dev version ``Qlib`` by the source code accor
     ```
   **Note**:  You can install Qlib with `python setup.py install` as well. But it is not the recommended approach. It will skip `pip` and cause obscure problems. For example, **only** the command ``pip install .`` **can** overwrite the stable version installed by ``pip install pyqlib``, while the command ``python setup.py install`` **can't**.
 
-**Tips**: If you fail to install `Qlib` or run the examples in your environment,  comparing your steps and the [CI workflow](.github/workflows/test_qlib_from_source.yml) may help you find the problem.
+**Tips**: If you fail to install `Qlib` or run the examples in your environment,  comparing your steps and the [CI workflow](.github/workflows/Tests.yml) may help you find the problem.
 
 ## Data Preparation
 TODO

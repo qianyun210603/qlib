@@ -5,13 +5,32 @@
 [![License](https://img.shields.io/pypi/l/pyqlib)](LICENSE)
 
 
-Qlib is an AI-oriented quantitative investment platform, which aims to realize the potential, empower the research, and create the value of AI technologies in quantitative investment.
+This is a fork of [Microsoft Qlib](http://github.com/microsoft/qlib) with some bug fixes and new features. Thanks for the Microsoft Qlib team for their great work.
 
-It contains the full ML pipeline of data processing, model training, back-testing; and covers the entire chain of quantitative investment: alpha seeking, risk modeling, portfolio optimization, and order execution. 
+# Motivation of this fork
+I'm currently using qlib to resarch and execute some factor strategies on my own. However, some features I need are not avaliable in the original qlib also there are some bugs. So I forked the original qlib and added some features I need. I hope this fork can help some people who are also using qlib.
+I will try to merge some non-debateable features/bugfix to the original qlib. But will keep some features that might be controversial in the fork only.
 
-With Qlib, users can easily try ideas to create better Quant investment strategies.
+# Features
+| Feature                        | Description                                                              | Status |
+|--------------------------------|--------------------------------------------------------------------------| -- |
+| Cross Sectional Factor         | Add cross-sectional factors such as cross-sectional ranking; average etc | Done |
+| Orthogonalization preprocesser | Add preprocessers to do Schimit and Symetric Orthogonalization           | Done |
+| Support non-adjusted data      | Add support for non-adjusted data                                        | Done |
+| Enhanced plotting I            | Use rangebreak to allow Datetime axis in plottings                       | [Merged](https://github.com/microsoft/qlib/pull/1390) |
+| Enhanced plotting II           | Add support for plotting factor returns                                  | Done |
+| Topk backtest engine I         | Allow sell in limit-up case and allow buy in limit-down case             | [Merged](https://github.com/microsoft/qlib/pull/1407 |
 
-For more details, please refer to our paper ["Qlib: An AI-oriented Quantitative Investment Platform"](https://arxiv.org/abs/2009.11189).
+<span style="font-size: xx-small; ">
+<b>Note:</b>
+<ul>
+<li><b>Done:</b> The feature is implemented in this fork but will not be merged to the original qlib. Either because it is rejected by the original qlib team or because it is not suitable for the original qlib.</li>
+<li><b>Merged:</b> The feature is merged to the original qlib.</li>
+<li><b>Merging:</b> PR opened to the original qlib but not accepted yet.</li>
+<li><b>Developing:</b> The feature is under development.</li>
+</ul>
+</span>
+
 
 # Quick Start
 
@@ -19,8 +38,7 @@ This quick start guide tries to demonstrate
 1. It's very easy to build a complete Quant research workflow and try your ideas with _Qlib_.
 2. Though with *public data* and *simple models*, machine learning technologies **work very well** in practical Quant investment.
 
-Here is a quick **[demo](https://terminalizer.com/view/3f24561a4470)** shows how to install ``Qlib``, and run LightGBM with ``qrun``. **But**, please make sure you have already prepared the data following the [instruction](#data-preparation).
-
+Here is a quick **[demo](https://terminalizer.com/view/3f24561a4470)** shows how to install ``Qlib``, and run LightGBM with ``qrun``.
 
 ## Installation
 
@@ -33,9 +51,9 @@ This table demonstrates the supported Python version of `Qlib`:
 
 **Note**: 
 1. **Conda** is suggested for managing your Python environment.
-1. Please pay attention that installing cython in Python 3.6 will raise some error when installing ``Qlib`` from source. If users use Python 3.6 on their machines, it is recommended to *upgrade* Python to version 3.7 or use `conda`'s Python to install ``Qlib`` from source.
-1. For Python 3.9, `Qlib` supports running workflows such as training models, doing backtest and plot most of the related figures (those included in [notebook](examples/workflow_by_code.ipynb)). However, plotting for the *model performance* is not supported for now and we will fix this when the dependent packages are upgraded in the future.
-1. `Qlib`Requires `tables` package, `hdf5` in tables does not support python3.9. 
+2. Please pay attention that installing cython in Python 3.6 will raise some error when installing ``Qlib`` from source. If users use Python 3.6 on their machines, it is recommended to *upgrade* Python to version 3.7 or use `conda`'s Python to install ``Qlib`` from source.
+3. For Python 3.9, `Qlib` supports running workflows such as training models, doing backtest and plot most of the related figures (those included in [notebook](examples/workflow_by_code.ipynb)). However, plotting for the *model performance* is not supported for now and we will fix this when the dependent packages are upgraded in the future.
+4. `Qlib`Requires `tables` package, `hdf5` in tables does not support python3.9. 
 
 ### Install from package manager
 Current the fork is not available in pip or conda
@@ -59,9 +77,9 @@ Users can install the latest forked version ``Qlib`` by the source code accordin
 
 **Tips**: If you fail to install `Qlib` or run the examples in your environment,  comparing your steps and the [CI workflow](.github/workflows/Tests.yml) may help you find the problem.
 
-## Data Preparation
-TODO
+### More details
+Please refer the [readme](http://github.com/microsoft/qlib) and [documentation](https://qlib.readthedocs.io/en/latest) of the original qlib.
 
 
 ## Licence
-TODO
+The forked version inherits the licence of the original qlib. See [LICENSE](LICENSE) for details.

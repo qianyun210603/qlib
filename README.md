@@ -19,7 +19,7 @@ I will try to merge some non-debateable features/bugfix to the original qlib. Bu
 | Support non-adjusted data      | Add support for non-adjusted data                                        | Done |
 | Enhanced plotting I            | Use rangebreak to allow Datetime axis in plottings                       | [Merged](https://github.com/microsoft/qlib/pull/1390) |
 | Enhanced plotting II           | Add support for plotting factor returns                                  | Done |
-| Topk backtest engine I         | Allow sell in limit-up case and allow buy in limit-down case             | [Merged](https://github.com/microsoft/qlib/pull/1407 |
+| Topk backtest engine I         | Allow sell in limit-up case and allow buy in limit-down case             | [Merged](https://github.com/microsoft/qlib/pull/1407) |
 
 <span style="font-size: xx-small; ">
 <b>Note:</b>

@@ -16,7 +16,6 @@ import yaml
 from tianshou.policy import BasePolicy
 from torch.utils.data import Dataset
 
-import qlib
 from qlib.backtest import Order
 from qlib.backtest.decision import OrderDir
 from qlib.constant import ONE_MIN

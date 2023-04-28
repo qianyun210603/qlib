@@ -1,2 +1,2 @@
-.github/workflows/*.yaml merge=ours
+.github/workflows merge=ours
 .gitattributes merge=ours

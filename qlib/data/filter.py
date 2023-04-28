@@ -143,7 +143,9 @@ class SeriesDFilter(BaseDFilter):
             the series of bool value indicating whether the date satisfies the filter condition and exists in target timestamp.
         """
         fstart, fend = list(filter_series.keys())[0], list(filter_series.keys())[-1]
-        filter_series = filter_series.astype("bool")  # Make sure the filter_series is boolean
+        filter_series = (
+            filter_series.astype("bool") if self.keep else ~filter_series.astype("bool")
+        )  # Make sure the filter_series is boolean
         timestamp_series[fstart:fend] = timestamp_series[fstart:fend] & filter_series
         return timestamp_series
 
@@ -245,13 +247,11 @@ class SeriesDFilter(BaseDFilter):
             # Construct a whole map of date
             _timestamp_series = self._toSeries(_all_calendar, timestamp)
             # Get filter series
-            if inst in _all_filter_series:
-                _filter_series = _all_filter_series[inst]
-            else:
-                if self.keep:
-                    _filter_series = pd.Series({timestamp: True for timestamp in _filter_calendar})
-                else:
-                    _filter_series = pd.Series({timestamp: False for timestamp in _filter_calendar})
+            _filter_series = (
+                _all_filter_series[inst]
+                if inst in _all_filter_series
+                else pd.Series({timestamp: True for timestamp in _filter_calendar})
+            )
             # Calculate bool value within the range of filter
             _timestamp_series = self._filterSeries(_timestamp_series, _filter_series)
             # Reform the map to (start_timestamp, end_timestamp) format

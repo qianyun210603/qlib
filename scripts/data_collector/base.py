@@ -41,6 +41,7 @@ class BaseCollector(abc.ABC):
         delay=0,
         check_data_length: int = None,
         limit_nums: int = None,
+        clear: bool = True,
     ):
         """
 
@@ -68,7 +69,7 @@ class BaseCollector(abc.ABC):
         self.save_dir = Path(save_dir).expanduser().resolve()
         if self.save_dir.exists():
             old_file_list = list(self.save_dir.glob("*.csv"))
-            if bool(old_file_list):
+            if bool(old_file_list) and clear:
                 logger.info("Cleaning up instrument save dir (previous period download etc)...")
                 for p in tqdm(old_file_list):
                     try:
@@ -290,7 +291,7 @@ class Normalize:
         self._target_dir.mkdir(parents=True, exist_ok=True)
         if self._target_dir.exists():
             old_file_list = list(self._target_dir.glob("*.csv"))
-            if bool(old_file_list):
+            if bool(old_file_list) and kwargs.get("clear", True):
                 logger.info("Cleaning up normalize target dir (previous)...")
                 for p in tqdm(old_file_list):
                     try:

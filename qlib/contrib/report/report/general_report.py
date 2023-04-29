@@ -22,6 +22,7 @@ def generate_full_report_for_recorder(
     exp_name=None,
     record_name=None,
     recorder_id=None,
+    recorder=None,
     report_contents=("Backtest Performance", "Model Evaluation"),
     dynamic_figure=True,
     **kwargs,
@@ -34,6 +35,9 @@ def generate_full_report_for_recorder(
     exp_name: str
     record_name: str
     recorder_id: str
+    recorder: Recorder
+    the recorder which contains the experiment run results, if provided, exp_id, exp_name, record_name, recorder_id
+    will be ignored
     report_contents: Set
     \*\*kwargs: Other params for different report
       - benchmark: {'average'|pd.Series}
@@ -41,11 +45,14 @@ def generate_full_report_for_recorder(
       - stratify_groups: int
        used in `Model Evaluation`, number of stratify groups
     """
-    assert (exp_id is not None or exp_name is not None) and (
-        recorder_id is not None or record_name is not None
-    ), "Please input at least one of experiment/recorder id or name before retrieving experiment/recorder."
-    exp = R.get_exp(experiment_id=exp_id, experiment_name=exp_name)
-    recorder = exp.get_recorder(recorder_id=recorder_id, recorder_name=record_name)
+    if recorder is None:
+        assert (exp_id is not None or exp_name is not None) and (
+            recorder_id is not None or record_name is not None
+        ), "Please input at least one of experiment/recorder id or name before retrieving experiment/recorder."
+        exp = R.get_exp(experiment_id=exp_id, experiment_name=exp_name)
+        recorder = exp.get_recorder(recorder_id=recorder_id, recorder_name=record_name)
+    else:
+        exp = R.get_exp(experiment_id=recorder.experiment_id)
     exp_name = str(exp.name) if bool(exp.name) else f"Exp[{exp.id}]"
     record_name = str(recorder.name) if bool(recorder.name) else f"Recorder[{recorder.id}]"
     title = exp_name + " -- " + record_name

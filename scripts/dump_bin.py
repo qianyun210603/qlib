@@ -183,6 +183,8 @@ class DumpDataBase:
     def save_instruments(self, instruments_data: Union[list, pd.DataFrame]):
         self._instruments_dir.mkdir(parents=True, exist_ok=True)
         instruments_path = str(self._instruments_dir.joinpath(self.INSTRUMENTS_FILE_NAME).resolve())
+        if self.freq != "day":
+            instruments_path = instruments_path.replace(".txt", f"_{self.freq}.txt")
         if isinstance(instruments_data, pd.DataFrame):
             _df_fields = [self.symbol_field_name, self.INSTRUMENTS_START_FIELD, self.INSTRUMENTS_END_FIELD]
             instruments_data = instruments_data.loc[:, _df_fields]

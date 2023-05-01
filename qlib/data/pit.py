@@ -48,7 +48,7 @@ class P(ElemOperator):
         resample_series = pd.Series(
             resample_data, index=pd.RangeIndex(start_index, end_index + 1), dtype="float32", name=str(self)
         )
-        return resample_series
+        return resample_series.loc[resample_series.first_valid_index() : end_index]
 
     def _load_feature(self, instrument, start_index, end_index, cur_time):
         return self.feature.load(instrument, start_index, end_index, cur_time)

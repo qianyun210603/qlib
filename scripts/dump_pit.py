@@ -6,11 +6,10 @@ TODO:
     - seperated insert, delete, update, query operations are required.
 """
 
-import abc
 import shutil
 import struct
 import traceback
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 from pathlib import Path
 from typing import Iterable, List, Union
@@ -22,7 +21,7 @@ from loguru import logger
 from tqdm import tqdm
 
 from qlib.config import C
-from qlib.utils import code_to_fname, fname_to_code, get_period_offset
+from qlib.utils import fname_to_code, get_period_offset
 
 
 class DumpPitData:
@@ -33,6 +32,8 @@ class DumpPitData:
 
     INTERVAL_quarterly = "quarterly"
     INTERVAL_annual = "annual"
+    INTERVAL_INDEFINITE = "indefinite"
+    INTERVAL_MONTHLY = "monthly"
 
     PERIOD_DTYPE = C.pit_record_type["period"]
     INDEX_DTYPE = C.pit_record_type["index"]
@@ -191,6 +192,10 @@ class DumpPitData:
                 continue
             data_file, index_file = self.get_filenames(symbol, field, interval)
 
+            if data_file.exists() ^ index_file.exists():
+                logger.warning(f"{data_file} and {index_file} should be both exist or not. Forcing to overwrite.")
+            overwrite = overwrite or not (data_file.exists() and index_file.exists())
+
             ## calculate first & last period
             start_year = df_sub[self.period_column_name].min()
             end_year = df_sub[self.period_column_name].max()
@@ -199,7 +204,7 @@ class DumpPitData:
                 end_year //= 100
 
             # adjust `first_year` if existing data found
-            if not overwrite and index_file.exists():
+            if not overwrite:
                 with open(index_file, "rb") as fi:
                     (first_year,) = struct.unpack(self.PERIOD_DTYPE, fi.read(self.PERIOD_DTYPE_SIZE))
                     n_years = len(fi.read()) // self.INDEX_DTYPE_SIZE
@@ -214,9 +219,9 @@ class DumpPitData:
                 first_year = start_year
 
             # if data already exists, continue to the next field
-            if start_year > end_year:
-                logger.warning(f"{symbol}-{field} data already exists, continue to the next field")
-                continue
+            # if start_year > end_year:
+            #     logger.warning(f"{symbol}-{field} data already exists, continue to the next field")
+            #     continue
 
             # dump index filled with NA
             with open(index_file, "ab") as fi:
@@ -229,13 +234,19 @@ class DumpPitData:
                         fi.write(struct.pack(self.INDEX_DTYPE, self.NA_INDEX))
 
             # if data already exists, remove overlapped data
-            if not overwrite and data_file.exists():
-                with open(data_file, "rb") as fd:
-                    fd.seek(-self.DATA_DTYPE_SIZE, 2)
-                    last_date, _, _, _ = struct.unpack(self.DATA_DTYPE, fd.read())
-                df_sub = df_sub.query(f"{self.date_column_name}>{last_date}")
+            if not overwrite:
+                start_date = df_sub[self.date_column_name].min()
+                with open(data_file, "rb+") as fd:
+                    fd.seek(0, 2)
+                    while True:
+                        fd.seek(-self.DATA_DTYPE_SIZE, 1)
+                        last_date, _, _, _ = struct.unpack(self.DATA_DTYPE, fd.read(self.DATA_DTYPE_SIZE))
+                        if last_date < start_date:
+                            fd.truncate()
+                            break
+
             # otherwise,
-            # 1) truncate existing file or create a new file with `wb+` if overwrite,
+            # 1) truncate existing file or create a new file with `wb+` if `overwrite` is True,
             # 2) or append existing file or create a new file with `ab+` if not overwrite
             else:
                 with open(data_file, "wb+" if overwrite else "ab+"):
@@ -256,7 +267,7 @@ class DumpPitData:
                         fi.write(struct.pack(self.INDEX_DTYPE, fd.tell()))
                     # Case II: previous data exists => find and update the last `_next`
                     else:
-                        _cur_fd = fd.tell()
+                        _cur_fd = fd.seek(0, 2)
                         prev_index = self.NA_INDEX
                         while cur_index != self.NA_INDEX:  # NOTE: first iter always != NA_INDEX
                             fd.seek(cur_index + self.DATA_DTYPE_SIZE - self.INDEX_DTYPE_SIZE)

@@ -168,8 +168,7 @@ class TestPIT(unittest.TestCase):
         # You can check the expected value based on the content in `docs/advanced/PIT.rst`
         expect = """
         instrument  datetime
-        sh600519    2005-01-04         NaN
-                    2007-04-30    0.090219
+        sh600519    2007-04-30    0.090219
                     2007-08-17    0.139330
                     2007-10-23    0.245863
                     2008-03-03    0.347900

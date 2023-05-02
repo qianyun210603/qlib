@@ -77,7 +77,7 @@ def get_period_list(periods, pit_mode: str) -> List[int]:
     Parameters
     ----------
     periods : series of periods
-    pit_mode : {'a', 'q', 'm', 'u'}
+    pit_mode : {'i', 'a', 'q', 'm'}
         frequency
 
     Returns
@@ -86,7 +86,7 @@ def get_period_list(periods, pit_mode: str) -> List[int]:
         the possible index between [first, last]
     """
     if pit_mode == "i":
-        return periods
+        return [periods[0]]
     last = periods.max()  # return the latest quarter
     first = periods.min()
     if pit_mode == "a":

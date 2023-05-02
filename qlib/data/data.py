@@ -15,6 +15,7 @@ from typing import List, Optional, Union
 
 import numpy as np
 import pandas as pd
+import struct
 
 # For supporting multiprocessing in outer code, joblib is used
 from joblib import delayed
@@ -30,12 +31,12 @@ from ..utils import (
     init_instance_by_config,
     normalize_cache_fields,
     parse_field,
-    read_period_data,
+    get_period_offset,
     register_wrapper,
     time_to_slc_point,
 )
 from ..utils.paral import ParallelExt
-from .cache import DiskDatasetCache, H
+from .cache import DiskDatasetCache, H, MemCacheLengthUnit
 from .inst_processor import InstProcessor
 from .ops import ExpressionOps, Operators  # pylint: disable=W0611  # noqa: F401
 
@@ -904,6 +905,72 @@ class LocalPITProvider(PITProvider):
     # TODO: Add PIT backend file storage
     # NOTE: This class is not multi-threading-safe!!!!
 
+    DATA_RECORDS = [
+        ("date", C.pit_record_type["date"]),
+        ("period", C.pit_record_type["period"]),
+        ("value", C.pit_record_type["value"]),
+        ("_next", C.pit_record_type["index"]),
+    ]
+    PERIOD_DTYPE = C.pit_record_type["period"]
+    INDEX_DTYPE = C.pit_record_type["index"]
+
+    def __init__(self):
+        super().__init__()
+        self._data = MemCacheLengthUnit(size_limit=20)
+        self._indices = MemCacheLengthUnit(size_limit=20)
+        self._series_cache = MemCacheLengthUnit(size_limit=5)
+
+    def _load_data(self, instrument, field):
+        if (instrument, field) not in self._data:
+            index_path = C.dpm.get_data_uri() / "financial" / instrument.lower() / f"{field}.index"
+            data_path = C.dpm.get_data_uri() / "financial" / instrument.lower() / f"{field}.data"
+            if not (index_path.exists() and data_path.exists()):
+                raise FileNotFoundError("No file is found.")
+            self._data[(instrument, field)] = np.fromfile(data_path, dtype=self.DATA_RECORDS)
+
+        return self._data[(instrument, field)]
+
+    def _load_index(self, instrument, field):
+        if (instrument, field) not in self._indices:
+            index_path = C.dpm.get_data_uri() / "financial" / instrument.lower() / f"{field}.index"
+            if not index_path.exists():
+                raise FileNotFoundError("No index file found.")
+            with open(index_path, "rb") as fi:
+                (first_year,) = struct.unpack(self.PERIOD_DTYPE, fi.read(struct.calcsize(self.PERIOD_DTYPE)))
+                all_periods = np.fromfile(fi, dtype=self.INDEX_DTYPE)
+            self._indices[(instrument, field)] = (first_year, all_periods)
+
+        return self._indices[(instrument, field)]
+
+    def read_period_data(
+        self, instrument, field, period, cur_date_int: int, pit_mode: str, last_period_index: int = None
+    ):
+        NAN_VALUE = C.pit_record_nan["value"]
+        NAN_INDEX = C.pit_record_nan["index"]
+        DATA_RECORDS_BYTES = struct.calcsize("".join(x[1] for x in self.DATA_RECORDS))
+
+        # find the first index of linked revisions
+        if last_period_index is None:
+            first_year, all_periods = self._load_index(instrument, field)
+            offset = get_period_offset(first_year, period, pit_mode)
+            _next = all_periods[offset]
+        else:
+            _next = last_period_index
+
+        prev_value = NAN_VALUE
+        prev_next = _next
+
+        data = self._load_data(instrument, field)
+        while _next != NAN_INDEX:
+            date, period, value, new_next = data[_next // DATA_RECORDS_BYTES]
+            if date > cur_date_int:
+                break
+            prev_next = _next
+            _next = new_next
+            prev_value = value
+
+        return prev_value, prev_next
+
     def period_feature(self, instrument, field, start_index, end_index, cur_time, period=None):
         if not isinstance(cur_time, pd.Timestamp):
             raise ValueError(
@@ -912,28 +979,10 @@ class LocalPITProvider(PITProvider):
 
         assert end_index <= 0  # PIT don't support querying future data
 
-        DATA_RECORDS = [
-            ("date", C.pit_record_type["date"]),
-            ("period", C.pit_record_type["period"]),
-            ("value", C.pit_record_type["value"]),
-            ("_next", C.pit_record_type["index"]),
-        ]
         VALUE_DTYPE = C.pit_record_type["value"]
 
         field = str(field).lower()[2:]
         instrument = code_to_fname(instrument)
-
-        # {For acceleration
-        # start_index, end_index, cur_index = kwargs["info"]
-        # if cur_index == start_index:
-        #     if not hasattr(self, "all_fields"):
-        #         self.all_fields = []
-        #     self.all_fields.append(field)
-        #     if not hasattr(self, "period_index"):
-        #         self.period_index = {}
-        #     if field not in self.period_index:
-        #         self.period_index[field] = {}
-        # For acceleration}
 
         _, pit_mode = field.rsplit("_", 1)
         if pit_mode not in {"a", "q", "m", "i"}:
@@ -945,18 +994,8 @@ class LocalPITProvider(PITProvider):
             _i: indefinite frequency data
             """
             )
-        index_path = C.dpm.get_data_uri() / "financial" / instrument.lower() / f"{field}.index"
-        data_path = C.dpm.get_data_uri() / "financial" / instrument.lower() / f"{field}.data"
-        if not (index_path.exists() and data_path.exists()):
-            raise FileNotFoundError("No file is found.")
-        # NOTE: The most significant performance loss is here.
-        # Does the acceleration that makes the program complicated really matters?
-        # - It makes parameters of the interface complicate
-        # - It does not performance in the optimal way (places all the pieces together, we may achieve higher performance)
-        #    - If we design it carefully, we can go through for only once to get the historical evolution of the data.
-        # So I decide to deprecated previous implementation and keep the logic of the program simple
-        # Instead, I'll add a cache for the index file.
-        data = np.fromfile(data_path, dtype=DATA_RECORDS)
+
+        data = self._load_data(instrument, field)
 
         # find all revision periods before `cur_time`
         cur_time_int = int(cur_time.year) * 10000 + int(cur_time.month) * 100 + int(cur_time.day)
@@ -964,35 +1003,28 @@ class LocalPITProvider(PITProvider):
         if loc <= 0:
             return pd.Series(dtype=C.pit_record_type["value"])
 
-        period_list = get_period_list(data["period"][:loc], pit_mode)
-        if period is not None:
-            # NOTE: `period` has higher priority than `start_index` & `end_index`
-            if period not in period_list:
-                return pd.Series(dtype=C.pit_record_type["value"])
+        if (instrument, field, start_index, end_index, cur_time, period) not in self._series_cache:
+            period_list = get_period_list(data["period"][:loc], pit_mode)
+            if period is not None:
+                # NOTE: `period` has higher priority than `start_index` & `end_index`
+                if period not in period_list:
+                    return pd.Series(dtype=C.pit_record_type["value"])
+                else:
+                    period_list = [period]
             else:
-                period_list = [period]
-        else:
-            period_list = period_list[max(0, len(period_list) + start_index - 1) : len(period_list) + end_index]
-        value = np.full((len(period_list),), np.nan, dtype=VALUE_DTYPE)
-        for i, p in enumerate(period_list):
-            # last_period_index = self.period_index[field].get(period)  # For acceleration
-            value[i], now_period_index = read_period_data(
-                index_path, data_path, p, cur_time_int, pit_mode  # , last_period_index  # For acceleration
+                period_list = period_list[max(0, len(period_list) + start_index - 1) : len(period_list) + end_index]
+            value = np.full((len(period_list),), np.nan, dtype=VALUE_DTYPE)
+            for i, p in enumerate(period_list):
+                value[i], now_period_index = self.read_period_data(
+                    instrument, field, p, cur_time_int, pit_mode  # , last_period_index  # For acceleration
+                )
+
+            # NOTE: the index is period_list; So it may result in unexpected values(e.g. nan)
+            # when calculation between different features and only part of its financial indicator is published
+            self._series_cache[(instrument, field, start_index, end_index, cur_time, period)] = pd.Series(
+                value, index=period_list, dtype=VALUE_DTYPE
             )
-            # self.period_index[field].update({period: now_period_index})  # For acceleration
-        # NOTE: the index is period_list; So it may result in unexpected values(e.g. nan)
-        # when calculation between different features and only part of its financial indicator is published
-        series = pd.Series(value, index=period_list, dtype=VALUE_DTYPE)
-
-        # {For acceleration
-        # if cur_index == end_index:
-        #     self.all_fields.remove(field)
-        #     if not len(self.all_fields):
-        #         del self.all_fields
-        #         del self.period_index
-        # For acceleration}
-
-        return series
+        return self._series_cache[(instrument, field, start_index, end_index, cur_time, period)]
 
 
 class LocalExpressionProvider(ExpressionProvider):

@@ -43,8 +43,8 @@ class QlibCacheException(RuntimeError):
 class MemCacheUnit(abc.ABC):
     """Memory Cache Unit."""
 
-    def __init__(self, *_, **kwargs):
-        self.size_limit = kwargs.pop("size_limit", 0)
+    def __init__(self, size_limit=0, *_, **__):
+        self.size_limit = size_limit
         self._size = 0
         self.od = OrderedDict()
 
@@ -109,9 +109,8 @@ class MemCacheUnit(abc.ABC):
         return v
 
     def _adjust_size(self, key, value):
-        if key in self.od:
+        if key in self.od:  # the two lines cannot be combined as one line, because the value of key may be changed
             self._size -= self._get_value_size(self.od[key])
-
         self._size += self._get_value_size(value)
 
     @property
@@ -119,6 +118,7 @@ class MemCacheUnit(abc.ABC):
         return self.od
 
     def update(self, data):
+        self._size -= sum(self._get_value_size(self.od[k]) for k in data if k in self.od)
         self.od.update(data)
         self._size += sum(self._get_value_size(v) for v in data.values())
 

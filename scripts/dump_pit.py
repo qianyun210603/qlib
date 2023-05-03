@@ -234,16 +234,36 @@ class DumpPitData:
                         fi.write(struct.pack(self.INDEX_DTYPE, self.NA_INDEX))
 
             # if data already exists, remove overlapped data
+            truncated_size = self.NA_INDEX
             if not overwrite:
                 start_date = df_sub[self.date_column_name].min()
-                with open(data_file, "rb+") as fd:
-                    fd.seek(0, 2)
-                    while True:
-                        fd.seek(-self.DATA_DTYPE_SIZE, 1)
-                        last_date, _, _, _ = struct.unpack(self.DATA_DTYPE, fd.read(self.DATA_DTYPE_SIZE))
+                truncated_periods = set()
+                with open(data_file, "rb+") as fd, open(index_file, "rb+") as fi:
+                    try:
+                        fd.seek(-self.DATA_DTYPE_SIZE, 2)
+                    except OSError:
+                        raise
+                    seek_back_bytes = -2 * self.DATA_DTYPE_SIZE
+                    while fd.tell() >= 0:
+                        last_date, period, *_ = struct.unpack(self.DATA_DTYPE, fd.read(self.DATA_DTYPE_SIZE))
                         if last_date < start_date:
+                            truncated_size = fd.tell()
                             fd.truncate()
                             break
+                        truncated_periods.add(period)
+                        if fd.tell() + seek_back_bytes < 0:
+                            truncated_size = 0
+                            fd.truncate(0)
+                            break
+                        fd.seek(seek_back_bytes, 1)
+                with open(index_file, "rb+") as fi:
+                    for period in truncated_periods:
+                        offset = get_period_offset(first_year, period, interval[0])
+                        fi.seek(self.PERIOD_DTYPE_SIZE + self.INDEX_DTYPE_SIZE * offset)
+                        (cur_index,) = struct.unpack(self.INDEX_DTYPE, fi.read(self.INDEX_DTYPE_SIZE))
+                        if cur_index!= self.NA_INDEX and cur_index >= truncated_size:
+                            fi.seek(-self.INDEX_DTYPE_SIZE, 1)
+                            fi.write(struct.pack(self.INDEX_DTYPE, self.NA_INDEX))
 
             # otherwise,
             # 1) truncate existing file or create a new file with `wb+` if `overwrite` is True,
@@ -261,6 +281,7 @@ class DumpPitData:
                     fi.seek(self.PERIOD_DTYPE_SIZE + self.INDEX_DTYPE_SIZE * offset)
                     (cur_index,) = struct.unpack(self.INDEX_DTYPE, fi.read(self.INDEX_DTYPE_SIZE))
 
+
                     # Case I: new data => update `_next` with current index
                     if cur_index == self.NA_INDEX:
                         fi.seek(self.PERIOD_DTYPE_SIZE + self.INDEX_DTYPE_SIZE * offset)
@@ -269,7 +290,7 @@ class DumpPitData:
                     else:
                         _cur_fd = fd.seek(0, 2)
                         prev_index = self.NA_INDEX
-                        while cur_index != self.NA_INDEX:  # NOTE: first iter always != NA_INDEX
+                        while cur_index < truncated_size:  # NOTE: first iter always != NA_INDEX
                             fd.seek(cur_index + self.DATA_DTYPE_SIZE - self.INDEX_DTYPE_SIZE)
                             prev_index = cur_index
                             (cur_index,) = struct.unpack(self.INDEX_DTYPE, fd.read(self.INDEX_DTYPE_SIZE))

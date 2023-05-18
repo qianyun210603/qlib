@@ -26,14 +26,14 @@ from .high_performance_ds import BaseQuote, NumpyQuote
 
 
 class Exchange:
-    # `quote_df` is a pd.DataFrame class that contains basic information for backtesting
+    # `quote_dfs` is a pd.DataFrame class that contains basic information for backtesting
     # After some processing, the data will later be maintained by `quote_cls` object for faster data retrieving.
-    # Some conventions for `quote_df`
+    # Some conventions for `quote_dfs`
     # - $close is for calculating the total value at end of each day.
     #   - if $close is None, the stock on that day is regarded as suspended.
     # - $factor is for rounding to the trading unit;
     #   - if any $factor is missing when $close exists, trading unit rounding will be disabled
-    quote_df: pd.DataFrame
+    quote_dfs: Dict[str, pd.DataFrame] = {}
 
     def __init__(
         self,
@@ -42,7 +42,7 @@ class Exchange:
         end_time: Union[pd.Timestamp, str] = None,
         codes: Union[list, str] = "all",
         deal_price: Union[str, Tuple[str, str], List[str]] = None,
-        subscribe_fields: Iterable = (),
+        subscribe_fields: Union[Iterable, Dict[Iterable]] = (),
         volume_threshold: Union[tuple, dict] = None,
         open_cost: float = 0.0015,
         close_cost: float = 0.0025,
@@ -184,9 +184,11 @@ class Exchange:
             assert isinstance(self.limit_threshold, tuple)
             for exp in self.limit_threshold:
                 necessary_fields.add(exp)
-        all_fields = list(necessary_fields | set(vol_lt_fields) | set(subscribe_fields))
+        if not isinstance(subscribe_fields, Dict):
+            subscribe_fields = {self.freq: subscribe_fields}
 
-        self.all_fields = all_fields
+        all_fields = list(necessary_fields | set(vol_lt_fields) | set(subscribe_fields[self.freq]))
+        self.all_fields = {freq: list(necessary_fields | set(vol_lt_fields) | set(s_fields)) for freq, s_fields in subscribe_fields.items()}
 
         self.open_cost = open_cost
         self.close_cost = close_cost
@@ -197,9 +199,10 @@ class Exchange:
         self.extra_quote = extra_quote
         self.get_quote_from_qlib()
 
-        # init quote by quote_df
+        # init quote by quote_dfs
         self.quote_cls = quote_cls
-        self.quote: BaseQuote = self.quote_cls(self.quote_df, freq)
+        self.quotes: Dict[str, BaseQuote] = {freq: self.quote_cls(self.quote_dfs[freq], freq) for freq in self.all_fields.keys()}
+        self.quote: BaseQuote = self.quotes[self.freq]
 
         self.instrument_info = {}
         dpm_uri = C.dpm.provider_uri.get("day", C.dpm.provider_uri.get(C.DEFAULT_FREQ, None))
@@ -221,29 +224,30 @@ class Exchange:
         # get stock data from qlib
         if len(self.codes) == 0:
             self.codes = D.instruments()
-        self.quote_df = D.features(
-            self.codes,
-            self.all_fields,
-            self.start_time,
-            self.end_time,
-            freq=self.freq,
-            disk_cache=True,
-        )
-        self.quote_df.columns = self.all_fields
-        if not (C.get("ohlc_adjusted", True) or self.quote_df["$factor"].isna().all()):
-            for f in {"$open", "$close", "$high", "$low"}.intersection(self.quote_df.columns):
-                self.quote_df[f] = self.quote_df[f] * self.quote_df["$factor"]
-            if "$volume" in self.quote_df:
-                self.quote_df["$volume"] = self.quote_df["$volume"] / self.quote_df["$factor"]
+        for freq in self.all_fields.keys():
+            self.quote_dfs[freq] = D.features(
+                self.codes,
+                self.all_fields[freq],
+                self.start_time,
+                self.end_time,
+                freq=freq,
+                disk_cache=True,
+            )
+            self.quote_dfs[freq].columns = self.all_fields[freq]
+            if not (C.get("ohlc_adjusted", True) or self.quote_dfs[freq]["$factor"].isna().all()):
+                for f in {"$open", "$close", "$high", "$low"}.intersection(self.quote_dfs[freq].columns):
+                    self.quote_dfs[freq][f] = self.quote_dfs[freq][f] * self.quote_dfs[freq]["$factor"]
+                if "$volume" in self.quote_dfs[freq].columns:
+                    self.quote_dfs[freq]["$volume"] = self.quote_dfs[freq]["$volume"] / self.quote_dfs[freq]["$factor"]
 
-        # check buy_price data and sell_price data
-        for attr in ("buy_price", "sell_price"):
-            pstr = getattr(self, attr)  # price string
-            if self.quote_df[pstr].isna().any():
-                self.logger.warning("{} field data contains nan.".format(pstr))
+            # check buy_price data and sell_price data
+            for attr in ("buy_price", "sell_price"):
+                pstr = getattr(self, attr)  # price string
+                if self.quote_dfs[freq][pstr].isna().any():
+                    self.logger.warning("{} field data contains nan.".format(pstr))
 
         # update trade_w_adj_price
-        if (self.quote_df["$factor"].isna() & ~self.quote_df["$close"].isna()).any():
+        if (self.quote_dfs[self.freq]["$factor"].isna() & ~self.quote_dfs[self.freq]["$close"].isna()).any():
             # The 'factor.day.bin' file not exists, and `factor` field contains `nan`
             # Use adjusted price
             self.trade_w_adj_price = True
@@ -276,8 +280,8 @@ class Exchange:
             if "limit_buy" not in self.extra_quote.columns:
                 self.extra_quote["limit_buy"] = False
                 self.logger.warning("No limit_buy set for extra_quote. All stock will be able to be bought.")
-            assert set(self.extra_quote.columns) == set(self.quote_df.columns) - {"$change"}
-            self.quote_df = pd.concat([self.quote_df, self.extra_quote], sort=False, axis=0)
+            assert set(self.extra_quote.columns) == set(self.quote_dfs[self.freq].columns) - {"$change"}
+            self.quote_dfs[self.freq] = pd.concat([self.quote_dfs[self.freq], self.extra_quote], sort=False, axis=0)
 
     LT_TP_EXP = "(exp)"  # Tuple[str, str]:  the limitation is calculated by a Qlib expression.
     LT_FLT = "float"  # float:  the trading limitation is based on `abs($change) < limit_threshold`
@@ -303,22 +307,22 @@ class Exchange:
             self, "limit_threshold"
         ), "self.limit_type and self.limit_threshold must be set first."
         # $close may contain NaN, the nan indicates that the stock is not tradable at that timestamp
-        suspended = self.quote_df["$close"].isna()
+        suspended = self.quote_dfs[self.freq]["$close"].isna()
         # check limit_threshold
         limit_type = self.limit_type
         if limit_type == self.LT_NONE:
-            self.quote_df["limit_buy"] = suspended
-            self.quote_df["limit_sell"] = suspended
+            self.quote_dfs[self.freq]["limit_buy"] = suspended
+            self.quote_dfs[self.freq]["limit_sell"] = suspended
         elif limit_type == self.LT_TP_EXP:
             # set limit
             lb_row, ls_row = cast(tuple, self.limit_threshold)
-            # astype bool is necessary, because quote_df is an expression and could be float
-            self.quote_df["limit_buy"] = self.quote_df[lb_row].astype("bool") | suspended
-            self.quote_df["limit_sell"] = self.quote_df[ls_row].astype("bool") | suspended
+            # astype bool is necessary, because quote_dfs is an expression and could be float
+            self.quote_dfs[self.freq]["limit_buy"] = self.quote_dfs[self.freq][lb_row].astype("bool") | suspended
+            self.quote_dfs[self.freq]["limit_sell"] = self.quote_dfs[self.freq][ls_row].astype("bool") | suspended
         elif limit_type == self.LT_FLT:
             limit_ratio: float = cast(float, self.limit_threshold)
-            self.quote_df["limit_buy"] = self.quote_df["$change"].ge(limit_ratio) | suspended
-            self.quote_df["limit_sell"] = self.quote_df["$change"].le(-limit_ratio) | suspended  # pylint: disable=E1130
+            self.quote_dfs[self.freq]["limit_buy"] = self.quote_dfs[self.freq]["$change"].ge(limit_ratio) | suspended
+            self.quote_dfs[self.freq]["limit_sell"] = self.quote_dfs[self.freq]["$change"].le(-limit_ratio) | suspended  # pylint: disable=E1130
 
     @staticmethod
     def _get_vol_limit(volume_threshold: Union[tuple, dict, None]) -> Tuple[Optional[list], Optional[list], set]:
@@ -370,6 +374,7 @@ class Exchange:
         start_time: pd.Timestamp,
         end_time: pd.Timestamp,
         direction: int | None = None,
+        freq: str | None = None
     ) -> bool:
         """
         Parameters
@@ -391,16 +396,17 @@ class Exchange:
         # NOTE:
         # **all** is used when checking limitation.
         # For example, the stock trading is limited in a day if every minute is limited in a day if every minute is limited.
+        quote = self.quote if freq is None else self.quotes[freq]
         if direction is None:
             # The trading limitation is related to the trading direction
             # if the direction is not provided, then any limitation from buy or sell will result in trading limitation
-            buy_limit = self.quote.get_data(stock_id, start_time, end_time, field="limit_buy", method="all")
-            sell_limit = self.quote.get_data(stock_id, start_time, end_time, field="limit_sell", method="all")
+            buy_limit = quote.get_data(stock_id, start_time, end_time, field="limit_buy", method="all")
+            sell_limit = quote.get_data(stock_id, start_time, end_time, field="limit_sell", method="all")
             return bool(buy_limit or sell_limit)
         elif direction == Order.BUY:
-            return cast(bool, self.quote.get_data(stock_id, start_time, end_time, field="limit_buy", method="all"))
+            return cast(bool, quote.get_data(stock_id, start_time, end_time, field="limit_buy", method="all"))
         elif direction == Order.SELL:
-            return cast(bool, self.quote.get_data(stock_id, start_time, end_time, field="limit_sell", method="all"))
+            return cast(bool, quote.get_data(stock_id, start_time, end_time, field="limit_sell", method="all"))
         else:
             raise ValueError(f"direction {direction} is not supported!")
 
@@ -409,13 +415,15 @@ class Exchange:
         stock_id: str,
         start_time: pd.Timestamp,
         end_time: pd.Timestamp,
+        freq: str | None = None
     ) -> bool:
         """if stock is suspended(hence not tradable), True will be returned"""
+        quote = self.quote if freq is None else self.quotes[freq]
         # is suspended
-        if stock_id in self.quote.get_all_stock():
+        if stock_id in quote.get_all_stock():
             # suspended stocks are represented by None $close stock
             # The $close may contain NaN,
-            close = self.quote.get_data(stock_id, start_time, end_time, "$close")
+            close = quote.get_data(stock_id, start_time, end_time, "$close")
             if close is None:
                 # if no close record exists
                 return True
@@ -436,11 +444,12 @@ class Exchange:
         start_time: pd.Timestamp,
         end_time: pd.Timestamp,
         direction: int | None = None,
+        freq: str | None = None
     ) -> bool:
         # check if stock can be traded
         return not (
-            self.check_stock_suspended(stock_id, start_time, end_time)
-            or self.check_stock_limit(stock_id, start_time, end_time, direction)
+            self.check_stock_suspended(stock_id, start_time, end_time, freq)
+            or self.check_stock_limit(stock_id, start_time, end_time, direction, freq)
         )
 
     def check_order(self, order: Order) -> bool:
@@ -498,8 +507,10 @@ class Exchange:
         end_time: pd.Timestamp,
         field: str,
         method: str = "ts_data_last",
+        freq: str | None = None,
     ) -> Union[None, int, float, bool, IndexData]:
-        return self.quote.get_data(stock_id, start_time, end_time, field=field, method=method)
+        quote = self.quote if freq is None else self.quotes[freq]
+        return quote.get_data(stock_id, start_time, end_time, field=field, method=method)
 
     def get_close(
         self,
@@ -507,8 +518,10 @@ class Exchange:
         start_time: pd.Timestamp,
         end_time: pd.Timestamp,
         method: str = "ts_data_last",
+        freq: str | None = None,
     ) -> Union[None, int, float, bool, IndexData]:
-        return self.quote.get_data(stock_id, start_time, end_time, field="$close", method=method)
+        quote = self.quote if freq is None else self.quotes[freq]
+        return quote.get_data(stock_id, start_time, end_time, field="$close", method=method)
 
     def get_volume(
         self,
@@ -516,9 +529,11 @@ class Exchange:
         start_time: pd.Timestamp,
         end_time: pd.Timestamp,
         method: Optional[str] = "sum",
+        freq: str | None = None
     ) -> Union[None, int, float, bool, IndexData]:
         """get the total deal volume of stock with `stock_id` between the time interval [start_time, end_time)"""
-        return self.quote.get_data(stock_id, start_time, end_time, field="$volume", method=method)
+        quote = self.quote if freq is None else self.quotes[freq]
+        return quote.get_data(stock_id, start_time, end_time, field="$volume", method=method)
 
     def get_deal_price(
         self,
@@ -547,6 +562,7 @@ class Exchange:
         stock_id: str,
         start_time: pd.Timestamp,
         end_time: pd.Timestamp,
+        freq: str | None = None,
     ) -> Optional[float]:
         """
         Returns
@@ -556,9 +572,10 @@ class Exchange:
             `float`: return factor if the factor exists
         """
         assert start_time is not None and end_time is not None, "the time range must be given"
-        if stock_id not in self.quote.get_all_stock():
+        quote = self.quote if freq is None else self.quotes[freq]
+        if stock_id not in quote.get_all_stock():
             return None
-        return self.quote.get_data(stock_id, start_time, end_time, field="$factor", method="ts_data_last")
+        return quote.get_data(stock_id, start_time, end_time, field="$factor", method="ts_data_last")
 
     def generate_amount_position_from_weight_position(
         self,

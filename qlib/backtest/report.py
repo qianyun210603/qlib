@@ -409,7 +409,7 @@ class Indicator:
             raise NotImplementedError(f"This type of input is not supported")
 
         # if there is no stock data during the time period
-        if price_s is None:
+        if pd.isna(price_s):
             return None, None
 
         if isinstance(price_s, (int, float, np.number)):
@@ -441,7 +441,10 @@ class Indicator:
 
         assert isinstance(volume_s, idd.SingleData)
         base_volume = volume_s.sum()
-        base_price = (price_s * volume_s).sum() / base_volume
+        try:
+            base_price = (price_s * volume_s).sum() / base_volume
+        except:
+            raise
         return base_price, base_volume
 
     def _agg_base_price(
@@ -546,7 +549,7 @@ class Indicator:
     def _cal_trade_fulfill_rate(self, method: str = "mean") -> Optional[BaseSingleMetric]:
         if method == "mean":
             return self.order_indicator.transfer(
-                lambda ffr: ffr.mean(),
+                lambda ffr: ffr.mean() if len(ffr) > 0 else np.nan,
             )
         elif method == "amount_weighted":
             return self.order_indicator.transfer(
@@ -561,7 +564,7 @@ class Indicator:
 
     def _cal_trade_price_advantage(self, method: str = "mean") -> Optional[BaseSingleMetric]:
         if method == "mean":
-            return self.order_indicator.transfer(lambda pa: pa.mean())
+            return self.order_indicator.transfer(lambda pa: pa.mean() if len(pa) > 0 else np.nan)
         elif method == "amount_weighted":
             return self.order_indicator.transfer(
                 lambda pa, deal_amount: (pa * deal_amount.abs()).sum() / (deal_amount.abs().sum()),

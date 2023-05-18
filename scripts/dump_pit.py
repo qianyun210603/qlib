@@ -261,7 +261,7 @@ class DumpPitData:
                         offset = get_period_offset(first_year, period, interval[0])
                         fi.seek(self.PERIOD_DTYPE_SIZE + self.INDEX_DTYPE_SIZE * offset)
                         (cur_index,) = struct.unpack(self.INDEX_DTYPE, fi.read(self.INDEX_DTYPE_SIZE))
-                        if cur_index!= self.NA_INDEX and cur_index >= truncated_size:
+                        if cur_index != self.NA_INDEX and cur_index >= truncated_size:
                             fi.seek(-self.INDEX_DTYPE_SIZE, 1)
                             fi.write(struct.pack(self.INDEX_DTYPE, self.NA_INDEX))
 
@@ -280,7 +280,6 @@ class DumpPitData:
 
                     fi.seek(self.PERIOD_DTYPE_SIZE + self.INDEX_DTYPE_SIZE * offset)
                     (cur_index,) = struct.unpack(self.INDEX_DTYPE, fi.read(self.INDEX_DTYPE_SIZE))
-
 
                     # Case I: new data => update `_next` with current index
                     if cur_index == self.NA_INDEX:

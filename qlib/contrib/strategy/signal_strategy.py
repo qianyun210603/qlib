@@ -83,20 +83,21 @@ class BaseTopkStrategy(BaseSignalStrategy):
     (to reduce turnover we may switch less than k instruments in one period, so it is not exactly equal amount of top k).
     """
 
-    def __init__(self, topk, hold_thresh, market=None, **kwargs):
+    def __init__(self, topk, hold_thresh, market=None, forbid_all_trade_at_limit=True, **kwargs):
         self.hold_thresh = hold_thresh
         self.topk = topk
         if market is None:
             self.instruments = None
         else:
             if isinstance(market, str):
-                instruments = D.instruments(market)
-            if isinstance(instruments, dict) and "market" in instruments:
-                self.instruments = D.list_instruments(instruments, freq="day")
+                market = D.instruments(market)
+            if isinstance(market, dict) and "market" in market:
+                self.instruments = D.list_instruments(market, freq="day")
                 self.forbid_buy_days = kwargs.get("forbid_buy_days", -2)
                 self.force_sell_days = kwargs.get("force_sell_days", -2)
             else:
                 self.instruments = None
+        self.forbid_all_trade_at_limit = forbid_all_trade_at_limit
         self.delist_schedule = {"SZ000418": pd.Timestamp("2019-05-07")}
         super().__init__(**kwargs)
 
@@ -158,7 +159,8 @@ class BaseTopkStrategy(BaseSignalStrategy):
         current_stock_list = current_pos.get_stock_list()
         for code in current_stock_list:
             if not self.trade_exchange.is_stock_tradable(
-                stock_id=code, start_time=trade_start_time, end_time=trade_end_time, direction=OrderDir.SELL
+                stock_id=code, start_time=trade_start_time, end_time=trade_end_time,
+                direction=None if self.forbid_all_trade_at_limit else OrderDir.SELL
             ):
                 continue
             if code in sell:
@@ -177,7 +179,7 @@ class BaseTopkStrategy(BaseSignalStrategy):
                     amount=sell_amount,
                     start_time=trade_start_time,
                     end_time=trade_end_time,
-                    direction=Order.SELL,  # 0 for sell, 1 for buy
+                    direction=Order.SELL,  #  0 for sell, 1 for buy
                 )
                 # is order executable
                 if self.trade_exchange.check_order(sell_order):
@@ -197,7 +199,8 @@ class BaseTopkStrategy(BaseSignalStrategy):
         for code in buy:
             # check is stock suspended
             if not self.trade_exchange.is_stock_tradable(
-                stock_id=code, start_time=trade_start_time, end_time=trade_end_time, direction=OrderDir.BUY
+                stock_id=code, start_time=trade_start_time, end_time=trade_end_time,
+                    direction=None if self.forbid_all_trade_at_limit else OrderDir.BUY
             ):
                 continue
             # buy order
@@ -229,11 +232,12 @@ class BaseTopkStrategy(BaseSignalStrategy):
             pred_score = pred_score.iloc[:, 0]
         if pred_score is None:
             return TradeDecisionWO([], self)
-        current_temp = copy.deepcopy(self.trade_position)
-        # generate order list for this adjust date
 
-        cash = current_temp.get_cash()
+        # generate order list for this adjust date
+        current_temp = copy.deepcopy(self.trade_position)
         current_stock_list = current_temp.get_stock_list()
+
+        # pred_score = pred_score.reindex(pred_score.index.union(current_stock_list), fill_value=-np.inf)
 
         buy, sell = self._generate_buy_sell_list(pred_score, current_stock_list, trade_start_time, trade_end_time)
         return self._generate_decisions_from_bs_list(current_temp, buy, sell, trade_start_time, trade_end_time)
@@ -331,11 +335,6 @@ class TopkDropoutStrategy(BaseTopkStrategy):
         pred_score, current_stock_list, removed_from_population = self.filter_instruments_by_market(
             pred_score, current_stock_list, trade_start_time, trade_end_time
         )
-        if len(removed_from_population):
-            get_module_logger(self.__class__.__name__).info(
-                f"force sell {','.join(removed_from_population)} at {trade_start_time.strftime('%Y%m%d')} due to "
-                f"removed from market."
-            )
 
         last = pred_score[pred_score.index.isin(current_stock_list)].sort_values(ascending=False, kind="stable").index
 

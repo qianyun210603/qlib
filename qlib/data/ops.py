@@ -1930,9 +1930,10 @@ class Corr(PairRolling):
         # NOTE: Load uses MemCache, so calling load again will not cause performance degradation
         series_left = self.feature_left.load(instrument, start_index, end_index, *args)
         series_right = self.feature_right.load(instrument, start_index, end_index, *args)
-        res.loc[np.isclose(series_left.rolling(self.N, min_periods=1).cov(series_right), 0, atol=1e-6)] = 0
-        res.loc[np.isclose(res, 1.0, atol=1e-4)] = 1
-        res.loc[np.isclose(res, -1.0, atol=1e-4)] = -1
+        res.loc[np.isclose(series_left.rolling(self.N, min_periods=1).cov(series_right), 0, atol=1e-12)] = 0
+        res.loc[np.isclose(res, 0.0, atol=1e-8)] = 0
+        res.loc[np.isclose(res, 1.0, atol=1e-6)] = 1
+        res.loc[np.isclose(res, -1.0, atol=1e-6)] = -1
         return res.replace([np.inf, -np.inf], 0)
 
     @property

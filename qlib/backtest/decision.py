@@ -29,7 +29,7 @@ DecisionType = TypeVar("DecisionType")
 
 class OrderDir(IntEnum):
     # Order direction
-    SELL = 0
+    SELL = -1
     BUY = 1
 
 
@@ -60,6 +60,9 @@ class Order:
     # The interval of the order which belongs to (NOTE: this is not the expected order dealing range time)
     start_time: pd.Timestamp
     end_time: pd.Timestamp
+    # The price of the order, could be float to indicating limit order (note no feasibilty check at exchange level),
+    # or str to indicating bar field, or None to indicating market order
+    price: Union[None, float, str] = None
 
     # 3) results
     # - users should not care about these values
@@ -70,6 +73,7 @@ class Order:
     # - dealt or partially dealt: deal_amount >= 0 and factor is not None
     deal_amount: float = 0.0  # `deal_amount` is a non-negative value
     factor: Optional[float] = None
+
 
     # TODO:
     # a status field to indicate the dealing result of the order
@@ -167,6 +171,7 @@ class OrderHelper:
         code: str,
         amount: float,
         direction: OrderDir,
+        price: Union[None, float, str] = None,
         start_time: Union[str, pd.Timestamp] = None,
         end_time: Union[str, pd.Timestamp] = None,
     ) -> Order:
@@ -197,6 +202,7 @@ class OrderHelper:
         return Order(
             stock_id=code,
             amount=amount,
+            price=price,
             start_time=None if start_time is None else pd.Timestamp(start_time),
             end_time=None if end_time is None else pd.Timestamp(end_time),
             direction=direction,

@@ -920,10 +920,15 @@ class Exchange:
         :param dealt_order_amount: the dealt order amount dict with the format of {stock_id: float}
         :return: trade_price, trade_val, trade_cost
         """
-        trade_price = cast(
-            float,
-            self.get_deal_price(order.stock_id, order.start_time, order.end_time, direction=order.direction),
-        )
+        if isinstance(order.price, str):
+            trade_price = self.quote.get_data(stock_id, start_time, end_time, field=order.price, method="ts_data_last")
+        elif not pd.isna(order.price):
+            trade_price = order.price
+        else:
+            trade_price = cast(
+                float,
+                self.get_deal_price(order.stock_id, order.start_time, order.end_time, direction=order.direction),
+            )
         total_trade_val = cast(float, self.get_volume(order.stock_id, order.start_time, order.end_time)) * trade_price
         order.factor = self.get_factor(order.stock_id, order.start_time, order.end_time)
         order.deal_amount = order.amount  # set to full amount and clip it step by step

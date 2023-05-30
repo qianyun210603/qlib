@@ -1423,11 +1423,8 @@ class Quantile(Rolling):
             series = series.expanding(min_periods=1).quantile(self.qscore)
         else:
             series = series.rolling(self.N, min_periods=1).quantile(self.qscore)
+        series = series / factor ** self.adjust_status
         return series
-
-    @property
-    def adjust_status(self):
-        return 0
 
 
 class Med(Rolling):
@@ -1638,19 +1635,18 @@ class Slope(Rolling):
 
     def _load_internal(self, instrument, start_index, end_index, *args):
         series = self.feature.load(instrument, start_index, end_index, *args)
+        factor = 1.0
         if not C.get("ohlc_adjusted", True) and self.feature.adjust_status != 0:
             factor = Feature("factor").load(instrument, start_index, end_index, *args).ffill()
-            if not factor.isna().all():
-                series = series * factor**self.feature.adjust_status
+            if factor.isna().all():
+                factor = 1.0
+        series = series * factor**self.feature.adjust_status
         if self.N == 0:
             series = pd.Series(expanding_slope(series.values), index=series.index)
         else:
             series = pd.Series(rolling_slope(series.values, self.N), index=series.index)
+        series = series / factor ** self.adjust_status
         return series
-
-    @property
-    def adjust_status(self):
-        return 0
 
 
 class Rsquare(Rolling):

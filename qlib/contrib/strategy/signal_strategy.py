@@ -83,19 +83,21 @@ class BaseTopkStrategy(BaseSignalStrategy):
     (to reduce turnover we may switch less than k instruments in one period, so it is not exactly equal amount of top k).
     """
 
-    def __init__(self, topk, hold_thresh, market=None, **kwargs):
+    def __init__(self, topk, hold_thresh, market=None, forbid_all_trade_at_limit=True, **kwargs):
         self.hold_thresh = hold_thresh
         self.topk = topk
         if market is None:
             self.instruments = None
         else:
-            instruments = D.instruments(market)
-            if isinstance(instruments, dict) and "market" in instruments:
-                self.instruments = D.list_instruments(instruments, freq="day")
+            if isinstance(market, str):
+                market = D.instruments(market)
+            if isinstance(market, dict) and "market" in market:
+                self.instruments = D.list_instruments(market, freq="day")
                 self.forbid_buy_days = kwargs.get("forbid_buy_days", -2)
                 self.force_sell_days = kwargs.get("force_sell_days", -2)
             else:
                 self.instruments = None
+        self.forbid_all_trade_at_limit = forbid_all_trade_at_limit
         self.delist_schedule = {"SZ000418": pd.Timestamp("2019-05-07")}
         super().__init__(**kwargs)
 
@@ -147,42 +149,27 @@ class BaseTopkStrategy(BaseSignalStrategy):
 
         return pred_score, list(remain_holding), list(force_sell)
 
-    def _generate_buy_sell_list(self, pred_score, current_stock_list, trade_start_time, trade_end_time):
+    def _generate_buy_sell_list(self, *args, **kwargs) -> Tuple[List, List]:
         raise NotImplementedError("Please implement `_generate_buy_sell_list` method")
 
-    def generate_trade_decision(self, execute_result=None):
-        # get the number of trading step finished, trade_step can be [0, 1, 2, ..., trade_len - 1]
-        trade_step = self.trade_calendar.get_trade_step()
-        trade_start_time, trade_end_time = self.trade_calendar.get_step_time(trade_step)
-        pred_start_time, pred_end_time = self.trade_calendar.get_step_time(trade_step, shift=1)
-        pred_score = self.signal.get_signal(start_time=pred_start_time, end_time=pred_end_time)
-        # NOTE: the current version of topk dropout strategy can't handle pd.DataFrame(multiple signal)
-        # So it only leverage the first col of signal
-        if isinstance(pred_score, pd.DataFrame):
-            pred_score = pred_score.iloc[:, 0]
-        if pred_score is None:
-            return TradeDecisionWO([], self)
-        current_temp = copy.deepcopy(self.trade_position)
-        # generate order list for this adjust date
+    def _generate_decisions_from_bs_list(self, current_pos, buy, sell, trade_start_time, trade_end_time):
         sell_order_list = []
         buy_order_list = []
-        cash = current_temp.get_cash()
-        current_stock_list = current_temp.get_stock_list()
-
-        buy, sell = self._generate_buy_sell_list(pred_score, current_stock_list, trade_start_time, trade_end_time)
-
+        cash = current_pos.get_cash()
+        current_stock_list = current_pos.get_stock_list()
         for code in current_stock_list:
             if not self.trade_exchange.is_stock_tradable(
-                stock_id=code, start_time=trade_start_time, end_time=trade_end_time, direction=OrderDir.SELL
+                stock_id=code, start_time=trade_start_time, end_time=trade_end_time,
+                direction=None if self.forbid_all_trade_at_limit else OrderDir.SELL
             ):
                 continue
             if code in sell:
                 # check hold limit
                 time_per_step = self.trade_calendar.get_freq()
-                if cast(Position, current_temp).get_stock_count(code, bar=time_per_step) < self.hold_thresh:
+                if cast(Position, current_pos).get_stock_count(code, bar=time_per_step) < self.hold_thresh:
                     continue
                 # sell order
-                sell_amount = current_temp.get_stock_amount(code=code)
+                sell_amount = current_pos.get_stock_amount(code=code)
                 # factor = self.trade_exchange.get_factor(
                 #     stock_id=code, start_time=trade_start_time, end_time=trade_end_time
                 # )
@@ -192,13 +179,13 @@ class BaseTopkStrategy(BaseSignalStrategy):
                     amount=sell_amount,
                     start_time=trade_start_time,
                     end_time=trade_end_time,
-                    direction=Order.SELL,  # 0 for sell, 1 for buy
+                    direction=Order.SELL,  #  0 for sell, 1 for buy
                 )
                 # is order executable
                 if self.trade_exchange.check_order(sell_order):
                     sell_order_list.append(sell_order)
                     trade_val, trade_cost, trade_price = self.trade_exchange.deal_order(
-                        sell_order, position=current_temp
+                        sell_order, position=current_pos
                     )
                     # update cash
                     cash += trade_val - trade_cost
@@ -212,7 +199,8 @@ class BaseTopkStrategy(BaseSignalStrategy):
         for code in buy:
             # check is stock suspended
             if not self.trade_exchange.is_stock_tradable(
-                stock_id=code, start_time=trade_start_time, end_time=trade_end_time, direction=OrderDir.BUY
+                stock_id=code, start_time=trade_start_time, end_time=trade_end_time,
+                    direction=None if self.forbid_all_trade_at_limit else OrderDir.BUY
             ):
                 continue
             # buy order
@@ -232,6 +220,28 @@ class BaseTopkStrategy(BaseSignalStrategy):
             buy_order_list.append(buy_order)
         return TradeDecisionWO(sell_order_list + buy_order_list, self)
 
+    def generate_trade_decision(self, execute_result=None):
+        # get the number of trading step finished, trade_step can be [0, 1, 2, ..., trade_len - 1]
+        trade_step = self.trade_calendar.get_trade_step()
+        trade_start_time, trade_end_time = self.trade_calendar.get_step_time(trade_step)
+        pred_start_time, pred_end_time = self.trade_calendar.get_step_time(trade_step, shift=1)
+        pred_score = self.signal.get_signal(start_time=pred_start_time, end_time=pred_end_time)
+        # NOTE: the current version of topk dropout strategy can't handle pd.DataFrame(multiple signal)
+        # So it only leverage the first col of signal
+        if isinstance(pred_score, pd.DataFrame):
+            pred_score = pred_score.iloc[:, 0]
+        if pred_score is None:
+            return TradeDecisionWO([], self)
+
+        # generate order list for this adjust date
+        current_temp = copy.deepcopy(self.trade_position)
+        current_stock_list = current_temp.get_stock_list()
+
+        # pred_score = pred_score.reindex(pred_score.index.union(current_stock_list), fill_value=-np.inf)
+
+        buy, sell = self._generate_buy_sell_list(pred_score, current_stock_list, trade_start_time, trade_end_time)
+        return self._generate_decisions_from_bs_list(current_temp, buy, sell, trade_start_time, trade_end_time)
+
 
 class TopkDropoutStrategy(BaseTopkStrategy):
     # TODO:
@@ -247,6 +257,7 @@ class TopkDropoutStrategy(BaseTopkStrategy):
         method_buy="top",
         hold_thresh=1,
         only_tradable=False,
+        market=None,
         **kwargs,
     ):
         """
@@ -274,7 +285,7 @@ class TopkDropoutStrategy(BaseTopkStrategy):
 
                 strategy will make buy sell decision without checking the tradable state of the stock.
         """
-        super().__init__(topk=topk, hold_thresh=hold_thresh, **kwargs)
+        super().__init__(topk=topk, hold_thresh=hold_thresh, market=market, **kwargs)
         self.n_drop = n_drop
         self.method_sell = method_sell
         self.method_buy = method_buy
@@ -324,11 +335,6 @@ class TopkDropoutStrategy(BaseTopkStrategy):
         pred_score, current_stock_list, removed_from_population = self.filter_instruments_by_market(
             pred_score, current_stock_list, trade_start_time, trade_end_time
         )
-        if len(removed_from_population):
-            get_module_logger(self.__class__.__name__).info(
-                f"force sell {','.join(removed_from_population)} at {trade_start_time.strftime('%Y%m%d')} due to "
-                f"removed from market."
-            )
 
         last = pred_score[pred_score.index.isin(current_stock_list)].sort_values(ascending=False, kind="stable").index
 
@@ -385,6 +391,7 @@ class TopkKeepnDropoutStrategy(BaseTopkStrategy):
         forcedropnum=0,
         only_positive_score=False,
         only_tradable=False,
+        market=None,
         **kwargs,
     ):
         """
@@ -404,7 +411,7 @@ class TopkKeepnDropoutStrategy(BaseTopkStrategy):
             else:
                 strategy will make decision with the tradable state of the stock info and avoid buy and sell them.
         """
-        super().__init__(topk=topk, hold_thresh=0, **kwargs)
+        super().__init__(topk=topk, hold_thresh=0, market=market, **kwargs)
         self.keepn = keepn
         assert keepn >= topk, "number to keep must larger than top k"
         self.only_positive_score = only_positive_score

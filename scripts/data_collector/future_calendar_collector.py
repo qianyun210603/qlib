@@ -18,7 +18,7 @@ from loguru import logger
 class CollectorFutureCalendar:
     calendar_format = "%Y-%m-%d"
 
-    def __init__(self, qlib_dir: Union[str, Path], start_date: str = None, end_date: str = None):
+    def __init__(self, qlib_dir: Union[str, Path], start_date: str = None, end_date: str = None, freq='day'):
         """
 
         Parameters
@@ -30,9 +30,10 @@ class CollectorFutureCalendar:
         end_date
             end date
         """
+        self.freq = freq
         self.qlib_dir = Path(qlib_dir).expanduser().absolute()
-        self.calendar_path = self.qlib_dir.joinpath("calendars/day.txt")
-        self.future_path = self.qlib_dir.joinpath("calendars/day_future.txt")
+        self.calendar_path = self.qlib_dir.joinpath(f"calendars/{freq}.txt")
+        self.future_path = self.qlib_dir.joinpath(f"calendars/{freq}_future.txt")
         self._calendar_list = self.calendar_list
         _latest_date = self._calendar_list[-1]
         self.start_date = _latest_date if start_date is None else pd.Timestamp(start_date)

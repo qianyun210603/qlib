@@ -169,7 +169,7 @@ class SBBStrategyBase(BaseStrategy):
         trade_start_time, trade_end_time = self.trade_calendar.get_step_time(trade_step)
         pred_start_time, pred_end_time = self.trade_calendar.get_step_time(trade_step, shift=1)
         order_list = []
-        # for each order in in self.outer_trade_decision
+        # for each order in self.outer_trade_decision
         for order in self.outer_trade_decision.get_decision():
             # get the price trend
             if trade_step % 2 == 0:
@@ -358,7 +358,7 @@ class SBBStrategyEMA(SBBStrategyBase):
         self._reset_signal()
 
     def _pred_price_trend(self, stock_id, pred_start_time=None, pred_end_time=None):
-        # if no signal, return mid trend
+        # if no signal, return midtrend
         if stock_id not in self.signal:
             return self.TREND_MID
         else:

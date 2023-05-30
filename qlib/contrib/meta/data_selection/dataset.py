@@ -26,7 +26,7 @@ class InternalData:
         self.step = step
         self.exp_name = exp_name
 
-    def setup(self, trainer=TrainerR, trainer_kwargs={}):
+    def setup(self, trainer=TrainerR, trainer_kwargs={}, horizon=None):
         """
         after running this function `self.data_ic_df` will become set.
         Each col represents a data.
@@ -63,10 +63,14 @@ class InternalData:
         seg = perf_task_tpl["dataset"]["kwargs"]["segments"]
 
         # We want to split the training time period into small segments.
+        end_date = DatasetH.get_max_time(seg)
+        if horizon is not None:
+            end_date = get_date_by_shift(end_date, -horizon-1, align='left')
         perf_task_tpl["dataset"]["kwargs"]["segments"] = {
-            "train": (DatasetH.get_min_time(seg), DatasetH.get_max_time(seg)),
+            "train": (DatasetH.get_min_time(seg), end_date),
             "test": (None, None),
         }
+
 
         # NOTE:
         # we play a trick here

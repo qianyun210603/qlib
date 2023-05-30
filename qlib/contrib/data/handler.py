@@ -36,6 +36,7 @@ def check_transform_proc(proc_l, fit_start_time, fit_end_time):
 
 _DEFAULT_LEARN_PROCESSORS = [
     {"class": "DropnaLabel"},
+    {"class": "DropTouchLimits"},
     {"class": "CSZScoreNorm", "kwargs": {"fields_group": "label"}},
 ]
 _DEFAULT_INFER_PROCESSORS = [
@@ -171,6 +172,8 @@ class Alpha158(DataHandlerLP):
                 "inst_processors": inst_processors,
             },
         }
+        if 'limits' in kwargs:
+            data_loader['kwargs']["config"]['limits'] = kwargs.pop('limits')
         super().__init__(
             instruments=instruments,
             start_time=start_time,
@@ -193,7 +196,8 @@ class Alpha158(DataHandlerLP):
         }
         return self.parse_config_to_fields(conf)
 
-    def get_label_config(self):
+    @staticmethod
+    def get_label_config():
         return ["Ref($close, -2)/Ref($close, -1) - 1"], ["LABEL0"]
 
     @staticmethod

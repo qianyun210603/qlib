@@ -55,6 +55,7 @@ class LGBModel(ModelFT, LightGBMFInt):
                 else:
                     raise ValueError("Unsupported reweighter type.")
                 ds_l.append((lgb.Dataset(x.values, label=y, weight=w), key))
+                self._feature_names = x.columns.tolist()
         return ds_l
 
     def fit(
@@ -84,6 +85,7 @@ class LGBModel(ModelFT, LightGBMFInt):
             valid_sets=ds,
             valid_names=names,
             callbacks=[early_stopping_callback, verbose_eval_callback, evals_result_callback],
+            feature_name=self._feature_names,
             **kwargs,
         )
         for k in names:

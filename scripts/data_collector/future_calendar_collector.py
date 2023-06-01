@@ -18,7 +18,7 @@ from loguru import logger
 class CollectorFutureCalendar:
     calendar_format = "%Y-%m-%d"
 
-    def __init__(self, qlib_dir: Union[str, Path], start_date: str = None, end_date: str = None, freq='day'):
+    def __init__(self, qlib_dir: Union[str, Path], start_date: str = None, end_date: str = None, freq="day"):
         """
 
         Parameters

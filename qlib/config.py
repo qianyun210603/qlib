@@ -344,7 +344,7 @@ class QlibConfig(Config):
             if freq is None:
                 freq = QlibConfig.DEFAULT_FREQ
             if freq not in self.provider_uri:
-                freq = 'day' if 'day' in self.provider_uri else list(self.provider_uri.keys())[0]
+                freq = "day" if "day" in self.provider_uri else list(self.provider_uri.keys())[0]
             _provider_uri = self.provider_uri[freq]
             if self.get_uri_type(_provider_uri) == QlibConfig.LOCAL_URI:
                 return Path(_provider_uri)

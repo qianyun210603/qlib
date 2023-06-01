@@ -159,8 +159,10 @@ class BaseTopkStrategy(BaseSignalStrategy):
         current_stock_list = current_pos.get_stock_list()
         for code in current_stock_list:
             if not self.trade_exchange.is_stock_tradable(
-                stock_id=code, start_time=trade_start_time, end_time=trade_end_time,
-                direction=None if self.forbid_all_trade_at_limit else OrderDir.SELL
+                stock_id=code,
+                start_time=trade_start_time,
+                end_time=trade_end_time,
+                direction=None if self.forbid_all_trade_at_limit else OrderDir.SELL,
             ):
                 continue
             if code in sell:
@@ -179,7 +181,7 @@ class BaseTopkStrategy(BaseSignalStrategy):
                     amount=sell_amount,
                     start_time=trade_start_time,
                     end_time=trade_end_time,
-                    direction=Order.SELL,  #  0 for sell, 1 for buy
+                    direction=Order.SELL, # 0 for sell, 1 for buy
                 )
                 # is order executable
                 if self.trade_exchange.check_order(sell_order):
@@ -199,8 +201,10 @@ class BaseTopkStrategy(BaseSignalStrategy):
         for code in buy:
             # check is stock suspended
             if not self.trade_exchange.is_stock_tradable(
-                stock_id=code, start_time=trade_start_time, end_time=trade_end_time,
-                    direction=None if self.forbid_all_trade_at_limit else OrderDir.BUY
+                stock_id=code,
+                start_time=trade_start_time,
+                end_time=trade_end_time,
+                direction=None if self.forbid_all_trade_at_limit else OrderDir.BUY,
             ):
                 continue
             # buy order

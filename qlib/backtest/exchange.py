@@ -342,8 +342,8 @@ class Exchange:
             limit_ratio: float = cast(float, self.limit_threshold)
             self.quote_dfs[self.freq]["limit_buy"] = self.quote_dfs[self.freq]["$change"].ge(limit_ratio) | suspended
             self.quote_dfs[self.freq]["limit_sell"] = (
-                self.quote_dfs[self.freq]["$change"].le(-limit_ratio) | suspended
-            )  # pylint: disable=E1130
+                self.quote_dfs[self.freq]["$change"].le(-limit_ratio) | suspended  # pylint: disable=E1130
+            )
 
     @staticmethod
     def _get_vol_limit(volume_threshold: Union[tuple, dict, None]) -> Tuple[Optional[list], Optional[list], set]:
@@ -940,7 +940,7 @@ class Exchange:
         :return: trade_price, trade_val, trade_cost
         """
         if isinstance(order.price, str):
-            trade_price = self.quote.get_data(stock_id, start_time, end_time, field=order.price, method="ts_data_last")
+            trade_price = self.quote.get_data(order.stock_id, order.start_time, order.end_time, field=order.price, method="ts_data_last")
         elif not pd.isna(order.price):
             trade_price = order.price
         else:

@@ -172,8 +172,8 @@ class Alpha158(DataHandlerLP):
                 "inst_processors": inst_processors,
             },
         }
-        if 'limits' in kwargs:
-            data_loader['kwargs']["config"]['limits'] = kwargs.pop('limits')
+        if "limits" in kwargs:
+            data_loader["kwargs"]["config"]["limits"] = kwargs.pop("limits")
         super().__init__(
             instruments=instruments,
             start_time=start_time,

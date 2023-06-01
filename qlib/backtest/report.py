@@ -441,10 +441,8 @@ class Indicator:
 
         assert isinstance(volume_s, idd.SingleData)
         base_volume = volume_s.sum()
-        try:
-            base_price = (price_s * volume_s).sum() / base_volume
-        except:
-            raise
+        base_price = (price_s * volume_s).sum() / base_volume
+
         return base_price, base_volume
 
     def _agg_base_price(

@@ -65,12 +65,11 @@ class InternalData:
         # We want to split the training time period into small segments.
         end_date = DatasetH.get_max_time(seg)
         if horizon is not None:
-            end_date = get_date_by_shift(end_date, -horizon-1, align='left')
+            end_date = get_date_by_shift(end_date, -horizon - 1, align="left")
         perf_task_tpl["dataset"]["kwargs"]["segments"] = {
             "train": (DatasetH.get_min_time(seg), end_date),
             "test": (None, None),
         }
-
 
         # NOTE:
         # we play a trick here

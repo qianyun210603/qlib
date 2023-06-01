@@ -234,7 +234,9 @@ class ExpManager:
             # So we supported it in the interface wrapper
             pr = urlparse(self.uri)
             if pr.scheme == "file":
-                with FileLock(os.path.join(url2pathname(pr.netloc), url2pathname(pr.path), "filelock")):  # pylint: disable=E0110
+                with FileLock(
+                    os.path.join(url2pathname(pr.netloc), url2pathname(pr.path), "filelock")
+                ):  # pylint: disable=E0110
                     return self.create_exp(experiment_name), True
             # NOTE: for other schemes like http, we double-check to avoid create exp conflicts
             try:

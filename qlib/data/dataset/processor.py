@@ -144,19 +144,20 @@ class FilterCol(Processor):
     def readonly(self):
         return True
 
-class DropTouchLimits(Processor):
 
+class DropTouchLimits(Processor):
     def __init__(self, filter_direction="both"):
         self.filter_direction = filter_direction
+
     def __call__(self, df):
         if "limits" not in df.columns:
             return df
 
         if self.filter_direction == "both":
             limit_cols = get_group_columns(df, "limits")
-            return df.loc[(df[limit_cols]<0.5).all(axis=1)].copy()
+            return df.loc[(df[limit_cols] < 0.5).all(axis=1)].copy()
         else:
-            return df.loc[df[("limits", self.filter_direction)]<0.5].copy()
+            return df.loc[df[("limits", self.filter_direction)] < 0.5].copy()
 
     def readonly(self):
         return True

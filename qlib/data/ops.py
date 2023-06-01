@@ -1423,7 +1423,7 @@ class Quantile(Rolling):
             series = series.expanding(min_periods=1).quantile(self.qscore)
         else:
             series = series.rolling(self.N, min_periods=1).quantile(self.qscore)
-        series = series / factor ** self.adjust_status
+        series = series / factor**self.adjust_status
         return series
 
 
@@ -1645,7 +1645,7 @@ class Slope(Rolling):
             series = pd.Series(expanding_slope(series.values), index=series.index)
         else:
             series = pd.Series(rolling_slope(series.values, self.N), index=series.index)
-        series = series / factor ** self.adjust_status
+        series = series / factor**self.adjust_status
         return series
 
 

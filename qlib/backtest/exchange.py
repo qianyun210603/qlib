@@ -43,6 +43,7 @@ class Exchange:
         codes: Union[list, str] = "all",
         deal_price: Union[str, Tuple[str, str], List[str]] = None,
         subscribe_fields: Union[Iterable, Dict[Iterable]] = (),
+        subscribe_fields_alias: dict = None,
         volume_threshold: Union[tuple, dict] = None,
         open_cost: float = 0.0015,
         close_cost: float = 0.0025,
@@ -187,8 +188,10 @@ class Exchange:
         if not isinstance(subscribe_fields, Dict):
             subscribe_fields = {self.freq: subscribe_fields}
 
-        all_fields = list(necessary_fields | set(vol_lt_fields) | set(subscribe_fields[self.freq]))
-        self.all_fields = {freq: list(necessary_fields | set(vol_lt_fields) | set(s_fields)) for freq, s_fields in subscribe_fields.items()}
+        self.all_fields = {
+            freq: list(necessary_fields | set(vol_lt_fields) | set(s_fields))
+            for freq, s_fields in subscribe_fields.items()
+        }
 
         self.open_cost = open_cost
         self.close_cost = close_cost
@@ -201,7 +204,9 @@ class Exchange:
 
         # init quote by quote_dfs
         self.quote_cls = quote_cls
-        self.quotes: Dict[str, BaseQuote] = {freq: self.quote_cls(self.quote_dfs[freq], freq) for freq in self.all_fields.keys()}
+        self.quotes: Dict[str, BaseQuote] = {
+            freq: self.quote_cls(self.quote_dfs[freq], freq) for freq in self.all_fields.keys()
+        }
         self.quote: BaseQuote = self.quotes[self.freq]
 
         self.instrument_info = {}
@@ -220,7 +225,7 @@ class Exchange:
                     }
                 )
 
-    def get_quote_from_qlib(self) -> None:
+    def get_quote_from_qlib(self, subscribe_fields_alias=None) -> None:
         # get stock data from qlib
         if len(self.codes) == 0:
             self.codes = D.instruments()
@@ -233,6 +238,8 @@ class Exchange:
                 freq=freq,
                 disk_cache=True,
             )
+            if subscribe_fields_alias is not None:
+                self.quote_dfs[freq].rename(columns=subscribe_fields_alias, inplace=True)
             self.quote_dfs[freq].columns = self.all_fields[freq]
             if not (C.get("ohlc_adjusted", True) or self.quote_dfs[freq]["$factor"].isna().all()):
                 for f in {"$open", "$close", "$high", "$low"}.intersection(self.quote_dfs[freq].columns):
@@ -315,14 +322,28 @@ class Exchange:
             self.quote_dfs[self.freq]["limit_sell"] = suspended
         elif limit_type == self.LT_TP_EXP:
             # set limit
-            lb_row, ls_row = cast(tuple, self.limit_threshold)
-            # astype bool is necessary, because quote_dfs is an expression and could be float
-            self.quote_dfs[self.freq]["limit_buy"] = self.quote_dfs[self.freq][lb_row].astype("bool") | suspended
-            self.quote_dfs[self.freq]["limit_sell"] = self.quote_dfs[self.freq][ls_row].astype("bool") | suspended
+            expressions = cast(tuple, self.limit_threshold)
+            if len(expressions) == 2:
+                lb_row, ls_row = cast(tuple, self.limit_threshold)
+                # astype bool is necessary, because quote_dfs is an expression and could be float
+                self.quote_dfs[self.freq]["limit_buy"] = self.quote_dfs[self.freq][lb_row].astype("bool") | suspended
+                self.quote_dfs[self.freq]["limit_sell"] = self.quote_dfs[self.freq][ls_row].astype("bool") | suspended
+            elif len(expressions) == 4:
+                lb_col, ls_col, wlb_col, wls_col = cast(tuple, self.limit_threshold)
+                self.quote_dfs[self.freq]["limit_buy"] = self.quote_dfs[self.freq][lb_col].astype("bool") | suspended
+                self.quote_dfs[self.freq]["limit_sell"] = self.quote_dfs[self.freq][ls_col].astype("bool") | suspended
+                self.quote_dfs[self.freq]["whole_limit_buy"] = (
+                    self.quote_dfs[self.freq][wlb_col].astype("bool") | suspended
+                )
+                self.quote_dfs[self.freq]["whole_limit_sell"] = (
+                    self.quote_dfs[self.freq][wls_col].astype("bool") | suspended
+                )
         elif limit_type == self.LT_FLT:
             limit_ratio: float = cast(float, self.limit_threshold)
             self.quote_dfs[self.freq]["limit_buy"] = self.quote_dfs[self.freq]["$change"].ge(limit_ratio) | suspended
-            self.quote_dfs[self.freq]["limit_sell"] = self.quote_dfs[self.freq]["$change"].le(-limit_ratio) | suspended  # pylint: disable=E1130
+            self.quote_dfs[self.freq]["limit_sell"] = (
+                self.quote_dfs[self.freq]["$change"].le(-limit_ratio) | suspended
+            )  # pylint: disable=E1130
 
     @staticmethod
     def _get_vol_limit(volume_threshold: Union[tuple, dict, None]) -> Tuple[Optional[list], Optional[list], set]:
@@ -374,7 +395,7 @@ class Exchange:
         start_time: pd.Timestamp,
         end_time: pd.Timestamp,
         direction: int | None = None,
-        freq: str | None = None
+        freq: str | None = None,
     ) -> bool:
         """
         Parameters
@@ -411,11 +432,7 @@ class Exchange:
             raise ValueError(f"direction {direction} is not supported!")
 
     def check_stock_suspended(
-        self,
-        stock_id: str,
-        start_time: pd.Timestamp,
-        end_time: pd.Timestamp,
-        freq: str | None = None
+        self, stock_id: str, start_time: pd.Timestamp, end_time: pd.Timestamp, freq: str | None = None
     ) -> bool:
         """if stock is suspended(hence not tradable), True will be returned"""
         quote = self.quote if freq is None else self.quotes[freq]
@@ -444,7 +461,7 @@ class Exchange:
         start_time: pd.Timestamp,
         end_time: pd.Timestamp,
         direction: int | None = None,
-        freq: str | None = None
+        freq: str | None = None,
     ) -> bool:
         # check if stock can be traded
         return not (
@@ -454,6 +471,8 @@ class Exchange:
 
     def check_order(self, order: Order) -> bool:
         # check limit and suspended
+        if isinstance(order.price, float):
+            return True
         return self.is_stock_tradable(order.stock_id, order.start_time, order.end_time, order.direction)
 
     def deal_order(
@@ -529,7 +548,7 @@ class Exchange:
         start_time: pd.Timestamp,
         end_time: pd.Timestamp,
         method: Optional[str] = "sum",
-        freq: str | None = None
+        freq: str | None = None,
     ) -> Union[None, int, float, bool, IndexData]:
         """get the total deal volume of stock with `stock_id` between the time interval [start_time, end_time)"""
         quote = self.quote if freq is None else self.quotes[freq]

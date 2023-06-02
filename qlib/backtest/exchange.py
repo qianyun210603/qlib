@@ -207,8 +207,6 @@ class Exchange:
         self.quotes: Dict[str, BaseQuote] = {
             freq: self.quote_cls(self.quote_dfs[freq], freq) for freq in self.all_fields.keys()
         }
-        self.quote: BaseQuote = self.quotes[self.freq]
-
         self.instrument_info = {}
         dpm_uri = C.dpm.provider_uri.get("day", C.dpm.provider_uri.get(C.DEFAULT_FREQ, None))
         if dpm_uri is not None and C.dpm.get_uri_type(dpm_uri) == "local":
@@ -225,7 +223,26 @@ class Exchange:
                     }
                 )
 
-    def get_quote_from_qlib(self, subscribe_fields_alias=None) -> None:
+    @property
+    def quote_df(self) -> pd.DataFrame:
+        return self.quote_dfs[self.freq]
+
+    @property
+    def quote(self) -> BaseQuote:
+        return self.quotes[self.freq]
+
+    def get_quote_from_qlib(self, subscribe_fields_alias: Dict[str, str]=None) -> None:
+        """
+        init quote_dfs by qlib dataloader
+
+        Parameters
+        ----------
+        subscribe_fields_alias: rename the fields in quote_dfs
+
+        Returns
+        -------
+
+        """
         # get stock data from qlib
         if len(self.codes) == 0:
             self.codes = D.instruments()

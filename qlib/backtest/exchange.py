@@ -940,7 +940,9 @@ class Exchange:
         :return: trade_price, trade_val, trade_cost
         """
         if isinstance(order.price, str):
-            trade_price = self.quote.get_data(order.stock_id, order.start_time, order.end_time, field=order.price, method="ts_data_last")
+            trade_price = self.quote.get_data(
+                order.stock_id, order.start_time, order.end_time, field=order.price, method="ts_data_last"
+            )
         elif not pd.isna(order.price):
             trade_price = order.price
         else:

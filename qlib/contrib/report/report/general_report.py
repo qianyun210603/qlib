@@ -85,6 +85,12 @@ def generate_full_report_for_recorder(
                 header="Backtest Performance",
                 type="subsections",
                 content=[
+                    dict(
+                        type="html",
+                        content=analysis_df.risk.unstack().to_html(
+                            formatters={"information_ratio": lambda x: f"{x:.4f}"}, float_format=lambda x: f"{x:.4%}"
+                        ),
+                    ),
                     dict(type=mytype, content=mycontent),
                     dict(header="Monthly Risk Summary", type=risktype, content=riskcontent),
                 ],

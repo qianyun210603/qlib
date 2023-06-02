@@ -181,7 +181,7 @@ class BaseTopkStrategy(BaseSignalStrategy):
                     amount=sell_amount,
                     start_time=trade_start_time,
                     end_time=trade_end_time,
-                    direction=Order.SELL, # 0 for sell, 1 for buy
+                    direction=Order.SELL,  # 0 for sell, 1 for buy
                 )
                 # is order executable
                 if self.trade_exchange.check_order(sell_order):

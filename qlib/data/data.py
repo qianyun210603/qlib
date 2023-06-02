@@ -2,14 +2,15 @@
 # Licensed under the MIT License.
 
 
-from __future__ import division, print_function
+from __future__ import division
+from __future__ import print_function
 
+import re
 import abc
 import bisect
 import copy
 import multiprocessing
 import queue
-import re
 from collections import deque
 from typing import List, Optional, Union
 
@@ -1300,6 +1301,7 @@ class ClientDatasetProvider(DatasetProvider):
                 else:
                     return data
         else:
+
             """
             Call the server to generate the data-set cache, get the uri of the cache file.
             Then load the data from the file on NFS directly.

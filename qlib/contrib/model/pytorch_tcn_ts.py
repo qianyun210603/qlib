@@ -2,22 +2,23 @@
 # Licensed under the MIT License.
 
 
-from __future__ import division, print_function
-
-import copy
+from __future__ import division
+from __future__ import print_function
 
 import numpy as np
 import pandas as pd
+import copy
+from ...utils import get_or_create_path
+from ...log import get_module_logger
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-from ...data.dataset.handler import DataHandlerLP
-from ...log import get_module_logger
-from ...model.base import Model
-from ...utils import get_or_create_path
 from .pytorch_utils import count_parameters
+from ...model.base import Model
+from ...data.dataset.handler import DataHandlerLP
 from .tcn import TemporalConvNet
 
 
@@ -53,7 +54,7 @@ class TCN(Model):
         n_jobs=10,
         GPU=0,
         seed=None,
-        **kwargs,
+        **kwargs
     ):
         # Set logger.
         self.logger = get_module_logger("TCN")
@@ -154,6 +155,7 @@ class TCN(Model):
         raise ValueError("unknown loss `%s`" % self.loss)
 
     def metric_fn(self, pred, label):
+
         mask = torch.isfinite(label)
 
         if self.metric in ("", "loss"):
@@ -162,10 +164,12 @@ class TCN(Model):
         raise ValueError("unknown metric `%s`" % self.metric)
 
     def train_epoch(self, data_loader):
+
         self.TCN_model.train()
 
         for data in data_loader:
-            feature = data[:, :, 0:-1].to(self.device)
+            data = torch.transpose(data, 1, 2)
+            feature = data[:, 0:-1, :].to(self.device)
             label = data[:, -1, -1].to(self.device)
 
             pred = self.TCN_model(feature.float())
@@ -177,13 +181,15 @@ class TCN(Model):
             self.train_optimizer.step()
 
     def test_epoch(self, data_loader):
+
         self.TCN_model.eval()
 
         scores = []
         losses = []
 
         for data in data_loader:
-            feature = data[:, :, 0:-1].to(self.device)
+            data = torch.transpose(data, 1, 2)
+            feature = data[:, 0:-1, :].to(self.device)
             # feature[torch.isnan(feature)] = 0
             label = data[:, -1, -1].to(self.device)
 
@@ -271,6 +277,7 @@ class TCN(Model):
         preds = []
 
         for data in test_loader:
+
             feature = data[:, :, 0:-1].to(self.device)
 
             with torch.no_grad():

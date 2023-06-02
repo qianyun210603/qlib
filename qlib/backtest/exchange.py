@@ -42,7 +42,7 @@ class Exchange:
         end_time: Union[pd.Timestamp, str] = None,
         codes: Union[list, str] = "all",
         deal_price: Union[str, Tuple[str, str], List[str]] = None,
-        subscribe_fields: Union[Iterable, Dict[Iterable]] = (),
+        subscribe_fields: Union[Iterable, Dict[str, Iterable]] = (),
         subscribe_fields_alias: dict = None,
         volume_threshold: Union[tuple, dict] = None,
         open_cost: float = 0.0015,
@@ -231,7 +231,7 @@ class Exchange:
     def quote(self) -> BaseQuote:
         return self.quotes[self.freq]
 
-    def get_quote_from_qlib(self, subscribe_fields_alias: Dict[str, str]=None) -> None:
+    def get_quote_from_qlib(self, subscribe_fields_alias: Dict[str, str] = None) -> None:
         """
         init quote_dfs by qlib dataloader
 

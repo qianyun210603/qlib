@@ -3,6 +3,7 @@
 
 import abc
 import shutil
+import struct
 import traceback
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from functools import partial
@@ -17,6 +18,9 @@ from tqdm import tqdm
 
 from qlib.utils import code_to_fname, fname_to_code
 
+DATA_TYPE = "<f"
+DATA_SIZE = struct.calcsize(DATA_TYPE)
+
 
 class DumpDataBase:
     INSTRUMENTS_START_FIELD = "start_datetime"
@@ -30,8 +34,9 @@ class DumpDataBase:
     INSTRUMENTS_SEP = "\t"
     INSTRUMENTS_FILE_NAME = "all.txt"
 
-    UPDATE_MODE = "update"
-    ALL_MODE = "all"
+    # UPDATE_MODE = "update"
+    # OVERWRITE_MODE = "overwrite"
+    # ALL_MODE = "all"
 
     def __init__(
         self,
@@ -103,7 +108,7 @@ class DumpDataBase:
 
         self._calendars_list = []
 
-        self._mode = self.ALL_MODE
+        # self._mode = mode
         self._kwargs = {}
 
     def _backup_qlib_dir(self, target_dir: Path):
@@ -126,7 +131,7 @@ class DumpDataBase:
             _calendars = df[self.date_field_name]
 
         if is_begin_end and as_set:
-            return (_calendars.min(), _calendars.max()), set(_calendars)
+            return (_calendars.min(), _calendars.max()), set(_calendars) # noqa
         elif is_begin_end:
             return _calendars.min(), _calendars.max()
         elif as_set:
@@ -178,7 +183,7 @@ class DumpDataBase:
         self._calendars_dir.mkdir(parents=True, exist_ok=True)
         calendars_path = str(self._calendars_dir.joinpath(f"{self.freq}.txt").expanduser().resolve())
         result_calendars_list = list(map(lambda x: self._format_datetime(x), calendars_data))
-        np.savetxt(calendars_path, result_calendars_list, fmt="%s", encoding="utf-8")
+        np.savetxt(calendars_path, result_calendars_list, fmt="%s", encoding="utf-8") # noqa
 
     def save_instruments(self, instruments_data: Union[list, pd.DataFrame]):
         self._instruments_dir.mkdir(parents=True, exist_ok=True)
@@ -193,7 +198,7 @@ class DumpDataBase:
             )
             instruments_data.to_csv(instruments_path, header=False, sep=self.INSTRUMENTS_SEP, index=False)
         else:
-            np.savetxt(instruments_path, instruments_data, fmt="%s", encoding="utf-8")
+            np.savetxt(instruments_path, instruments_data, fmt="%s", encoding="utf-8") # noqa
 
     def data_merge_calendar(self, df: pd.DataFrame, calendars_list: List[pd.Timestamp]) -> pd.DataFrame:
         # calendars
@@ -209,9 +214,8 @@ class DumpDataBase:
         r_df = df.reindex(cal_df.index)
         return r_df
 
-    @staticmethod
-    def get_datetime_index(df: pd.DataFrame, calendar_list: List[pd.Timestamp]) -> int:
-        return calendar_list.index(df.index.min())
+    def get_datetime_index(self, min_date) -> int:
+        return self._calendars_list.index(min_date)
 
     def _data_to_bin(self, df: pd.DataFrame, calendar_list: List[pd.Timestamp], features_dir: Path):
         if df.empty:
@@ -226,18 +230,36 @@ class DumpDataBase:
             logger.warning(f"{features_dir.name} data is not in calendars")
             return
         # used when creating a bin file
-        date_index = self.get_datetime_index(_df, calendar_list)
+        date_index = self.get_datetime_index(_df.index.min())
+        # index_min = self._calendars_list.index(min(calendar_list))
+        # index_max = self._calendars_list.index(max(calendar_list))
+
         for field in self.get_dump_fields(_df.columns):
             bin_path = features_dir.joinpath(f"{field.lower()}.{self.freq}{self.DUMP_FILE_SUFFIX}")
             if field not in _df.columns:
                 continue
-            if bin_path.exists() and self._mode == self.UPDATE_MODE:
-                # update
-                with bin_path.open("ab") as fp:
-                    np.array(_df[field]).astype("<f").tofile(fp)
+            if bin_path.exists():
+                self._append_data_to_bin(bin_path, _df[field], date_index)
             else:
-                # append; self._mode == self.ALL_MODE or not bin_path.exists()
-                np.hstack([date_index, _df[field]]).astype("<f").tofile(str(bin_path.resolve()))
+                np.hstack([date_index, _df[field]]).astype(DATA_TYPE).tofile(str(bin_path.resolve()))
+
+            # if bin_path.exists() and self._mode != self.ALL_MODE:
+            #     if self._mode == self.UPDATE_MODE:
+            #         # update
+            #         with bin_path.open("ab") as fp:
+            #             if index_min + fp.tell() // DATA_SIZE - 1 + len(_df) < index_max:
+            #                 logger.warning("potential mismatch data and calendar")
+            #             np.array(_df[field]).astype(DATA_TYPE).tofile(fp)
+            #     elif self._mode == self.OVERWRITE_MODE:
+            #         with bin_path.open("rb+") as fp:
+            #             start_idx = struct.unpack(DATA_TYPE, fp.read(DATA_SIZE))
+            #             assert start_idx == index_min, f"mismatch start index in {bin_path.name} and instruments.txt"
+            #             # fp.truncate((1+index_min-1)*DATA_SIZE)
+            #             # fp.seek(0, -2)
+            #             # np.array(_df[field]).astype(DATA_TYPE).tofile(fp)
+            # else:
+            #     # append; self._mode == self.ALL_MODE or not bin_path.exists()
+            #     np.hstack([date_index, field_data]).astype(DATA_TYPE).tofile(str(bin_path.resolve()))
 
     def _dump_bin(self, file_or_data: [Path, pd.DataFrame], calendar_list: List[pd.Timestamp]):
         if not calendar_list:
@@ -257,7 +279,7 @@ class DumpDataBase:
             logger.warning(f"{code} data is None or empty")
             return
 
-        # try to remove dup rows or it will cause exception when reindex.
+        # try to remove duplicated rows, or it will cause exception when reindex.
         df = df.drop_duplicates(self.date_field_name)
 
         # features save dir
@@ -269,11 +291,16 @@ class DumpDataBase:
     def dump(self):
         raise NotImplementedError("dump not implemented!")
 
+    @staticmethod
+    def _append_data_to_bin(bin_path, field_data, date_index):
+        np.hstack([date_index, field_data]).astype(DATA_TYPE).tofile(str(bin_path.resolve()))
+
     def __call__(self, *args, **kwargs):
         self.dump()
 
 
 class DumpDataAll(DumpDataBase):
+
     def _get_all_date(self):
         logger.info("start get all date......")
         all_datetime = set()
@@ -325,6 +352,7 @@ class DumpDataAll(DumpDataBase):
 
 
 class DumpDataFix(DumpDataAll):
+
     def _dump_instruments(self):
         logger.info("start fix dump instruments......")
         _fun = partial(self._get_date, is_begin_end=True)
@@ -361,7 +389,7 @@ class DumpDataFix(DumpDataAll):
         self._dump_features()
 
 
-class DumpDataUpdate(DumpDataBase):
+class DumpDataUpdateBase(DumpDataBase):
     def __init__(
         self,
         csv_path: str,
@@ -414,8 +442,8 @@ class DumpDataUpdate(DumpDataBase):
             symbol_field_name,
             exclude_fields,
             include_fields,
+            limit_nums,
         )
-        self._mode = self.UPDATE_MODE
         self._old_calendar_list = self._read_calendars(self._calendars_dir.joinpath(f"{self.freq}.txt"))
         # NOTE: all.txt only exists once for each stock
         # NOTE: if a stock corresponds to multiple different time ranges, user need to modify self._update_instruments
@@ -427,7 +455,7 @@ class DumpDataUpdate(DumpDataBase):
 
         # load all csv files
         self._all_data = self._load_all_source_data()  # type: pd.DataFrame
-        self._new_calendar_list = self._old_calendar_list + sorted(
+        self._calendars_list = self._old_calendar_list + sorted(
             filter(lambda x: x > self._old_calendar_list[-1], self._all_data[self.date_field_name].unique())
         )
 
@@ -452,6 +480,9 @@ class DumpDataUpdate(DumpDataBase):
         logger.info("end of load all data.\n")
         return pd.concat(all_df, sort=False)
 
+    def _get_update_calendar(self, code: str, df: pd.DataFrame) -> List[pd.Timestamp]:
+        raise NotImplementedError("implement in child classes")
+
     def _dump_calendars(self):
         pass
 
@@ -469,14 +500,7 @@ class DumpDataUpdate(DumpDataBase):
                 if not (isinstance(_start, pd.Timestamp) and isinstance(_end, pd.Timestamp)):
                     continue
                 if _code in self._update_instruments:
-                    # exists stock, will append data
-                    _update_calendars = (
-                        _df[_df[self.date_field_name] > self._update_instruments[_code][self.INSTRUMENTS_END_FIELD]][
-                            self.date_field_name
-                        ]
-                        .sort_values()
-                        .to_list()
-                    )
+                    _update_calendars = self._get_update_calendar(_code, _df)
                     if _update_calendars:
                         self._update_instruments[_code][self.INSTRUMENTS_END_FIELD] = self._format_datetime(_end)
                         futures[executor.submit(self._dump_bin, _df, _update_calendars)] = _code
@@ -485,7 +509,7 @@ class DumpDataUpdate(DumpDataBase):
                     _dt_range = self._update_instruments.setdefault(_code, dict())
                     _dt_range[self.INSTRUMENTS_START_FIELD] = self._format_datetime(_start)
                     _dt_range[self.INSTRUMENTS_END_FIELD] = self._format_datetime(_end)
-                    futures[executor.submit(self._dump_bin, _df, self._new_calendar_list)] = _code
+                    futures[executor.submit(self._dump_bin, _df, self._calendars_list)] = _code
 
             with tqdm(total=len(futures)) as p_bar:
                 for _future in as_completed(futures):
@@ -499,11 +523,47 @@ class DumpDataUpdate(DumpDataBase):
         logger.info("end of features dump.\n")
 
     def dump(self):
-        self.save_calendars(self._new_calendar_list)
+        self.save_calendars(self._calendars_list)
         self._dump_features()
         df = pd.DataFrame.from_dict(self._update_instruments, orient="index")
         df.index.names = [self.symbol_field_name]
         self.save_instruments(df.reset_index())
+
+
+class DumpDataUpdate(DumpDataUpdateBase):
+
+    def _get_update_calendar(self, code: str, df: pd.DataFrame) -> List[pd.Timestamp]:
+        _update_calendars = (
+            df[df[self.date_field_name] > self._update_instruments[code][self.INSTRUMENTS_END_FIELD]][
+                self.date_field_name
+            ]
+            .sort_values()
+            .to_list()
+        )
+        return _update_calendars
+
+    def _append_data_to_bin(self, bin_path, field_data, date_index):
+        if bin_path.exists():
+            with bin_path.open("ab") as fp:
+                start_idx, = struct.unpack(DATA_TYPE, fp.read(DATA_SIZE))
+                if start_idx + fp.tell() // DATA_SIZE - 1 < date_index:
+                    logger.warning("potential mismatch data and calendar")
+                np.array(field_data).astype(DATA_TYPE).tofile(fp)
+
+
+class DumpDataOverwrite(DumpDataUpdateBase):
+
+    def _get_update_calendar(self, code: str, df: pd.DataFrame) -> List[pd.Timestamp]:
+        _update_calendars = df[self.date_field_name].sort_values().tolist()
+        return _update_calendars
+
+    def _append_data_to_bin(self, bin_path, field_data, date_index):
+        if bin_path.exists():
+            with bin_path.open("rb+") as fp:
+                start_idx, = struct.unpack(DATA_TYPE, fp.read(DATA_SIZE))
+                fp.truncate((date_index-int(start_idx)+1)*DATA_SIZE)
+                fp.seek(0, 2)
+                np.array(field_data).astype(DATA_TYPE).tofile(fp)
 
 
 if __name__ == "__main__":

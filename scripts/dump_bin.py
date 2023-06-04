@@ -131,7 +131,7 @@ class DumpDataBase:
             _calendars = df[self.date_field_name]
 
         if is_begin_end and as_set:
-            return (_calendars.min(), _calendars.max()), set(_calendars) # noqa
+            return (_calendars.min(), _calendars.max()), set(_calendars)  # noqa
         elif is_begin_end:
             return _calendars.min(), _calendars.max()
         elif as_set:
@@ -183,7 +183,7 @@ class DumpDataBase:
         self._calendars_dir.mkdir(parents=True, exist_ok=True)
         calendars_path = str(self._calendars_dir.joinpath(f"{self.freq}.txt").expanduser().resolve())
         result_calendars_list = list(map(lambda x: self._format_datetime(x), calendars_data))
-        np.savetxt(calendars_path, result_calendars_list, fmt="%s", encoding="utf-8") # noqa
+        np.savetxt(calendars_path, result_calendars_list, fmt="%s", encoding="utf-8")  # noqa
 
     def save_instruments(self, instruments_data: Union[list, pd.DataFrame]):
         self._instruments_dir.mkdir(parents=True, exist_ok=True)
@@ -198,7 +198,7 @@ class DumpDataBase:
             )
             instruments_data.to_csv(instruments_path, header=False, sep=self.INSTRUMENTS_SEP, index=False)
         else:
-            np.savetxt(instruments_path, instruments_data, fmt="%s", encoding="utf-8") # noqa
+            np.savetxt(instruments_path, instruments_data, fmt="%s", encoding="utf-8")  # noqa
 
     def data_merge_calendar(self, df: pd.DataFrame, calendars_list: List[pd.Timestamp]) -> pd.DataFrame:
         # calendars
@@ -300,7 +300,6 @@ class DumpDataBase:
 
 
 class DumpDataAll(DumpDataBase):
-
     def _get_all_date(self):
         logger.info("start get all date......")
         all_datetime = set()
@@ -352,7 +351,6 @@ class DumpDataAll(DumpDataBase):
 
 
 class DumpDataFix(DumpDataAll):
-
     def _dump_instruments(self):
         logger.info("start fix dump instruments......")
         _fun = partial(self._get_date, is_begin_end=True)
@@ -531,7 +529,6 @@ class DumpDataUpdateBase(DumpDataBase):
 
 
 class DumpDataUpdate(DumpDataUpdateBase):
-
     def _get_update_calendar(self, code: str, df: pd.DataFrame) -> List[pd.Timestamp]:
         _update_calendars = (
             df[df[self.date_field_name] > self._update_instruments[code][self.INSTRUMENTS_END_FIELD]][
@@ -545,14 +542,13 @@ class DumpDataUpdate(DumpDataUpdateBase):
     def _append_data_to_bin(self, bin_path, field_data, date_index):
         if bin_path.exists():
             with bin_path.open("ab") as fp:
-                start_idx, = struct.unpack(DATA_TYPE, fp.read(DATA_SIZE))
+                (start_idx,) = struct.unpack(DATA_TYPE, fp.read(DATA_SIZE))
                 if start_idx + fp.tell() // DATA_SIZE - 1 < date_index:
                     logger.warning("potential mismatch data and calendar")
                 np.array(field_data).astype(DATA_TYPE).tofile(fp)
 
 
 class DumpDataOverwrite(DumpDataUpdateBase):
-
     def _get_update_calendar(self, code: str, df: pd.DataFrame) -> List[pd.Timestamp]:
         _update_calendars = df[self.date_field_name].sort_values().tolist()
         return _update_calendars
@@ -560,8 +556,8 @@ class DumpDataOverwrite(DumpDataUpdateBase):
     def _append_data_to_bin(self, bin_path, field_data, date_index):
         if bin_path.exists():
             with bin_path.open("rb+") as fp:
-                start_idx, = struct.unpack(DATA_TYPE, fp.read(DATA_SIZE))
-                fp.truncate((date_index-int(start_idx)+1)*DATA_SIZE)
+                (start_idx,) = struct.unpack(DATA_TYPE, fp.read(DATA_SIZE))
+                fp.truncate((date_index - int(start_idx) + 1) * DATA_SIZE)
                 fp.seek(0, 2)
                 np.array(field_data).astype(DATA_TYPE).tofile(fp)
 

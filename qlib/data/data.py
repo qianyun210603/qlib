@@ -864,7 +864,13 @@ class LocalInstrumentProvider(InstrumentProvider, ProviderBackendMixin):
             inst: list(
                 filter(
                     lambda x: x[0] <= x[1],
-                    [(max(start_time, pd.Timestamp(x[0])), min(end_time, pd.Timestamp(x[1]))) for x in spans],
+                    [
+                        (
+                            max(start_time, pd.Timestamp(x[0])),
+                            min(end_time, pd.Timestamp(x[1]).replace(hour=23, minute=59, second=59)),
+                        )
+                        for x in spans
+                    ],
                 )
             )
             for inst, spans in _instruments.items()

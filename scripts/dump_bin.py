@@ -541,10 +541,11 @@ class DumpDataUpdate(DumpDataUpdateBase):
 
     def _append_data_to_bin(self, bin_path, field_data, date_index):
         if bin_path.exists():
-            with bin_path.open("ab") as fp:
+            with bin_path.open("rb+") as fp:
                 (start_idx,) = struct.unpack(DATA_TYPE, fp.read(DATA_SIZE))
                 if start_idx + fp.tell() // DATA_SIZE - 1 < date_index:
                     logger.warning("potential mismatch data and calendar")
+                fp.seek(0, 2)
                 np.array(field_data).astype(DATA_TYPE).tofile(fp)
 
 

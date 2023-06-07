@@ -69,6 +69,7 @@ class Exchange:
         :param subscribe_fields: Iterable (convertible to set), subscribe fields. This expressions will be added to the
                                  query and `self.quote`.
                                  It is useful when users want more fields to be queried
+        :param subscribe_fields_alias: dict, subscribe fields alias. The keys are expressions and values are alias names.
         :param limit_threshold: Union[Tuple[str, str], List[str], float, None]
                                 1) `None`: no limitation
                                 2) float, 0.1 for example, default None
@@ -200,7 +201,7 @@ class Exchange:
 
         self.volume_threshold = volume_threshold
         self.extra_quote = extra_quote
-        self.get_quote_from_qlib()
+        self.get_quote_from_qlib(subscribe_fields_alias)
 
         # init quote by quote_dfs
         self.quote_cls = quote_cls
@@ -674,7 +675,7 @@ class Exchange:
         :param current_amount:
         :param target_amount:
         :param factor:
-        :return  real_deal_amount;  Positive deal_amount indicates buying more stock.
+        :return real_deal_amount;  Positive deal_amount indicates buying more stock.
         """
         if current_amount == target_amount:
             return 0

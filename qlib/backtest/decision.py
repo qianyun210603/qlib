@@ -29,7 +29,7 @@ DecisionType = TypeVar("DecisionType")
 
 class OrderDir(IntEnum):
     # Order direction
-    SELL = -1
+    SELL = 0
     BUY = 1
 
 

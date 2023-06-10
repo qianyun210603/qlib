@@ -163,6 +163,14 @@ class DropTouchLimits(Processor):
         return True
 
 
+class RenameCol(Processor):
+    def __init__(self, alias={}):
+        self.alias = alias
+
+    def __call__(self, df):
+        return df.rename(columns=self.alias)
+
+
 class TanhProcess(Processor):
     """Use tanh to process noise data"""
 

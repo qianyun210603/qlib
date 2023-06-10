@@ -105,6 +105,8 @@ class DumpDataBase:
         self._calendars_dir = self.qlib_dir.joinpath(self.CALENDARS_DIR_NAME)
         self._features_dir = self.qlib_dir.joinpath(self.FEATURES_DIR_NAME)
         self._instruments_dir = self.qlib_dir.joinpath(self.INSTRUMENTS_DIR_NAME)
+        self._instruments_filename = self.INSTRUMENTS_FILE_NAME if freq == 'day' \
+            else self.INSTRUMENTS_FILE_NAME.replace(".txt", f"_{self.freq}.txt")
 
         self._calendars_list = []
 
@@ -187,9 +189,7 @@ class DumpDataBase:
 
     def save_instruments(self, instruments_data: Union[list, pd.DataFrame]):
         self._instruments_dir.mkdir(parents=True, exist_ok=True)
-        instruments_path = str(self._instruments_dir.joinpath(self.INSTRUMENTS_FILE_NAME).resolve())
-        if self.freq != "day":
-            instruments_path = instruments_path.replace(".txt", f"_{self.freq}.txt")
+        instruments_path = str(self._instruments_dir.joinpath(self._instruments_filename).resolve())
         if isinstance(instruments_data, pd.DataFrame):
             _df_fields = [self.symbol_field_name, self.INSTRUMENTS_START_FIELD, self.INSTRUMENTS_END_FIELD]
             instruments_data = instruments_data.loc[:, _df_fields]
@@ -379,7 +379,7 @@ class DumpDataFix(DumpDataAll):
         self._calendars_list = self._read_calendars(self._calendars_dir.joinpath(f"{self.freq}.txt"))
         # noinspection PyAttributeOutsideInit
         self._old_instruments = (
-            self._read_instruments(self._instruments_dir.joinpath(self.INSTRUMENTS_FILE_NAME))
+            self._read_instruments(self._instruments_dir.joinpath(self._instruments_filename))
             .set_index([self.symbol_field_name])
             .to_dict(orient="index")
         )  # type: dict
@@ -446,7 +446,7 @@ class DumpDataUpdateBase(DumpDataBase):
         # NOTE: all.txt only exists once for each stock
         # NOTE: if a stock corresponds to multiple different time ranges, user need to modify self._update_instruments
         self._update_instruments = (
-            self._read_instruments(self._instruments_dir.joinpath(self.INSTRUMENTS_FILE_NAME))
+            self._read_instruments(self._instruments_dir.joinpath(self._instruments_filename))
             .set_index([self.symbol_field_name])
             .to_dict(orient="index")
         )  # type: dict
@@ -543,9 +543,12 @@ class DumpDataUpdate(DumpDataUpdateBase):
         if bin_path.exists():
             with bin_path.open("rb+") as fp:
                 (start_idx,) = struct.unpack(DATA_TYPE, fp.read(DATA_SIZE))
-                if start_idx + fp.tell() // DATA_SIZE - 1 < date_index:
-                    logger.warning("potential mismatch data and calendar")
                 fp.seek(0, 2)
+                if start_idx + fp.tell() // DATA_SIZE - 1 < date_index:
+                    logger.warning(
+                        f"potential mismatch data and calendar "
+                        f"{start_idx + fp.tell() // DATA_SIZE - 1} != {date_index}"
+                    )
                 np.array(field_data).astype(DATA_TYPE).tofile(fp)
 
 

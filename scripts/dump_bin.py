@@ -105,8 +105,11 @@ class DumpDataBase:
         self._calendars_dir = self.qlib_dir.joinpath(self.CALENDARS_DIR_NAME)
         self._features_dir = self.qlib_dir.joinpath(self.FEATURES_DIR_NAME)
         self._instruments_dir = self.qlib_dir.joinpath(self.INSTRUMENTS_DIR_NAME)
-        self._instruments_filename = self.INSTRUMENTS_FILE_NAME if freq == 'day' \
+        self._instruments_filename = (
+            self.INSTRUMENTS_FILE_NAME
+            if freq == "day"
             else self.INSTRUMENTS_FILE_NAME.replace(".txt", f"_{self.freq}.txt")
+        )
 
         self._calendars_list = []
 
@@ -290,6 +293,9 @@ class DumpDataBase:
     @abc.abstractmethod
     def dump(self):
         raise NotImplementedError("dump not implemented!")
+
+    def dump_features(self):
+        self._dump_features()
 
     @staticmethod
     def _append_data_to_bin(bin_path, field_data, date_index):
@@ -561,8 +567,12 @@ class DumpDataOverwrite(DumpDataUpdateBase):
         if bin_path.exists():
             with bin_path.open("rb+") as fp:
                 (start_idx,) = struct.unpack(DATA_TYPE, fp.read(DATA_SIZE))
-                fp.truncate((date_index - int(start_idx) + 1) * DATA_SIZE)
-                fp.seek(0, 2)
+                fp.truncate(max(0, date_index - int(start_idx) + 1) * DATA_SIZE)
+                if date_index >= start_idx:
+                    fp.seek(0, 2)
+                else:
+                    fp.seek(0, 0)
+                    fp.write(struct.pack(DATA_TYPE, date_index))
                 np.array(field_data).astype(DATA_TYPE).tofile(fp)
 
 

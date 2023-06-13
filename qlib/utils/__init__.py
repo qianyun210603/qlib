@@ -779,6 +779,8 @@ def exists_qlib_data(qlib_dir):
     # check instruments
     code_names = set(map(lambda x: fname_to_code(x.name.lower()), features_dir.iterdir()))
     _instrument = instruments_dir.joinpath("all.txt")
+    if not _instrument.exists():
+        return False
     miss_code = set(pd.read_csv(_instrument, sep="\t", header=None).loc[:, 0].apply(str.lower)) - set(code_names)
     if miss_code and any(map(lambda x: "sht" not in x, miss_code)):
         return False
@@ -899,9 +901,9 @@ def get_item_from_obj(config: dict, name_path: str) -> object:
     cur_cfg = config
     for k in name_path.split("."):
         if isinstance(cur_cfg, dict):
-            cur_cfg = cur_cfg[k]
+            cur_cfg = cur_cfg.get(k, f"<{k}>")
         elif k.isdigit():
-            cur_cfg = cur_cfg[int(k)]
+            cur_cfg = cur_cfg.get(int(k), f"<{k}>")
         else:
             raise ValueError(f"Error when getting {k} from cur_cfg")
     return cur_cfg

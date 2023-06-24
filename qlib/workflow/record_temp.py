@@ -161,15 +161,16 @@ class SignalRecord(RecordTemp):
     This is the Signal Record class that generates the signal prediction. This class inherits the ``RecordTemp`` class.
     """
 
-    def __init__(self, model=None, dataset=None, recorder=None):
+    def __init__(self, model=None, dataset=None, recorder=None, label_key=DataHandlerLP.DK_I):
         super().__init__(recorder=recorder)
         self.model = model
         self.dataset = dataset
+        self.label_key = label_key
 
     @staticmethod
-    def generate_label(dataset):
+    def generate_label(dataset, label_key):
         with class_casting(dataset, DatasetH):
-            params = dict(segments="test", col_set="label", data_key=DataHandlerLP.DK_R)
+            params = dict(segments="test", col_set="label", data_key=label_key)
             try:
                 # Assume the backend handler is DataHandlerLP
                 raw_label = dataset.prepare(**params)
@@ -200,7 +201,7 @@ class SignalRecord(RecordTemp):
         pprint(pred.head(5))
 
         if isinstance(self.dataset, DatasetH):
-            raw_label = self.generate_label(self.dataset)
+            raw_label = self.generate_label(self.dataset, self.label_key)
             self.save(**{"label.pkl": raw_label})
 
     def list(self):

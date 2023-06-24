@@ -140,7 +140,7 @@ class MetaTaskDS(MetaTask):
 
         Parameters
         ----------
-        meta_info: pd.DataFrame
+        meta_info: pd.DataFrame,
             please refer to the docs of _prepare_meta_ipt for detailed explanation.
         """
         super().__init__(task, meta_info)
@@ -150,7 +150,7 @@ class MetaTaskDS(MetaTask):
         self.processed_meta_input = {"time_perf": time_perf}
         # FIXME: memory issue in this step
         if mode == MetaTask.PROC_MODE_FULL:
-            # process metainfo_
+            # process metainfo
             ds = self.get_dataset()
 
             # these three lines occupied 70% of the time of initializing MetaTaskDS
@@ -161,9 +161,15 @@ class MetaTaskDS(MetaTask):
             if prev_size == 0 or d_test.shape[0] / prev_size <= 0.1:
                 raise ValueError(f"Most of samples are dropped. Please check this task: {task}")
 
-            assert (
-                d_test.groupby("datetime").size().shape[0] >= 5
-            ), "In this segment, this trading dates is less than 5, you'd better check the data."
+            if d_test.groupby("datetime").size().shape[0] < 5:
+                train_st = d_train.index.min()
+                train_ed = d_train.index.max()
+                test_st = d_test.index.min()
+                test_st = d_test.index.max()
+                get_module_logger("MetaTaskDS").warning(
+                    "In this segment, the number of trading dates is less than 5, you'd better check the data: "
+                    f"train: {train_st} - {train_ed}, test: {test_st} - {test_st}"
+                )
 
             sample_time_belong = np.zeros((d_train.shape[0], time_perf.shape[1]))
             for i, col in enumerate(time_perf.columns):
@@ -198,7 +204,7 @@ class MetaTaskDS(MetaTask):
                 for col in meta_info_norm.columns:
                     fill_value[col] = meta_info_norm.loc[meta_info_norm[col].isna(), :].dropna(axis=1).mean().max()
                 fill_value = pd.Series(fill_value).sort_index()
-                # The NaN Values are filled segment-wise. Below is an exampleof fill_value
+                # The NaN Values are filled segment-wise. Below is an example of fill_value
                 # 2009-01-05  2009-02-06    0.145809
                 # 2009-02-09  2009-03-06    0.148005
                 # 2009-03-09  2009-04-03    0.090385

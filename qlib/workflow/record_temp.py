@@ -168,7 +168,7 @@ class SignalRecord(RecordTemp):
         self.label_key = label_key
 
     @staticmethod
-    def generate_label(dataset, label_key):
+    def generate_label(dataset, label_key=DataHandlerLP.DK_I):
         with class_casting(dataset, DatasetH):
             params = dict(segments="test", col_set="label", data_key=label_key)
             try:

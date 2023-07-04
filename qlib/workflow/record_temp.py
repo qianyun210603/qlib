@@ -4,7 +4,7 @@
 import logging
 import warnings
 from pprint import pprint
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Iterable
 
 import pandas as pd
 
@@ -422,8 +422,8 @@ class PortAnaRecord(ACRecordTemp):
         indicator_analysis_method=None,
         verbose=True,
         skip_existing=False,
-        exclude_freq: Union[List, str] = None,
-        save_trades: bool=True,
+        exclude_freq: Union[Iterable, str] = set(),
+        save_trades: bool = True,
     ):
         """
         config["strategy"] : dict
@@ -471,7 +471,7 @@ class PortAnaRecord(ACRecordTemp):
         # We only deepcopy_basic_type because
         # - We don't want to affect the config outside.
         # - We don't want to deepcopy complex object to avoid overhead
-        config = deepcopy_basic_type(config)
+        config: dict = deepcopy_basic_type(config)
 
         self.strategy_config = config["strategy"]
         _default_executor_config = {

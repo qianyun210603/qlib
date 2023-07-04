@@ -250,16 +250,17 @@ class Exchange:
         for freq in self.all_fields.keys():
             if freq in self.quote_dfs:
                 min_date = self.quote_dfs[freq].index.get_level_values("datetime").min().normalize()
-                max_date = self.quote_dfs[freq].index.get_level_values("datetime").max().normalize() + pd.Timedelta(days=1)
+                max_date = self.quote_dfs[freq].index.get_level_values("datetime").max().normalize() + pd.Timedelta(
+                    days=1
+                )
                 missing_fields = set(self.all_fields[freq]) - set(self.quote_dfs[freq].columns)
 
                 if min_date <= self.start_time and max_date >= self.end_time and not bool(missing_fields):
                     self.logger.info(f"Using cached {freq} data,")
                     continue
-                else:
-                    self.logger.info(f"{min_date}-{self.start_time}; {max_date}-{self.end_time}; {str(missing_fields)}")
-                    self.logger.info(f"clear insufficient {freq} data")
-                    del self.quote_dfs[freq]
+                self.logger.info(f"{min_date}-{self.start_time}; {max_date}-{self.end_time}; {str(missing_fields)}")
+                self.logger.info(f"clear insufficient {freq} data")
+                del self.quote_dfs[freq]
             self.quote_dfs[freq] = D.features(
                 self.codes,
                 self.all_fields[freq],
@@ -438,7 +439,7 @@ class Exchange:
             - if direction is None, check if tradable for buying and selling.
             - if direction == Order.BUY, check the if tradable for buying
             - if direction == Order.SELL, check the sell limit for selling.
-
+        freq : str | None
         Returns
         -------
         True: the trading of the stock is limited (maybe hit the highest/lowest price), hence the stock is not tradable

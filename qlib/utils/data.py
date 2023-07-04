@@ -4,7 +4,7 @@
 This module covers some utility functions that operate on data or basic object
 """
 from copy import deepcopy
-from typing import List, Union
+from typing import List, Union, Any
 import pandas as pd
 import numpy as np
 
@@ -32,7 +32,7 @@ def zscore(x: Union[pd.Series, pd.DataFrame]):
     return (x - x.mean()).div(x.std())
 
 
-def deepcopy_basic_type(obj: object) -> object:
+def deepcopy_basic_type(obj: object) -> Any:
     """
     deepcopy an object without copy the complicated objects.
         This is useful when you want to generate Qlib tasks and share the handler

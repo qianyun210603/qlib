@@ -65,10 +65,10 @@ class PortfolioMetrics:
                 benchmark code, default is SH000300 CSI300
             - start_time : Union[str, pd.Timestamp], optional
                 - If `benchmark` is pd.Series, it will be ignored
-                - Else, it represent start time of benchmark, by default None
+                - Else, it represents start time of benchmark, by default None
             - end_time : Union[str, pd.Timestamp], optional
                 - If `benchmark` is pd.Series, it will be ignored
-                - Else, it represent end time of benchmark, by default None
+                - Else, it represents end time of benchmark, by default None
 
         """
 

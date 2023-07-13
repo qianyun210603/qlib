@@ -16,7 +16,7 @@ from ..utils.resam import resam_ts_data
 class Signal(metaclass=abc.ABCMeta):
     """
     Some trading strategy make decisions based on other prediction signals
-    The signals may comes from different sources(e.g. prepared data, online prediction from model and dataset)
+    The signals may come from different sources(e.g. prepared data, online prediction from model and dataset)
 
     This interface is tries to provide unified interface for those different sources
     """

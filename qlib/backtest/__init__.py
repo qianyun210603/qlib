@@ -108,11 +108,11 @@ def get_exchange(
 
 
 def create_account_instance(
-    start_time: Union[pd.Timestamp, str],
-    end_time: Union[pd.Timestamp, str],
-    benchmark: Optional[str],
     account: Union[float, int, dict],
     pos_type: str = "Position",
+    benchmark: Optional[str] = None,
+    start_time: Union[pd.Timestamp, str] = None,
+    end_time: Union[pd.Timestamp, str] = None,
 ) -> Account:
     """
     # TODO: is very strange pass benchmark_config in the account (maybe for report)
@@ -120,12 +120,6 @@ def create_account_instance(
 
     Parameters
     ----------
-    start_time
-        start time of the benchmark
-    end_time
-        end time of the benchmark
-    benchmark : str
-        the benchmark for reporting
     account :   Union[
                     float,
                     {
@@ -145,12 +139,20 @@ def create_account_instance(
             ...
     pos_type: str
         Postion type.
+    benchmark : str
+        the benchmark for reporting
+    start_time
+        start time of the benchmark
+    end_time
+        end time of the benchmark
     """
     if isinstance(account, (int, float)):
         init_cash = account
+        timestamp = start_time
         position_dict = {}
     elif isinstance(account, dict):
         init_cash = account.pop("cash")
+        timestamp = account.pop("timestamp", None)
         position_dict = account
     else:
         raise ValueError("account must be in (int, float, dict)")
@@ -159,6 +161,7 @@ def create_account_instance(
         init_cash=init_cash,
         position_dict=position_dict,
         pos_type=pos_type,
+        pos_timestamp=timestamp,
         benchmark_config={}
         if benchmark is None
         else {

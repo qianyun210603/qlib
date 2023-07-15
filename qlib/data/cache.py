@@ -2,36 +2,37 @@
 # Licensed under the MIT License.
 
 
-from __future__ import division, print_function
+from __future__ import division
+from __future__ import print_function
 
-import abc
-import contextlib
 import multiprocessing
 import os
-import pickle
 import stat
 import sys
 import time
+import pickle
 import traceback
-from collections import OrderedDict
+import redis_lock
+import contextlib
+import abc
 from pathlib import Path
-from typing import Iterable, Optional, Union
-
 import numpy as np
 import pandas as pd
-import redis_lock
+from typing import Union, Iterable, Optional
+from collections import OrderedDict
 
 from ..config import C
-from ..log import get_module_logger
 from ..utils import (
-    get_redis_connection,
     hash_args,
+    get_redis_connection,
+    read_bin,
+    parse_field,
+    remove_fields_space,
     normalize_cache_fields,
     normalize_cache_instruments,
-    parse_field,
-    read_bin,
-    remove_fields_space,
 )
+
+from ..log import get_module_logger
 from .base import Feature
 from .ops import Operators  # pylint: disable=W0611  # noqa: F401
 
@@ -401,7 +402,7 @@ class ExpressionCache(BaseProviderCache):
     .. note:: Override the `_uri` and `_expression` method to create your own expression cache mechanism.
     """
 
-    def expression(self, instrument, expression, start_time, end_time, freq, instrument_d=None, **kwargs):
+    def expression(self, instrument, expression, start_time, end_time, freq, instrument_d=None, **_):
         """Get expression data.
 
         .. note:: Same interface as `expression` method in expression provider
@@ -500,7 +501,7 @@ class DatasetCache(BaseProviderCache):
     def _dataset_uri(
         self, instruments, fields, start_time=None, end_time=None, freq="day", disk_cache=1, inst_processors=[]
     ):
-        """Get a uri of feature dataset using cache.
+        """Get an uri of feature dataset using cache.
         specially:
             disk_cache=1 means using data set cache and return the uri of cache file.
             disk_cache=0 means client knows the path of expression cache,

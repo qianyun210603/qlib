@@ -159,14 +159,16 @@ class BaseTopkStrategy(BaseSignalStrategy):
 
         return pred_score, list(remain_holding), list(force_sell)
 
-    def _generate_buy_sell_list( self,
-                                pred_score,
-                                current_stock_list,
-                                trade_start_time,
-                                trade_end_time,
-                                pred_start_time,
-                                pred_end_time,
-                                redundancy=0) -> Tuple[List, List]:
+    def _generate_buy_sell_list(
+        self,
+        pred_score,
+        current_stock_list,
+        trade_start_time,
+        trade_end_time,
+        pred_start_time,
+        pred_end_time,
+        redundancy=0,
+    ) -> Tuple[List, List]:
         raise NotImplementedError("Please implement `_generate_buy_sell_list` method")
 
     def _generate_decisions_from_bs_list(
@@ -544,7 +546,14 @@ class TopkKeepnDropoutStrategy(BaseTopkStrategy):
         self.only_tradable = only_tradable
 
     def _generate_buy_sell_list(
-        self, pred_score, current_stock_list, trade_start_time, trade_end_time, pred_start_time, pred_end_time, redundancy=0
+        self,
+        pred_score,
+        current_stock_list,
+        trade_start_time,
+        trade_end_time,
+        pred_start_time,
+        pred_end_time,
+        redundancy=0,
     ):
         pred_score, current_stock_list, removed_from_population = self.filter_instruments_by_market(
             pred_score, current_stock_list, trade_start_time, trade_end_time

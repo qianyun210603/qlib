@@ -410,7 +410,9 @@ class ExpressionCache(BaseProviderCache):
         try:
             return self._expression(instrument, expression, start_time, end_time, freq, instrument_d=instrument_d)
         except NotImplementedError:
-            return self.provider.expression(instrument, expression, start_time, end_time, freq, instrument_d=instrument_d)
+            return self.provider.expression(
+                instrument, expression, start_time, end_time, freq, instrument_d=instrument_d
+            )
 
     def _uri(self, instrument, field, start_time, end_time, freq):
         """Get expression cache file uri.
@@ -612,7 +614,9 @@ class DiskExpressionCache(ExpressionCache):
                 # When the expression is not a raw feature
                 # generate expression cache if the feature is not a Feature
                 # instance
-                series = self.provider.expression(instrument, field, _calendar[0], _calendar[-1], freq, instrument_d=instrument_d)
+                series = self.provider.expression(
+                    instrument, field, _calendar[0], _calendar[-1], freq, instrument_d=instrument_d
+                )
                 if not series.empty:
                     # This expression is empty, we don't generate any cache for it.
                     with CacheUtils.writer_lock(self.r, f"{str(C.dpm.get_data_uri(freq))}:expression-{_cache_uri}"):
@@ -629,7 +633,9 @@ class DiskExpressionCache(ExpressionCache):
                     return series
             else:
                 # If the expression is a raw feature(such as $close, $open)
-                return self.provider.expression(instrument, field, start_time, end_time, freq, instrument_d=instrument_d)
+                return self.provider.expression(
+                    instrument, field, start_time, end_time, freq, instrument_d=instrument_d
+                )
 
     def gen_expression_cache(self, expression_data, cache_path, instrument, field, freq, last_update):
         """use bin file to save like feature-data."""

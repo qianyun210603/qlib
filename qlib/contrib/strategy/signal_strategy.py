@@ -220,7 +220,9 @@ class BaseTopkStrategy(BaseSignalStrategy):
             ):
                 continue
             # buy order
-            buy_price = self.trade_exchange.get_close(stock_id=code, start_time=pred_start_time, end_time=pred_end_time)
+            buy_price = self.trade_exchange.get_deal_price(
+                stock_id=code, start_time=trade_start_time, end_time=trade_end_time, direction=OrderDir.BUY
+            )
             buy_amount = value / buy_price
             factor = self.trade_exchange.get_factor(stock_id=code, start_time=trade_start_time, end_time=trade_end_time)
             buy_amount = self.trade_exchange.round_amount_by_trade_unit(buy_amount, factor)
@@ -409,12 +411,15 @@ class TopkDropoutStrategy(BaseTopkStrategy):
                         test_buy_price = self.trade_exchange.get_close(
                             stock_id=si, start_time=pred_start_time, end_time=pred_end_time
                         )
-                        factor = self.trade_exchange.get_factor(
-                            stock_id=si, start_time=pred_start_time, end_time=pred_end_time
-                        )
-                        buy_amount = self.trade_exchange.round_amount_by_trade_unit(
-                            estimate_value / test_buy_price, factor
-                        )
+                        if test_buy_price is not None:
+                            factor = self.trade_exchange.get_factor(
+                                stock_id=si, start_time=pred_start_time, end_time=pred_end_time
+                            )
+                            buy_amount = self.trade_exchange.round_amount_by_trade_unit(
+                                estimate_value / test_buy_price, factor
+                            )
+                        else:
+                            buy_amount = 100
                         if buy_amount > 0:
                             res.append(si)
                             cur_n += 1

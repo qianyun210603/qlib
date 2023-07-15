@@ -18,7 +18,8 @@ I will try to merge some non-debateable features/bugfix to the original qlib. Bu
 | Orthogonalization preprocesser | Add preprocessers to do Schimit and Symetric Orthogonalization           | Done |
 | Support non-adjusted data      | Add support for non-adjusted data                                        | Done |
 | Enhanced plotting I            | Use rangebreak to allow Datetime axis in plottings                       | [Merged](https://github.com/microsoft/qlib/pull/1390) |
-| Enhanced plotting II           | Add support for plotting factor returns                                  | Done |
+| Enhanced plotting II           | Add support for plotting factor returns                                  | Done | 
+| Enhanced plotting III          | 1) Custom benchmark; 2) stratifying fix; 3) Colorbar enhancement         | [Merging](https://github.com/microsoft/qlib/pull/1413) | 
 | Topk backtest engine I         | Allow sell in limit-up case and allow buy in limit-down case             | [Merged](https://github.com/microsoft/qlib/pull/1407) |
 | Topk backtest engine II        | Sell names which are removed from instrument population (expired, delisted, removed from index etc)             | Done |
 | Ops `Today`                    | Return Calendar days since BASE_DAY(1970-01-01)          | Done |
@@ -76,7 +77,7 @@ Users can install the latest forked version ``Qlib`` by the source code accordin
     ```
   **Note**:  You can install Qlib with `python setup.py install` as well. But it is not the recommended approach. It will skip `pip` and cause obscure problems. For example, **only** the command ``pip install .`` **can** overwrite the stable version installed by ``pip install pyqlib``, while the command ``python setup.py install`` **can't**.
 
-**Tips**: If you fail to install `Qlib` or run the examples in your environment,  comparing your steps and the [CI workflow](.github/workflows/Tests.yml) may help you find the problem.
+**Tips**: If you fail to install `Qlib` or run the examples in your environment,  comparing your steps and the [CI workflow](.github/workflows/test_qlib_from_source.yml) may help you find the problem.
 
 ### More details
 Please refer the [readme](http://github.com/microsoft/qlib) and [documentation](https://qlib.readthedocs.io/en/latest) of the original qlib.

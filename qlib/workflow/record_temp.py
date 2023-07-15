@@ -4,7 +4,7 @@
 import logging
 import warnings
 from pprint import pprint
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Iterable
 
 import pandas as pd
 
@@ -422,6 +422,8 @@ class PortAnaRecord(ACRecordTemp):
         indicator_analysis_method=None,
         verbose=True,
         skip_existing=False,
+        exclude_freq: Union[Iterable, str] = set(),
+        save_trades: bool = True,
     ):
         """
         config["strategy"] : dict
@@ -438,6 +440,10 @@ class PortAnaRecord(ACRecordTemp):
             the candidate values include 'mean', 'amount_weighted', 'value_weighted'
         verbose: bool
             if print out summary in console
+        exclude_freq: Union[List, str]
+            freqs not save
+        save_trades: bool
+            if save trades records
         """
         super().__init__(recorder=recorder, skip_existing=skip_existing)
 
@@ -465,7 +471,7 @@ class PortAnaRecord(ACRecordTemp):
         # We only deepcopy_basic_type because
         # - We don't want to affect the config outside.
         # - We don't want to deepcopy complex object to avoid overhead
-        config = deepcopy_basic_type(config)
+        config: dict = deepcopy_basic_type(config)
 
         self.strategy_config = config["strategy"]
         _default_executor_config = {
@@ -500,6 +506,13 @@ class PortAnaRecord(ACRecordTemp):
 
         self.verbose = verbose
 
+        if isinstance(exclude_freq, str):
+            self.exclude_freq = {exclude_freq}
+        else:
+            self.exclude_freq = set(exclude_freq)
+
+        self.save_trades = save_trades
+
     def _get_report_freq(self, executor_config):
         ret_freq = []
         if executor_config["kwargs"].get("generate_portfolio_metrics", False):
@@ -529,14 +542,17 @@ class PortAnaRecord(ACRecordTemp):
             executor=self.executor_config, strategy=self.strategy_config, **self.backtest_config
         )
         for _freq, (report_normal, positions_normal) in portfolio_metric_dict.items():
-            self.save(**{f"report_normal_{_freq}.pkl": report_normal})
-            self.save(**{f"positions_normal_{_freq}.pkl": positions_normal})
+            if self.exclude_freq is None or _freq not in self.exclude_freq:
+                self.save(**{f"report_normal_{_freq}.pkl": report_normal})
+                self.save(**{f"positions_normal_{_freq}.pkl": positions_normal})
 
         for _freq, indicators_normal in indicator_dict.items():
-            self.save(**{f"indicators_normal_{_freq}.pkl": indicators_normal[0]})
-            self.save(**{f"indicators_normal_{_freq}_obj.pkl": indicators_normal[1]})
+            if self.exclude_freq is None or _freq not in self.exclude_freq:
+                self.save(**{f"indicators_normal_{_freq}.pkl": indicators_normal[0]})
+                self.save(**{f"indicators_normal_{_freq}_obj.pkl": indicators_normal[1]})
 
-        self.save(**{"trades.pkl": trades})
+        if self.save_trades:
+            self.save(**{"trades.pkl": trades})
 
         for _analysis_freq in self.risk_analysis_freq:
             if _analysis_freq not in portfolio_metric_dict:

@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Union, Optional
 
 import numpy as np
 import pandas as pd
@@ -21,7 +21,10 @@ class BasePosition:
     Please refer to the `Position` class for the position
     """
 
-    def __init__(self, *args: Any, cash: float = 0.0, **kwargs: Any) -> None:
+    def __init__(
+        self, *args: Any, cash: float = 0.0, timestamp: Optional[Union[str, pd.Timestamp]] = None, **kwargs: Any
+    ) -> None:
+        self.timestamp = pd.Timestamp(timestamp)
         self.init_cash = cash
         self._settle_type = self.ST_NO
         self.position: dict = {}
@@ -245,7 +248,12 @@ class Position(BasePosition):
     }
     """
 
-    def __init__(self, cash: float = 0, position_dict: Dict[str, Union[Dict[str, float], float]] = {}) -> None:
+    def __init__(
+        self,
+        cash: float = 0,
+        position_dict: Dict[str, Union[Dict[str, float], float]] = {},
+        timestamp: Optional[Union[str, pd.Timestamp]] = None,
+    ) -> None:
         """Init position by cash and position_dict.
 
         Parameters
@@ -263,7 +271,7 @@ class Position(BasePosition):
             if there is no price key in the dict of stocks, it will be filled by _fill_stock_value.
             by default {}.
         """
-        super().__init__(cash=cash)
+        super().__init__(cash=cash, timestamp=timestamp)
 
         # NOTE: The position dict must be copied!!!
         # Otherwise, the initial value
@@ -279,7 +287,9 @@ class Position(BasePosition):
         except KeyError:
             pass
 
-    def fill_stock_value(self, start_time: Union[str, pd.Timestamp], freq: str, last_days: int = 30) -> None:
+    def fill_stock_value(
+        self, start_time: Union[str, pd.Timestamp] = None, freq: str = "day", last_days: int = 30
+    ) -> None:
         """fill the stock value by the close price of the latest last_days from qlib.
 
         Parameters
@@ -301,7 +311,7 @@ class Position(BasePosition):
         if len(stock_list) == 0:
             return
 
-        start_time = pd.Timestamp(start_time)
+        start_time = pd.Timestamp(start_time) if start_time is not None else self.timestamp
         # note that start time is 2020-01-01 00:00:00 if raw start time is "2020-01-01"
         price_end_time = start_time
         price_start_time = start_time - timedelta(days=last_days)
@@ -451,10 +461,9 @@ class Position(BasePosition):
 
     def get_stock_count(self, code: str, bar: str) -> float:
         """the days the account has been hold, it may be used in some special strategies"""
-        if f"count_{bar}" in self.position[code]:
+        if f"count_{bar}" in self.position.get(code, {}):
             return self.position[code][f"count_{bar}"]
-        else:
-            return 0
+        return 0
 
     def get_stock_weight(self, code: str) -> float:
         return self.position[code]["weight"]

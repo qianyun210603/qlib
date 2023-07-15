@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-from typing import Dict, List, Optional, Tuple, cast
+from typing import Dict, List, Optional, Tuple, cast, Union
 
 import pandas as pd
 
@@ -83,6 +83,7 @@ class Account:
         freq: str = "day",
         benchmark_config: dict = {},
         pos_type: str = "Position",
+        pos_timestamp: pd.Timestamp = None,
         port_metr_enabled: bool = True,
     ) -> None:
         """the trade account of backtest.
@@ -106,9 +107,16 @@ class Account:
         self._pos_type = pos_type
         self._port_metr_enabled = port_metr_enabled
         self.benchmark_config: dict = {}  # avoid no attribute error
-        self.init_vars(init_cash, position_dict, freq, benchmark_config)
+        self.init_vars(init_cash, position_dict, freq, benchmark_config, pos_timestamp)
 
-    def init_vars(self, init_cash: float, position_dict: dict, freq: str, benchmark_config: dict) -> None:
+    def init_vars(
+        self,
+        init_cash: float,
+        position_dict: dict,
+        freq: str,
+        benchmark_config: dict,
+        pos_timestamp: Optional[Union[pd.Timestamp, str]] = None,
+    ) -> None:
         # 1) the following variables are shared by multiple layers
         # - you will see a shallow copy instead of deepcopy in the NestedExecutor;
         self.init_cash = init_cash
@@ -118,6 +126,7 @@ class Account:
                 "kwargs": {
                     "cash": init_cash,
                     "position_dict": position_dict,
+                    "timestamp": pos_timestamp,
                 },
                 "module_path": "qlib.backtest.position",
             },
@@ -136,18 +145,18 @@ class Account:
         return self._port_metr_enabled and not self.current_position.skip_update()
 
     def reset_report(self, freq: str, benchmark_config: dict) -> None:
+        # fill stock value
+        # The frequency of account may not align with the trading frequency.
+        # This may result in obscure bugs when data quality is low.
+        start_time = self.benchmark_config.get("start_time", None) if isinstance(self.benchmark_config, dict) else None
+        self.current_position.fill_stock_value(start_time, self.freq)
+
         # portfolio related metrics
         if self.is_port_metr_enabled():
             # NOTE:
             # `accum_info` and `current_position` are shared here
             self.portfolio_metrics = PortfolioMetrics(freq, benchmark_config)
             self.hist_positions = {}
-
-            # fill stock value
-            # The frequency of account may not align with the trading frequency.
-            # This may result in obscure bugs when data quality is low.
-            if isinstance(self.benchmark_config, dict) and "start_time" in self.benchmark_config:
-                self.current_position.fill_stock_value(self.benchmark_config["start_time"], self.freq)
 
         # trading related metrics(e.g. high-frequency trading)
         self.indicator = Indicator()
@@ -235,6 +244,7 @@ class Account:
         # NOTE: updating position does not only serve portfolio metrics, it also serves the strategy
         assert self.current_position is not None
 
+        self.current_position.timestamp = trade_end_time
         if not self.current_position.skip_update():
             stock_list = self.current_position.get_stock_list()
             for code in stock_list:

@@ -108,7 +108,7 @@ class TradeCalendarManager:
             pandas.Series.loc
             # - The returned right endpoints should minus 1 seconds because of the closed interval representation in
             #   Qlib.
-            # Note: Qlib supports up to minutely decision execution, so 1 seconds is less than any trading time
+            # Note: Qlib supports up to minutely decision execution, so 1 second is less than any trading time
             #   interval.
 
         Parameters

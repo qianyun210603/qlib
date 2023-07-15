@@ -532,7 +532,9 @@ def remove_fields_space(fields: [list, str, tuple]):
     """
     if isinstance(fields, str):
         return fields.replace(" ", "")
-    return [i.replace(" ", "") if isinstance(i, str) else str(i) for i in fields]
+    if isinstance(fields, (list, tuple)):
+        return [i.replace(" ", "") if isinstance(i, str) else str(i) for i in fields]
+    return str(fields)
 
 
 def normalize_cache_fields(fields: [list, tuple]):

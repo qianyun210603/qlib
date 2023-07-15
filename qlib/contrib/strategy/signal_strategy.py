@@ -241,14 +241,11 @@ class BaseTopkStrategy(BaseSignalStrategy):
         current_temp = copy.deepcopy(self.trade_position)
         current_stock_list = current_temp.get_stock_list()
 
-        # pred_score = pred_score.reindex(pred_score.index.union(current_stock_list), fill_value=-np.inf)
-
         buy, sell = self._generate_buy_sell_list(pred_score, current_stock_list, trade_start_time, trade_end_time)
         return self._generate_decisions_from_bs_list(current_temp, buy, sell, trade_start_time, trade_end_time)
 
 
 class TopkDropoutStrategy(BaseTopkStrategy):
-    # TODO:
     # 1. Supporting leverage the get_range_limit result from the decision
     # 2. Supporting alter_outer_trade_decision
     # 3. Supporting checking the availability of trade decision

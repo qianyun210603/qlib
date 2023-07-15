@@ -48,6 +48,15 @@ def init(default_conf="client", **kwargs):
     clear_mem_cache = kwargs.pop("clear_mem_cache", True)
     if clear_mem_cache:
         H.clear()
+
+    default_config_overwrite = Path(kwargs.pop("default_config_overwrite", "~/.qlib/default_config_overwrite.yaml"))
+    default_config_overwrite = default_config_overwrite.expanduser()
+    if default_config_overwrite.exists():
+        with open(default_config_overwrite, "r") as stream:
+            default_config_overwrite = yaml.safe_load(stream)
+        kwargs.update(default_config_overwrite)
+        logger.info(f"Load default config overwrite from {default_config_overwrite}")
+
     C.set(default_conf, **kwargs)
     get_module_logger.setLevel(C.logging_level)
 

@@ -341,4 +341,4 @@ def format_decisions(
     return res
 
 
-__all__ = ["Order", "backtest", "get_strategy_executor"]
+__all__ = ["Order", "backtest", "get_strategy_executor", "get_exchange", "create_account_instance"]

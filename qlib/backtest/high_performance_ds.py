@@ -159,10 +159,10 @@ class NumpyQuote(BaseQuote):
             return None
 
         # single data
-        # If it don't consider the classification of single data, it will consume a lot of time.
+        # If it doesn't consider the classification of single data, it will consume a lot of time.
         if is_single_value(start_time, end_time, self.freq, self.region):
             # this is a very special case.
-            # skip aggregating function to speed-up the query calculation
+            # skip aggregating function to speed up the query calculation
 
             # FIXME:
             # it will go to the else logic when it comes to the

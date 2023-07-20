@@ -311,7 +311,7 @@ class Position(BasePosition):
         if len(stock_list) == 0:
             return
 
-        start_time = pd.Timestamp(start_time) if start_time is not None else self.timestamp
+        start_time = self.timestamp if self.timestamp is not None else pd.Timestamp(start_time)
         # note that start time is 2020-01-01 00:00:00 if raw start time is "2020-01-01"
         price_end_time = start_time
         price_start_time = start_time - timedelta(days=last_days)

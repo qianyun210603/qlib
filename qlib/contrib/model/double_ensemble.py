@@ -64,7 +64,7 @@ class DEnsembleModel(Model, FeatureInt):
         self.loss = loss
         self.early_stopping_rounds = early_stopping_rounds
 
-    def fit(self, dataset: DatasetH):
+    def fit(self, dataset: DatasetH, reweigher=None):
         df_train, df_valid = dataset.prepare(
             ["train", "valid"], col_set=["feature", "label"], data_key=DataHandlerLP.DK_L
         )

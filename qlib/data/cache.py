@@ -2,36 +2,37 @@
 # Licensed under the MIT License.
 
 
-from __future__ import division, print_function
+from __future__ import division
+from __future__ import print_function
 
-import abc
-import contextlib
 import multiprocessing
 import os
-import pickle
 import stat
 import sys
 import time
+import pickle
 import traceback
-from collections import OrderedDict
+import redis_lock
+import contextlib
+import abc
 from pathlib import Path
-from typing import Iterable, Optional, Union
-
 import numpy as np
 import pandas as pd
-import redis_lock
+from typing import Union, Iterable, Optional
+from collections import OrderedDict
 
 from ..config import C
-from ..log import get_module_logger
 from ..utils import (
-    get_redis_connection,
     hash_args,
+    get_redis_connection,
+    read_bin,
+    parse_field,
+    remove_fields_space,
     normalize_cache_fields,
     normalize_cache_instruments,
-    parse_field,
-    read_bin,
-    remove_fields_space,
 )
+
+from ..log import get_module_logger
 from .base import Feature
 from .ops import Operators  # pylint: disable=W0611  # noqa: F401
 
@@ -401,15 +402,17 @@ class ExpressionCache(BaseProviderCache):
     .. note:: Override the `_uri` and `_expression` method to create your own expression cache mechanism.
     """
 
-    def expression(self, instrument, expression, start_time, end_time, freq):
+    def expression(self, instrument, expression, start_time, end_time, freq, instrument_d=None, **_):
         """Get expression data.
 
         .. note:: Same interface as `expression` method in expression provider
         """
         try:
-            return self._expression(instrument, expression, start_time, end_time, freq)
+            return self._expression(instrument, expression, start_time, end_time, freq, instrument_d=instrument_d)
         except NotImplementedError:
-            return self.provider.expression(instrument, expression, start_time, end_time, freq)
+            return self.provider.expression(
+                instrument, expression, start_time, end_time, freq, instrument_d=instrument_d
+            )
 
     def _uri(self, instrument, field, start_time, end_time, freq):
         """Get expression cache file uri.
@@ -418,7 +421,7 @@ class ExpressionCache(BaseProviderCache):
         """
         raise NotImplementedError("Implement this function to match your own cache mechanism")
 
-    def _expression(self, instrument, field, start_time, end_time, freq):
+    def _expression(self, instrument, field, start_time, end_time, freq, instrument_d=None):
         """Get expression data using cache.
 
         Override this method to define how to get expression data corresponding to users' own cache mechanism.
@@ -500,7 +503,7 @@ class DatasetCache(BaseProviderCache):
     def _dataset_uri(
         self, instruments, fields, start_time=None, end_time=None, freq="day", disk_cache=1, inst_processors=[]
     ):
-        """Get a uri of feature dataset using cache.
+        """Get an uri of feature dataset using cache.
         specially:
             disk_cache=1 means using data set cache and return the uri of cache file.
             disk_cache=0 means client knows the path of expression cache,
@@ -570,7 +573,7 @@ class DiskExpressionCache(ExpressionCache):
         instrument = str(instrument).lower()
         return hash_args(instrument, field, freq)
 
-    def _expression(self, instrument, field, start_time=None, end_time=None, freq="day"):
+    def _expression(self, instrument, field, start_time=None, end_time=None, freq="day", instrument_d=None):
         _cache_uri = self._uri(instrument=instrument, field=field, start_time=None, end_time=None, freq=freq)
         _instrument_dir = self.get_cache_dir(freq).joinpath(instrument.lower())
         cache_path = _instrument_dir.joinpath(_cache_uri)
@@ -595,12 +598,13 @@ class DiskExpressionCache(ExpressionCache):
                 # FIXME: Multiple readers may result in error visit number
                 if not self.remote:
                     CacheUtils.visit(cache_path)
-                series = read_bin(cache_path, start_index, end_index)
-                return series
+                if self.update(cache_path, freq) < 2:
+                    series = read_bin(cache_path, start_index, end_index)
+                    return series
             except Exception:
                 series = None
                 self.logger.error("reading %s file error : %s" % (cache_path, traceback.format_exc()))
-            return series
+                return series
         else:
             # normalize field
             field = remove_fields_space(field)
@@ -610,7 +614,9 @@ class DiskExpressionCache(ExpressionCache):
                 # When the expression is not a raw feature
                 # generate expression cache if the feature is not a Feature
                 # instance
-                series = self.provider.expression(instrument, field, _calendar[0], _calendar[-1], freq)
+                series = self.provider.expression(
+                    instrument, field, _calendar[0], _calendar[-1], freq, instrument_d=instrument_d
+                )
                 if not series.empty:
                     # This expression is empty, we don't generate any cache for it.
                     with CacheUtils.writer_lock(self.r, f"{str(C.dpm.get_data_uri(freq))}:expression-{_cache_uri}"):
@@ -627,7 +633,9 @@ class DiskExpressionCache(ExpressionCache):
                     return series
             else:
                 # If the expression is a raw feature(such as $close, $open)
-                return self.provider.expression(instrument, field, start_time, end_time, freq)
+                return self.provider.expression(
+                    instrument, field, start_time, end_time, freq, instrument_d=instrument_d
+                )
 
     def gen_expression_cache(self, expression_data, cache_path, instrument, field, freq, last_update):
         """use bin file to save like feature-data."""
@@ -637,7 +645,7 @@ class DiskExpressionCache(ExpressionCache):
             "info": {"instrument": instrument, "field": field, "freq": freq, "last_update": last_update},
             "meta": {"last_visit": time.time(), "visits": 1},
         }
-        self.logger.debug(f"generating expression cache: {meta}")
+        self.logger.info(f"generating expression cache: {meta}")
         self.clear_cache(cache_path)
         meta_path = cache_path.with_suffix(".meta")
 
@@ -676,6 +684,7 @@ class DiskExpressionCache(ExpressionCache):
             if len(new_calendar) <= 1:
                 # Including last updated calendar, we only get 1 item.
                 # No future updating is needed.
+                self.logger.info(f"No future updating is needed for cache {cp_cache_uri}")
                 return 1
             else:
                 # get the data needed after the historical data are removed.
@@ -707,6 +716,7 @@ class DiskExpressionCache(ExpressionCache):
                 d["info"]["last_update"] = str(new_calendar[-1])
                 with meta_path.open("wb") as f:
                     pickle.dump(d, f, protocol=C.dump_protocol_version)
+            self.logger.info(f"Cache {cp_cache_uri} updated successfully.")
         return 0
 
 

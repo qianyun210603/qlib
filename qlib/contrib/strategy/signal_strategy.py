@@ -78,7 +78,7 @@ class BaseSignalStrategy(BaseStrategy, ABC):
         return self.risk_degree
 
     @abc.abstractmethod
-    def generate_trade_candidates(self, trade_start_time, trade_end_time, *args, **kwargs) -> pd.DataFrame:
+    def generate_trade_candidates(self, trade_time, *args, redundancy=0, **kwargs) -> pd.DataFrame:
         raise NotImplementedError("Implement in subclasses")
 
 
@@ -160,7 +160,16 @@ class BaseTopkStrategy(BaseSignalStrategy):
 
         return pred_score, list(remain_holding), list(force_sell)
 
-    def _generate_buy_sell_list(self, *args, redundancy=0, **kwargs) -> Tuple[List, List]:
+    def _generate_buy_sell_list(
+        self,
+        pred_score,
+        current_stock_list,
+        trade_start_time,
+        trade_end_time,
+        pred_start_time,
+        pred_end_time,
+        redundancy=0,
+    ) -> Tuple[List, List]:
         raise NotImplementedError("Please implement `_generate_buy_sell_list` method")
 
     def _generate_decisions_from_bs_list(
@@ -270,7 +279,7 @@ class BaseTopkStrategy(BaseSignalStrategy):
             current_temp, buy, sell, trade_start_time, trade_end_time, pred_start_time, pred_end_time
         )
 
-    def generate_trade_candidates(self, trade_time, redundancy=0) -> pd.DataFrame:
+    def generate_trade_candidates(self, trade_time, *args, redundancy=0, **kwargs) -> pd.DataFrame:
         trade_step, _ = self.trade_calendar.get_range_idx(trade_time, trade_time)
         trade_start_time, trade_end_time = self.trade_calendar.get_step_time(trade_step)
         pred_start_time, pred_end_time = self.trade_calendar.get_step_time(trade_step, shift=1)
@@ -345,7 +354,6 @@ class BaseTopkStrategy(BaseSignalStrategy):
 
 
 class TopkDropoutStrategy(BaseTopkStrategy):
-    # TODO:
     # 1. Supporting leverage the get_range_limit result from the decision
     # 2. Supporting alter_outer_trade_decision
     # 3. Supporting checking the availability of trade decision
@@ -547,7 +555,14 @@ class TopkKeepnDropoutStrategy(BaseTopkStrategy):
         self.only_tradable = only_tradable
 
     def _generate_buy_sell_list(
-        self, pred_score, current_stock_list, trade_start_time, trade_end_time, pred_start_time, pred_end_time
+        self,
+        pred_score,
+        current_stock_list,
+        trade_start_time,
+        trade_end_time,
+        pred_start_time,
+        pred_end_time,
+        redundancy=0,
     ):
         pred_score, current_stock_list, removed_from_population = self.filter_instruments_by_market(
             pred_score, current_stock_list, trade_start_time, trade_end_time
@@ -664,6 +679,7 @@ class WeightStrategyBase(BaseSignalStrategy):
 
 
 class EnhancedIndexingStrategy(WeightStrategyBase):
+
     """Enhanced Indexing Strategy
 
     Enhanced indexing combines the arts of active management and passive management,

@@ -1,13 +1,11 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
-
 """
 Some tools for task management.
 """
 
 import bisect
-from typing import Union
-
+from copy import deepcopy
 import pandas as pd
 from pymongo import MongoClient
 from pymongo.database import Database
@@ -16,6 +14,10 @@ from qlib.config import C
 from qlib.data import D
 from qlib.log import get_module_logger
 from qlib.workflow import R
+from qlib.utils import hash_args
+from qlib.utils.mod import init_instance_by_config
+from typing import Union
+from pathlib import Path
 
 
 def get_mongodb() -> Database:
@@ -277,3 +279,31 @@ class TimeAdjuster:
             return self.get(start_idx), self.get(end_idx)
         else:
             raise NotImplementedError(f"This type of input is not supported")
+
+
+def replace_task_handler_with_cache(task: dict, cache_dir: Union[str, Path] = ".") -> dict:
+    """
+    Replace the handler in task with a cache handler.
+    It will automatically cache the file and save it in cache_dir.
+
+    >>> import qlib
+    >>> qlib.auto_init()
+    >>> import datetime
+    >>> # it is simplified task
+    >>> task = {"dataset": {"kwargs":{'handler': {'class': 'Alpha158', 'module_path': 'qlib.contrib.data.handler', 'kwargs': {'start_time': datetime.date(2008, 1, 1), 'end_time': datetime.date(2020, 8, 1), 'fit_start_time': datetime.date(2008, 1, 1), 'fit_end_time': datetime.date(2014, 12, 31), 'instruments': 'CSI300'}}}}}
+    >>> new_task = replace_task_handler_with_cache(task)
+    >>> print(new_task)
+    {'dataset': {'kwargs': {'handler': 'file...Alpha158.3584f5f8b4.pkl'}}}
+
+    """
+    cache_dir = Path(cache_dir)
+    task = deepcopy(task)
+    handler = task["dataset"]["kwargs"]["handler"]
+    if isinstance(handler, dict):
+        hash = hash_args(handler)
+        h_path = cache_dir / f"{handler['class']}.{hash[:10]}.pkl"
+        if not h_path.exists():
+            h = init_instance_by_config(handler)
+            h.to_pickle(h_path, dump_all=True)
+        task["dataset"]["kwargs"]["handler"] = f"file://{h_path}"
+    return task

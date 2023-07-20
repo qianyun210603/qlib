@@ -109,7 +109,7 @@ class EnvWrapper(
         # Use weak reference here, because:
         # 1. Logically, the other components should be able to live without an env_wrapper.
         #    For example, they might live in a strategy_wrapper in future.
-        #    Therefore injecting a "hard" attribute called "env" is not appropripate.
+        #    Therefore, injecting a "hard" attribute called "env" is not appropripate.
         # 2. When the environment gets destroyed, it gets destoryed.
         #    We don't want it to silently live inside some interpreters.
         # 3. Avoid circular reference.

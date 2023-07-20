@@ -119,7 +119,7 @@ class Account:
     ) -> None:
         # 1) the following variables are shared by multiple layers
         # - you will see a shallow copy instead of deepcopy in the NestedExecutor;
-        self.init_cash = init_cash
+
         self.current_position: BasePosition = init_instance_by_config(
             {
                 "class": self._pos_type,
@@ -137,6 +137,7 @@ class Account:
         self.portfolio_metrics: Optional[PortfolioMetrics] = None
         self.hist_positions: Dict[pd.Timestamp, BasePosition] = {}
         self.reset(freq=freq, benchmark_config=benchmark_config)
+        self.init_value = self.current_position.calculate_value()
 
     def is_port_metr_enabled(self) -> bool:
         """
@@ -272,7 +273,7 @@ class Account:
         assert self.portfolio_metrics is not None
 
         if self.portfolio_metrics.is_empty():
-            last_account_value = self.init_cash
+            last_account_value = self.init_value
             last_total_cost = 0
             last_total_turnover = 0
         else:

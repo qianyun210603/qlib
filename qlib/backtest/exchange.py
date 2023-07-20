@@ -471,17 +471,17 @@ class Exchange:
         if stock_id in quote.get_all_stock():
             # suspended stocks are represented by None $close stock
             # The $close may contain NaN,
-            close = quote.get_data(stock_id, start_time, end_time, "$close")
-            if close is None:
+            volume = quote.get_data(stock_id, start_time, end_time, "$volume")
+            if volume is None:
                 # if no close record exists
                 return True
-            elif isinstance(close, IndexData):
+            elif isinstance(volume, IndexData):
                 # **any** non-NaN $close represents trading opportunity may exist
                 #  if all returned is nan, then the stock is suspended
-                return cast(bool, cast(IndexData, close).isna().all())
+                return cast(bool, cast(IndexData, volume).isna().all())
             else:
                 # it is single value, make sure is not None
-                return np.isnan(close)
+                return np.isnan(volume)
         else:
             # if the stock is not in the stock list, then it is not tradable and regarded as suspended
             return True

@@ -1,6 +1,6 @@
 [![Python Versions](https://img.shields.io/pypi/pyversions/pyqlib.svg?logo=python&logoColor=white)](https://pypi.org/project/pyqlib/#files)
 [![Platform](https://img.shields.io/badge/platform-linux%20%7C%20windows-lightgrey)](https://pypi.org/project/pyqlib/#files)
-[![Github Actions Test Status](https://github.com/qianyun210603/qlib/actions/workflows/Tests.yml/badge.svg)](https://github.com/qianyun210603/qlib/actions)
+[![UnitTests](https://github.com/qianyun210603/qlib/actions/workflows/test_qlib_from_source.yml/badge.svg)](https://github.com/qianyun210603/qlib/actions/workflows/test_qlib_from_source.yml)
 [![Documentation Status](https://readthedocs.org/projects/qlib/badge/?version=latest)](https://qlib.readthedocs.io/en/latest/?badge=latest)
 [![License](https://img.shields.io/pypi/l/pyqlib)](LICENSE)
 

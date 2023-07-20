@@ -104,6 +104,7 @@ class BaseTopkStrategy(BaseSignalStrategy):
                 self.instruments = None
         self.forbid_all_trade_at_limit = forbid_all_trade_at_limit
         self.delist_schedule = {"SZ000418": pd.Timestamp("2019-05-07")}
+        self.use_prev_close_for_amount = kwargs.get("use_prev_close_for_amount", True)
         super().__init__(**kwargs)
 
     def filter_instruments_by_market(self, pred_score, current_stock_list, trade_start_time, trade_end_time):
@@ -220,11 +221,19 @@ class BaseTopkStrategy(BaseSignalStrategy):
             ):
                 continue
             # buy order
-            buy_price = self.trade_exchange.get_deal_price(
-                stock_id=code, start_time=trade_start_time, end_time=trade_end_time, direction=OrderDir.BUY
-            )
+            if self.use_prev_close_for_amount:
+                buy_price = self.trade_exchange.get_close(stock_id=code, start_time=pred_start_time,
+                                                          end_time=pred_end_time)
+                factor = self.trade_exchange.get_factor(stock_id=code, start_time=pred_start_time,
+                                                        end_time=pred_end_time)
+            else:
+                buy_price = self.trade_exchange.get_deal_price(
+                    stock_id=code, start_time=trade_start_time, end_time=trade_end_time, direction=OrderDir.BUY
+                )
+                factor = self.trade_exchange.get_factor(stock_id=code, start_time=trade_start_time, end_time=trade_end_time)
+
             buy_amount = value / buy_price
-            factor = self.trade_exchange.get_factor(stock_id=code, start_time=trade_start_time, end_time=trade_end_time)
+
             buy_amount = self.trade_exchange.round_amount_by_trade_unit(buy_amount, factor)
             if buy_amount != 0:
                 buy_order = Order(

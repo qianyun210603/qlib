@@ -560,7 +560,7 @@ class InfPosition(BasePosition):
         return np.inf
 
     def calculate_value(self) -> float:
-        raise NotImplementedError(f"InfPosition doesn't support calculating value")
+        return np.inf
 
     def get_stock_list(self) -> List[str]:
         raise NotImplementedError(f"InfPosition doesn't support stock list position")

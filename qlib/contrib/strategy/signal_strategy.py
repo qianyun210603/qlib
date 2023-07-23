@@ -104,7 +104,7 @@ class BaseTopkStrategy(BaseSignalStrategy):
                 self.instruments = None
         self.forbid_all_trade_at_limit = forbid_all_trade_at_limit
         self.delist_schedule = {"SZ000418": pd.Timestamp("2019-05-07")}
-        self.use_prev_close_for_amount = kwargs.get("use_prev_close_for_amount", True)
+        self.use_prev_close_for_amount = kwargs.get("use_prev_close_for_amount", False)
         super().__init__(**kwargs)
 
     def filter_instruments_by_market(self, pred_score, current_stock_list, trade_start_time, trade_end_time):

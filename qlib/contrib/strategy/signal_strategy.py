@@ -210,9 +210,14 @@ class BaseTopkStrategy(BaseSignalStrategy):
             # is order executable
             if self.trade_exchange.check_order(sell_order):
                 sell_order_list.append(sell_order)
-                trade_val, trade_cost, trade_price = self.trade_exchange.deal_order(sell_order, position=current_pos)
-                # update cash
-                cash += trade_val - trade_cost
+                if self.use_prev_close_for_amount:
+                    cash += self.trade_position.get_stock_price(code) * self.trade_position.get_stock_amount(code)
+                else:
+                    trade_val, trade_cost, trade_price = self.trade_exchange.deal_order(
+                        sell_order, position=current_pos
+                    )
+                    # update cash
+                    cash += trade_val - trade_cost
         # buy new stock
         # note the current has been changed
         value = cash * self.risk_degree / len(buy) if len(buy) > 0.0 else 0.0
@@ -231,15 +236,19 @@ class BaseTopkStrategy(BaseSignalStrategy):
                 continue
             # buy order
             if self.use_prev_close_for_amount:
-                buy_price = self.trade_exchange.get_close(stock_id=code, start_time=pred_start_time,
-                                                          end_time=pred_end_time)
-                factor = self.trade_exchange.get_factor(stock_id=code, start_time=pred_start_time,
-                                                        end_time=pred_end_time)
+                buy_price = self.trade_exchange.get_close(
+                    stock_id=code, start_time=pred_start_time, end_time=pred_end_time
+                )
+                factor = self.trade_exchange.get_factor(
+                    stock_id=code, start_time=pred_start_time, end_time=pred_end_time
+                )
             else:
                 buy_price = self.trade_exchange.get_deal_price(
                     stock_id=code, start_time=trade_start_time, end_time=trade_end_time, direction=OrderDir.BUY
                 )
-                factor = self.trade_exchange.get_factor(stock_id=code, start_time=trade_start_time, end_time=trade_end_time)
+                factor = self.trade_exchange.get_factor(
+                    stock_id=code, start_time=trade_start_time, end_time=trade_end_time
+                )
 
             buy_amount = value / buy_price
 
@@ -323,7 +332,12 @@ class BaseTopkStrategy(BaseSignalStrategy):
         pred_df["prev_factor"] = [
             self.trade_exchange.get_close(x, trade_start_time, trade_end_time) for x in pred_df.index
         ]
-        estimate_value_target = self.trade_position.calculate_value() * self.risk_degree / self.topk
+        cash = self.trade_position.get_cash()
+        expected_sell_proceeds = sum(
+            self.trade_position.get_stock_price(code) * self.trade_position.get_stock_amount(code) for code in sell_real
+        )
+
+        estimate_value_target = (cash + expected_sell_proceeds) * self.risk_degree / (len(buy) - redundancy)
 
         def get_price_and_amount(stock_id, estimate_value_target, start_time, end_time, action):
             prev_close = self.trade_exchange.get_close(stock_id, start_time, end_time)

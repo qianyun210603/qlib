@@ -342,6 +342,8 @@ class BaseTopkStrategy(BaseSignalStrategy):
         def get_price_and_amount(stock_id, estimate_value_target, start_time, end_time, action):
             prev_close = self.trade_exchange.get_close(stock_id, start_time, end_time)
             factor = self.trade_exchange.get_factor(stock_id, start_time=start_time, end_time=end_time, freq="day")
+            if pd.isna(factor):
+                factor = 1.0
             if action == 1:
                 adj_rounded_amount = self.trade_exchange.round_amount_by_trade_unit(
                     deal_amount=estimate_value_target / prev_close, factor=factor

@@ -320,11 +320,12 @@ class BaseTopkStrategy(BaseSignalStrategy):
             for c in pred_df.index
         ]
         sell_real = [c for c in sell if pred_df.loc[c, f"count_{time_per_step}"] >= self.hold_thresh]
+        buy_real = buy[: len(buy) + len(sell_real) - len(sell)]
         pred_df["action"] = np.nan
 
         pred_df.loc[current_stock_list, "action"] = 0
         pred_df.loc[sell_real, "action"] = -1
-        pred_df.loc[buy, "action"] = 1
+        pred_df.loc[buy_real, "action"] = 1
         pred_df.dropna(subset=["action"], inplace=True)
         pred_df["prev_close"] = [
             self.trade_exchange.get_close(x, trade_start_time, trade_end_time) for x in pred_df.index
@@ -337,7 +338,8 @@ class BaseTopkStrategy(BaseSignalStrategy):
             self.trade_position.get_stock_price(code) * self.trade_position.get_stock_amount(code) for code in sell_real
         )
 
-        estimate_value_target = (cash + expected_sell_proceeds) * self.risk_degree / (len(buy) - redundancy)
+        num_to_buy = len(buy_real) - redundancy
+        estimate_value_target = 0 if num_to_buy == 0 else (cash + expected_sell_proceeds) * self.risk_degree / num_to_buy
 
         def get_price_and_amount(stock_id, estimate_value_target, start_time, end_time, action):
             prev_close = self.trade_exchange.get_close(stock_id, start_time, end_time)

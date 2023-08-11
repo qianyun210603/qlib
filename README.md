@@ -45,17 +45,18 @@ Here is a quick **[demo](https://terminalizer.com/view/3f24561a4470)** shows how
 ## Installation
 
 This table demonstrates the supported Python version of `Qlib`:
+
 |               | install with pip           | install from source  | plot |
 | ------------- |:---------------------:|:--------------------:|:----:|
-| Python 3.7    | :heavy_check_mark:    | :heavy_check_mark:   | :heavy_check_mark: |
-| Python 3.8    | :heavy_check_mark:    | :heavy_check_mark:   | :heavy_check_mark: |
+| Python 3.7    | :x:    | :heavy_check_mark:   | :heavy_check_mark: |
+| Python 3.8    | :x:    | :heavy_check_mark:   | :heavy_check_mark: |
 | Python 3.9    | :x:                   | :heavy_check_mark:   | :heavy_check_mark: |
 
 **Note**: 
 1. **Conda** is suggested for managing your Python environment.
 2. Please pay attention that installing cython in Python 3.6 will raise some error when installing ``Qlib`` from source. If users use Python 3.6 on their machines, it is recommended to *upgrade* Python to version 3.7 or use `conda`'s Python to install ``Qlib`` from source.
-3. For Python 3.9, `Qlib` supports running workflows such as training models, doing backtest and plot most of the related figures (those included in [notebook](examples/workflow_by_code.ipynb)). However, plotting for the *model performance* is not supported for now and we will fix this when the dependent packages are upgraded in the future.
-4. `Qlib`Requires `tables` package, `hdf5` in tables does not support python3.9. 
+3. `Qlib`Requires `tables` package, `hdf5` in tables does not support python3.9.
+4. This fork is not available on `pip`.
 
 ### Install from package manager
 Current the fork is not available in pip or conda

@@ -339,7 +339,9 @@ class BaseTopkStrategy(BaseSignalStrategy):
         )
 
         num_to_buy = len(buy_real) - redundancy
-        estimate_value_target = 0 if num_to_buy == 0 else (cash + expected_sell_proceeds) * self.risk_degree / num_to_buy
+        estimate_value_target = (
+            0 if num_to_buy == 0 else (cash + expected_sell_proceeds) * self.risk_degree / num_to_buy
+        )
 
         def get_price_and_amount(stock_id, estimate_value_target, start_time, end_time, action):
             prev_close = self.trade_exchange.get_close(stock_id, start_time, end_time)

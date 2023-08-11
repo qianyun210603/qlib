@@ -535,3 +535,11 @@ class GramSchmidtOrthogonalization(Processor):
                 self.projection_order, orth_cols=list(cols), label_cols=label_cols, eps=self.eps
             )
         )
+
+
+class AttachMirror(Processor):
+    """Attach the mirror of the data to the end of the data"""
+    def __call__(self, df: pd.DataFrame):
+        df_mirror = df.copy() * -1
+        df_attached = pd.concat([df, df_mirror], axis=0).sort_index()
+        return df_attached

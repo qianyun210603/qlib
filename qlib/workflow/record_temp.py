@@ -133,9 +133,9 @@ class RecordTemp:
         parents : bool
             will we check parents
 
-        :raise FileNotFoundError
+        Raise
         ------
-
+        FileNotFoundError
             whether the records are stored properly.
         """
         if include_self:

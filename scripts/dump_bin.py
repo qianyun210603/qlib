@@ -146,7 +146,7 @@ class DumpDataBase:
 
     def _get_source_data(self, file_path: Path) -> pd.DataFrame:
         df = pd.read_csv(str(file_path.resolve()), low_memory=False)
-        df[self.date_field_name] = df[self.date_field_name].astype(str).astype(np.datetime64)
+        df[self.date_field_name] = df[self.date_field_name].astype(str).astype("datetime64[ns]")
         # df.drop_duplicates([self.date_field_name], inplace=True)
         return df
 

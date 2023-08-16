@@ -467,7 +467,7 @@ class Alpha101(DataHandlerLP):
                     },
                     "filter_pipe": filter_pipe,
                     "freq": freq,
-                    "inst_processor": kwargs.get("inst_processor", None),
+                    "inst_processors": kwargs.get("inst_processors", None),
                 },
             },
         )
@@ -645,7 +645,7 @@ class Alpha191(DataHandlerLP):
                     },
                     "filter_pipe": filter_pipe,
                     "freq": freq,
-                    "inst_processor": kwargs.get("inst_processor", None),
+                    "inst_processors": kwargs.get("inst_processors", None),
                 },
             },
         )

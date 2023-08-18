@@ -20,7 +20,7 @@ class LGBModel(ModelFT, LightGBMFInt):
     """LightGBM Model"""
 
     def __init__(self, loss="mse", early_stopping_rounds=50, num_boost_round=1000, **kwargs):
-        if loss not in {"mse", "binary"}:
+        if loss not in {"mse", "binary", "huber", "fair", "poisson", "quantile", "mape", "gamma", "tweedie"}:
             raise NotImplementedError
         self.params = {"objective": loss, "verbosity": -1}
         self.params.update(kwargs)

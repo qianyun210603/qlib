@@ -1,10 +1,11 @@
-
+import bisect
 from .base import ArcticStorageMixin, qlib_symbol_to_db
 from typing import List, Union
 from arctic.date import DateRange
 import numpy as np
 import pandas as pd
 from functools import lru_cache
+from qlib.data import D
 
 from qlib.data.storage import FeatureStorage
 
@@ -44,7 +45,6 @@ class ArcticFeatureStorage(ArcticStorageMixin, FeatureStorage):
             db_inst = f"{db_inst}_{freq_suffix}"
         return db_field, db_inst, lib
 
-
     def clear(self):
         raise NotImplementedError("ArcticFeatureStorage is read-only")
 
@@ -66,33 +66,64 @@ class ArcticFeatureStorage(ArcticStorageMixin, FeatureStorage):
     @property
     @lru_cache(maxsize=1)
     def start_index(self) -> Union[pd.Timestamp, None]:
-        ll = self._get_chunk_ranges()
-        if len(ll) == 0:
-            raise ValueError(f"{self.instrument} has no data")
-        for lll in ll:
-            df_min = self.lib.read(self.db_inst, chunk_range=DateRange(*lll))
-            if not df_min.index.empty:
-                return df_min.index.min()
-        return None
+        if self.lib.has_symbol(self.db_inst):
+            ll = self._get_chunk_ranges()
+            if len(ll) == 0:
+                raise ValueError(f"{self.instrument} has no data")
+            for lll in ll:
+                df_min = self.lib.read(self.db_inst, chunk_range=DateRange(*lll))
+                if not df_min.index.empty:
+                    return df_min.index.min()
+        return pd.Timestamp("1970-01-01")
 
     @property
     @lru_cache(maxsize=1)
     def end_index(self) -> Union[pd.Timestamp, None]:
-        ll = self._get_chunk_ranges()
+        if self.lib.has_symbol(self.db_inst):
+            ll = self._get_chunk_ranges()
+            if len(ll) == 0:
+                raise ValueError(f"{self.instrument} has no data")
+            for lll in reversed(ll):
+                df_max = self.lib.read(self.db_inst, chunk_range=DateRange(*lll))
+                if not df_max.index.empty:
+                    return df_max.index.max()
+        return pd.Timestamp("2099-01-01")
+
+    def _read_factor(self, start_index: pd.Timestamp, end_index: pd.Timestamp) -> pd.Series:
+        inferred_index = pd.DatetimeIndex(D.calendar(start_time=start_index, end_time=end_index, freq=self.freq, future=True))
+        if not self.lib.has_symbol(self.db_inst):
+            return pd.Series(1.0, index=inferred_index)
+        ll = sorted(s for s, e in self._get_chunk_ranges())
         if len(ll) == 0:
-            raise ValueError(f"{self.instrument} has no data")
-        for lll in reversed(ll):
-            df_max = self.lib.read(self.db_inst, chunk_range=DateRange(*lll))
-            if not df_max.index.empty:
-                return df_max.index.max()
-        return None
+            return pd.Series(1.0, index=inferred_index)
+        idx = bisect.bisect(ll, start_index)
+        if idx == 0:
+            df = self.lib.read(self.db_inst, chunk_range=DateRange(start_index, end_index), columns=[self.db_field])
+            series = df[self.db_field]
+            series = series.reindex(inferred_index, method='ffill').fillna(1.0)
+            return series
+        df = self.lib.read(self.db_inst, chunk_range=DateRange(ll[idx - 1], end_index), columns=[self.db_field])
+        series = df[self.db_field]
+        series = series.reindex(inferred_index, method='ffill')
+        return series
+
+    # TODO: make vwap directly available
+    def _read_vwap(self, start_index: pd.Timestamp, end_index: pd.Timestamp) -> pd.Series:
+        df = self.lib.read(self.db_inst, chunk_range=DateRange(start_index, end_index), columns=["close_price", "volume", "turnover"])
+        series = df.apply(lambda x: x["turnover"] / x["volume"] if x["volume"] > 0 else x["close_price"], axis=1)
+        return series
 
     def __getitem__(self, i: Union[pd.Timestamp, slice]) -> pd.Series:
-        if not self.lib.has_symbol(self.db_inst):
-            raise KeyError(f"{self.instrument} not found in {self.lib}")
         start_index = max(self.start_index, i.start)
         end_index = min(self.end_index, i.stop)
-        series = self.lib.read(self.db_inst, chunk_range=DateRange(start_index, end_index))
+        if self.field == 'factor':
+            return self._read_factor(start_index, end_index)
+        if self.field == 'vwap':
+            return self._read_vwap(start_index, end_index)
+        if not self.lib.has_symbol(self.db_inst):
+            raise KeyError(f"{self.instrument} not found in {self.lib}")
+        df = self.lib.read(self.db_inst, chunk_range=DateRange(start_index, end_index), columns=[self.db_field])
+        series = df[self.db_field]
         return series
 
     def __len__(self) -> int:

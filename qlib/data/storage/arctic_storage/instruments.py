@@ -6,16 +6,23 @@ import pandas as pd
 from qlib.data.storage import InstKT, InstrumentStorage, InstVT
 from qlib.log import get_module_logger
 
+INDEX_MAPPING = {
+    "csi050": "000016_SSE@COMPONENT",
+    "csi300": "000300_SSE@COMPONENT",
+    "csi500": "000905_SSE@COMPONENT",
+    "csi1000": "000852_SSE@COMPONENT",
+    "convert": "000832_SSE@COMPONENT",
+}
 
 
 class ArcticInstrumentStorage(ArcticStorageMixin, InstrumentStorage):
 
     def __init__(self, market: str, freq: str, **kwargs):
         super().__init__(market, freq, **kwargs)
-        self.arctic_stroe = self._get_arctic_store()
-        self.inst_symbol = f"{self.market}"
-        self.inst_lib = self.arctic_store.get_library(self.inst_symbol)
+        self.arctic_store = self._get_arctic_store()
+        self.inst_lib = self.arctic_store.get_library("market_meta")
         self.market = market
+        self.inst_symbol = INDEX_MAPPING[market]
         self._instruments = None
 
     def _process_all(self):
@@ -43,17 +50,20 @@ class ArcticInstrumentStorage(ArcticStorageMixin, InstrumentStorage):
         if self.market in ["cnstock_all", "cnconvert_all"]:
             return self._process_all()
         tmp = self.inst_lib.read(self.inst_symbol)
-        for intervals in tmp.values():
-            for interval in intervals:
-                interval[0] = pd.Timestamp(interval[0]).tz_localize(None)
-                interval[1] = pd.Timestamp(interval[1]).tz_localize(None).replace(hour=23, minute=59, second=59)
-        return tmp
 
-    def _write_instrument(self, data: Dict[InstKT, InstVT] = None) -> None:
-        raise NotImplementedError("ArcticInstrumentStorage is read-only")
+        def _parse_intervals(orig_intervals):
+            intervals = []
+            for interval in orig_intervals:
+                if interval[0] == interval[1]:
+                    continue
+                intervals.append([pd.Timestamp(interval[0]).tz_localize(None), pd.Timestamp(interval[1]).tz_localize(None).replace(hour=23, minute=59, second=59)])
+            return intervals
+
+        insts = {db_symbol_to_qlib(db_sym): _parse_intervals(intervals) for db_sym, intervals in tmp.items()}
+        return insts
 
     def clear(self) -> None:
-        self._write_instrument(data={})
+        raise NotImplementedError("ArcticInstrumentStorage is read-only")
 
     @property
     def data(self) -> Dict[InstKT, InstVT]:

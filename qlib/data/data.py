@@ -699,7 +699,7 @@ class DatasetProvider(abc.ABC):
             data = pd.DataFrame(
                 index=pd.MultiIndex.from_arrays([[], []], names=("instrument", "datetime")),
                 columns=column_names,
-                dtype=np.float32,
+                dtype=C.dpm.get_data_settings("float_data_type", freq, default="<f"),
             )
         return data
 
@@ -1046,9 +1046,11 @@ class LocalExpressionProvider(ExpressionProvider):
         super().__init__()
         self.time2idx = time2idx
 
+
     def expression(
         self, instrument, expression, start_time=None, end_time=None, freq="day", instrument_d={}, extend_windows=(0, 0)
     ):
+        float_dtype = C.dpm.get_data_settings("float_data_type", freq, default="<f")
         if isinstance(expression, str):
             expression = self.get_expression_instance(expression)
 
@@ -1073,15 +1075,13 @@ class LocalExpressionProvider(ExpressionProvider):
                     for inst, spans in instrument_d.items()
                 }
         else:
-            start_time, end_time = pd.Timestamp(start_time), pd.Timestamp(end_time)
+            start_index, end_index = pd.Timestamp(start_time), pd.Timestamp(end_time)
             query_start, query_end = get_date_by_shift(start_time, -lft_etd), get_date_by_shift(end_time, rght_etd)
             if isinstance(instrument_d, dict):
                 instrument_d = {
                     inst: [[pd.Timestamp(span[0]), pd.Timestamp(span[1])] for span in spans]
                     for inst, spans in instrument_d.items()
                 }
-
-
 
         if isinstance(expression, ExpressionOps):
             expression.set_population(instrument_d)
@@ -1101,7 +1101,7 @@ class LocalExpressionProvider(ExpressionProvider):
         # 1) The stock data is currently float. If there is other types of data, this part needs to be re-implemented.
         # 2) The precision should be configurable
         try:
-            series = series.astype(np.float64)
+            series = series.astype(float_dtype)
         except ValueError:
             pass
         except TypeError:

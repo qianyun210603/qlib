@@ -641,6 +641,7 @@ class DiskExpressionCache(ExpressionCache):
         """use bin file to save like feature-data."""
         # Make sure the cache runs right when the directory is deleted
         # while running
+        float_dtype = C.dpm.get_data_settings("float_data_type", freq=freq, default="<f")
         meta = {
             "info": {"instrument": instrument, "field": field, "freq": freq, "last_update": last_update},
             "meta": {"last_visit": time.time(), "visits": 1},
@@ -654,12 +655,13 @@ class DiskExpressionCache(ExpressionCache):
         meta_path.chmod(stat.S_IRWXU | stat.S_IRGRP | stat.S_IROTH)
         df = expression_data.to_frame()
 
-        r = np.hstack([df.index[0], expression_data]).astype("<f")
+        r = np.hstack([df.index[0], expression_data]).astype(float_dtype)
         r.tofile(str(cache_path))
 
     def update(self, cache_uri, freq: str = "day"):
         cp_cache_uri = self.get_cache_dir(freq).joinpath(cache_uri)
         meta_path = cp_cache_uri.with_suffix(".meta")
+        float_dtype = float_dtype = C.dpm.get_data_settings("float_data_type", freq=freq, default="<f")
         if not self.check_cache_exists(cp_cache_uri, suffix_list=[".meta"]):
             self.logger.info(f"The cache {cp_cache_uri} has corrupted. It will be removed")
             self.clear_cache(cp_cache_uri)
@@ -693,7 +695,7 @@ class DiskExpressionCache(ExpressionCache):
 
                 # The existing data length
                 size_bytes = os.path.getsize(cp_cache_uri)
-                ele_size = np.dtype("<f").itemsize
+                ele_size = np.dtype(float_dtype).itemsize
                 assert size_bytes % ele_size == 0
                 ele_n = size_bytes // ele_size - 1
 
@@ -708,7 +710,7 @@ class DiskExpressionCache(ExpressionCache):
                     instrument, field, whole_calendar[current_index - remove_n], new_calendar[-1], freq
                 )
                 with open(cp_cache_uri, "ab") as f:
-                    data = np.array(data).astype("<f")
+                    data = np.array(data).astype(float_dtype)
                     # Remove the last bits
                     f.truncate(size_bytes - ele_size * remove_n)
                     f.write(data)

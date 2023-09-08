@@ -297,6 +297,7 @@ class FileFeatureStorage(FileStorageMixin, FeatureStorage):
         return self[:]
 
     def write(self, data_array: Union[List, np.ndarray], index: int = None) -> None:
+        float_dtype = C.dpm.get_data_settings("")
         if len(data_array) == 0:
             logger.info(
                 "len(data_array) == 0, write"
@@ -307,17 +308,17 @@ class FileFeatureStorage(FileStorageMixin, FeatureStorage):
             # write
             index = 0 if index is None else index
             with self.uri.open("wb") as fp:
-                np.hstack([index, data_array]).astype("<f").tofile(fp)
+                np.hstack([index, data_array]).astype(float_dtype).tofile(fp)
         else:
             if index is None or index > self.end_index:
                 # append
                 index = 0 if index is None else index
                 with self.uri.open("ab+") as fp:
-                    np.hstack([[np.nan] * (index - self.end_index - 1), data_array]).astype("<f").tofile(fp)
+                    np.hstack([[np.nan] * (index - self.end_index - 1), data_array]).astype(float_dtype).tofile(fp)
             else:
                 # rewrite
                 with self.uri.open("rb+") as fp:
-                    _old_data = np.fromfile(fp, dtype="<f")
+                    _old_data = np.fromfile(fp, dtype=float_dtype)
                     _old_index = _old_data[0]
                     _old_df = pd.DataFrame(
                         _old_data[1:], index=range(_old_index, _old_index + len(_old_data) - 1), columns=["old"]
@@ -326,14 +327,16 @@ class FileFeatureStorage(FileStorageMixin, FeatureStorage):
                     _new_df = pd.DataFrame(data_array, index=range(index, index + len(data_array)), columns=["new"])
                     _df = pd.concat([_old_df, _new_df], sort=False, axis=1)
                     _df = _df.reindex(range(_df.index.min(), _df.index.max() + 1))
-                    _df["new"].fillna(_df["old"]).values.astype("<f").tofile(fp)
+                    _df["new"].fillna(_df["old"]).values.astype(float_dtype).tofile(fp)
 
     @property
     def start_index(self) -> Union[int, None]:
         if not self.uri.exists():
             return None
+        float_dtype = C.dpm.get_data_settings("float_data_type", freq=self.freq, default="<f")
+        float_size = struct.calcsize(float_dtype)
         with self.uri.open("rb") as fp:
-            index = int(np.frombuffer(fp.read(4), dtype="<f")[0])
+            index = int(np.frombuffer(fp.read(float_size), dtype=float_dtype)[0])
         return index
 
     @property
@@ -344,11 +347,13 @@ class FileFeatureStorage(FileStorageMixin, FeatureStorage):
         return self.start_index + len(self) - 1
 
     def __getitem__(self, i: Union[int, slice]) -> Union[Tuple[int, float], pd.Series]:
+        float_dtype = C.dpm.get_data_settings("float_data_type", freq=self.freq, default="<f")
+        float_size = struct.calcsize(float_dtype)
         if not self.uri.exists():
             if isinstance(i, int):
                 return None, None
             elif isinstance(i, slice):
-                return pd.Series(dtype=np.float32)
+                return pd.Series(dtype=float_dtype)
             else:
                 raise TypeError(f"type(i) = {type(i)}")
 
@@ -358,22 +363,23 @@ class FileFeatureStorage(FileStorageMixin, FeatureStorage):
             if isinstance(i, int):
                 if storage_start_index > i:
                     raise IndexError(f"{i}: start index is {storage_start_index}")
-                fp.seek(4 * (i - storage_start_index) + 4)
-                return i, struct.unpack("f", fp.read(4))[0]
+                fp.seek(float_size * (i - storage_start_index) + float_size)
+                return i, struct.unpack("f", fp.read(float_size))[0]
             elif isinstance(i, slice):
                 start_index = storage_start_index if i.start is None else i.start
                 end_index = storage_end_index if i.stop is None else i.stop - 1
                 si = max(start_index, storage_start_index)
                 if si > end_index:
-                    return pd.Series(dtype=np.float32)
-                fp.seek(4 * (si - storage_start_index) + 4)
+                    return pd.Series(dtype=np.float64)
+                fp.seek(float_size * (si - storage_start_index) + float_size)
                 # read n bytes
                 count = end_index - si + 1
-                data = np.frombuffer(fp.read(4 * count), dtype="<f")
+                data = np.frombuffer(fp.read(float_size * count), dtype=float_dtype)
                 return pd.Series(data, index=pd.RangeIndex(si, si + len(data)))
             else:
                 raise TypeError(f"type(i) = {type(i)}")
 
     def __len__(self) -> int:
         self.check()
-        return self.uri.stat().st_size // 4 - 1
+        float_dtype = C.dpm.get_data_settings("float_data_type", freq=self.freq, default="<f")
+        return self.uri.stat().st_size // struct.calcsize(float_dtype) - 1

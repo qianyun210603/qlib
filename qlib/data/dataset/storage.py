@@ -146,7 +146,7 @@ class HashingStockStorage(BaseHandlerStorage):
         if len(fetch_stock_df_list) == 0:
             index_names = ("instrument", "datetime") if self.stock_level == 0 else ("datetime", "instrument")
             return pd.DataFrame(
-                index=pd.MultiIndex.from_arrays([[], []], names=index_names), columns=self.columns, dtype=np.float32
+                index=pd.MultiIndex.from_arrays([[], []], names=index_names), columns=self.columns, dtype=np.float64
             )
         elif len(fetch_stock_df_list) == 1:
             return fetch_stock_df_list[0]

@@ -52,19 +52,20 @@ def get_redis_connection():
 
 
 #################### Data ####################
-def read_bin(file_path: Union[str, Path], start_index, end_index):
+def read_bin(file_path: Union[str, Path], start_index, end_index, float_dtype="<f"):
+    float_dtype_size = struct.calcsize(float_dtype)
     file_path = Path(file_path.expanduser().resolve())
     with file_path.open("rb") as f:
         # read start_index
-        ref_start_index = int(np.frombuffer(f.read(4), dtype="<f")[0])
+        ref_start_index = int(np.frombuffer(f.read(float_dtype_size), dtype=float_dtype)[0])
         si = max(ref_start_index, start_index)
         if si > end_index:
-            return pd.Series(dtype=np.float32)
+            return pd.Series(dtype=float_dtype)
         # calculate offset
-        f.seek(4 * (si - ref_start_index) + 4)
+        f.seek(float_dtype_size * (si - ref_start_index) + 4)
         # read nbytes
         count = end_index - si + 1
-        data = np.frombuffer(f.read(4 * count), dtype="<f")
+        data = np.frombuffer(f.read( * count), dtype=float_dtype)
         series = pd.Series(data, index=pd.RangeIndex(si, si + len(data)))
     return series
 

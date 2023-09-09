@@ -289,6 +289,7 @@ class QlibConfig(Config):
     # URI_TYPE
     LOCAL_URI = "local"
     NFS_URI = "nfs"
+    ARCTIC_URI = "arctic"
     DEFAULT_FREQ = "__DEFAULT_FREQ"
 
     def __init__(self, default_conf):
@@ -328,6 +329,8 @@ class QlibConfig(Config):
 
         @staticmethod
         def get_uri_type(uri: Union[str, Path]):
+            if uri.startswith("arctic"):
+                return QlibConfig.ARCTIC_URI
             uri = uri if isinstance(uri, str) else str(uri.expanduser().resolve())
             is_win = re.match("^[a-zA-Z]:.*", uri) is not None  # such as 'C:\\data', 'D:'
             # such as 'host:/data/'   (User may define short hostname by themselves or use localhost)
@@ -357,6 +360,8 @@ class QlibConfig(Config):
                     _path = str(self.mount_path[freq])
                     return Path(f"{_path}:\\") if ":" not in _path else Path(_path)
                 return Path(self.mount_path[freq])
+            elif self.get_uri_type(_provider_uri) == QlibConfig.ARCTIC_URI:
+                return "arctic"
             else:
                 raise NotImplementedError(f"This type of uri is not supported")
 
@@ -368,13 +373,18 @@ class QlibConfig(Config):
             if freq not in self.provider_uri:
                 freq = "day" if "day" in self.provider_uri else list(self.provider_uri.keys())[0]
             if freq not in self._data_settings:
-                _provider_uri = self.get_data_uri(freq)
-                _provider_config_uri = Path(_provider_uri) / "data_setting.yaml"
-                if _provider_config_uri.exists():
-                    with open(_provider_config_uri, "r") as f:
-                        self._data_settings[freq] = yaml.safe_load(f)
+                _provider_uri = self.provider_uri[freq]
+                if self.get_uri_type(_provider_uri) == QlibConfig.LOCAL_URI:
+                    _provider_config_uri = Path(_provider_uri) / "data_setting.yaml"
+                    if _provider_config_uri.exists():
+                        with open(_provider_config_uri, "r") as f:
+                            self._data_settings[freq] = yaml.safe_load(f)
+                    else:
+                        return default
+                elif self.get_uri_type(_provider_uri) == QlibConfig.ARCTIC_URI:
+                    self._data_settings[freq] = {"float_data_type": "<d"}
                 else:
-                    return default
+                    raise NotImplementedError(f"This type of uri is not supported")
             return self._data_settings[freq].get(field, default)
 
 

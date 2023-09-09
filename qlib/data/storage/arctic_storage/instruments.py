@@ -20,7 +20,7 @@ class ArcticInstrumentStorage(ArcticStorageMixin, InstrumentStorage):
     def __init__(self, market: str, freq: str, **kwargs):
         super().__init__(market, freq, **kwargs)
         self.arctic_store = self._get_arctic_store()
-        self.inst_lib = self.arctic_store.get_library("market_meta")
+        self.inst_lib = self.arctic_store.get_library("index_components")
         self.market = market
         self.inst_symbol = INDEX_MAPPING[market]
         self._instruments = None

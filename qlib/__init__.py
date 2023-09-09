@@ -75,6 +75,8 @@ def init(default_conf="client", **kwargs):
                     logger.warning(f"auto_path is False, please make sure {mount_path} is mounted")
         elif uri_type == C.NFS_URI:
             _mount_nfs_uri(provider_uri, C.dpm.get_data_uri(_freq), C["auto_mount"])
+        elif uri_type == C.ARCTIC_URI:
+            pass
         else:
             raise NotImplementedError(f"This type of URI is not supported")
 

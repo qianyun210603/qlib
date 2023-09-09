@@ -99,6 +99,15 @@ class DumpDataBase:
         self.date_field_name = date_field_name
 
         self._setting_file = self.qlib_dir.joinpath("data_setting.yaml")
+        if self._setting_file.exists():
+            with open(self._setting_file, "r") as f:
+                self._data_settings = yaml.load(f, Loader=yaml.Loader)
+            if "float_data_type" not in self._data_settings:
+                self._data_settings["float_data_type"] = DATA_TYPE
+            self._data_settings["float_data_size"] = struct.calcsize(self._data_settings["float_data_type"])
+        else:
+            self._data_settings = {"float_data_type": DATA_TYPE, "float_data_size": DATA_SIZE}
+
         self._calendars_dir = self.qlib_dir.joinpath(self.CALENDARS_DIR_NAME)
         self._features_dir = self.qlib_dir.joinpath(self.FEATURES_DIR_NAME)
         self._instruments_dir = self.qlib_dir.joinpath(self.INSTRUMENTS_DIR_NAME)
@@ -127,7 +136,7 @@ class DumpDataBase:
         else:
             df = file_or_df
         if df.empty or self.date_field_name not in df.columns.tolist():
-            _calendars = pd.Series(dtype=DATA_TYPE)
+            _calendars = pd.Series(dtype=self._data_settings["float_data_type"])
         else:
             _calendars = df[self.date_field_name]
 
@@ -238,7 +247,7 @@ class DumpDataBase:
             if bin_path.exists():
                 self._append_data_to_bin(bin_path, _df[field], date_index)
             else:
-                np.hstack([date_index, _df[field]]).astype(DATA_TYPE).tofile(str(bin_path.resolve()))
+                np.hstack([date_index, _df[field]]).astype(self._data_settings["float_data_type"]).tofile(str(bin_path.resolve()))
 
     def _dump_bin(self, file_or_data: [Path, pd.DataFrame], calendar_list: List[pd.Timestamp]):
         if not calendar_list:
@@ -277,9 +286,8 @@ class DumpDataBase:
     def dump_features(self):
         self._dump_features()
 
-    @staticmethod
-    def _append_data_to_bin(bin_path, field_data, date_index):
-        np.hstack([date_index, field_data]).astype(DATA_TYPE).tofile(str(bin_path.resolve()))
+    def _append_data_to_bin(self, bin_path, field_data, date_index):
+        np.hstack([date_index, field_data]).astype(self._data_settings["float_data_type"]).tofile(str(bin_path.resolve()))
 
     def __call__(self, *args, **kwargs):
         self.dump()
@@ -329,18 +337,13 @@ class DumpDataAll(DumpDataBase):
 
         logger.info("end of features dump.\n")
 
-    def dump(self, data_settings: dict = None):
-        settings = {
-            "float_data_type": DATA_TYPE,
-        }
-        if data_settings is not None:
-            settings.update(data_settings)
-        with open(self._setting_file, "w") as f:
-            yaml.dump(settings, f)
+    def dump(self):
         self._get_all_date()
         self._dump_calendars()
         self._dump_instruments()
         self._dump_features()
+        with open(self._setting_file, "w") as f:
+            yaml.dump(self._data_settings, f)
 
 
 class DumpDataFix(DumpDataAll):
@@ -513,13 +516,7 @@ class DumpDataUpdateBase(DumpDataBase):
 
         logger.info("end of features dump.\n")
 
-    def dump(self, data_settings: dict = None):
-        with open(self._setting_file, "r") as f:
-            orig_settings = yaml.safe_load(f)
-        data_settings["float_data_type"] = DATA_TYPE
-        for k, v in data_settings.items():
-            assert k in orig_settings and orig_settings[k] == v, \
-                f"setting {k}={v} is not consistent with the original setting {k}={orig_settings[k]}"
+    def dump(self):
         self.save_calendars(self._calendars_list)
         self._dump_features()
         df = pd.DataFrame.from_dict(self._update_instruments, orient="index")
@@ -541,14 +538,14 @@ class DumpDataUpdate(DumpDataUpdateBase):
     def _append_data_to_bin(self, bin_path, field_data, date_index):
         if bin_path.exists():
             with bin_path.open("rb+") as fp:
-                (start_idx,) = struct.unpack(DATA_TYPE, fp.read(DATA_SIZE))
+                (start_idx,) = struct.unpack(self._data_settings["float_data_type"], fp.read(self._data_settings["float_data_size"]))
                 fp.seek(0, 2)
-                if start_idx + fp.tell() // DATA_SIZE - 1 < date_index:
+                if start_idx + fp.tell() // self._data_settings["float_data_size"] - 1 < date_index:
                     logger.warning(
                         f"potential mismatch data and calendar "
-                        f"{start_idx + fp.tell() // DATA_SIZE - 1} != {date_index}"
+                        f"{start_idx + fp.tell() // self._data_settings['float_data_size'] - 1} != {date_index}"
                     )
-                np.array(field_data).astype(DATA_TYPE).tofile(fp)
+                np.array(field_data).astype(self._data_settings["float_data_type"]).tofile(fp)
 
 
 class DumpDataOverwrite(DumpDataUpdateBase):
@@ -559,14 +556,14 @@ class DumpDataOverwrite(DumpDataUpdateBase):
     def _append_data_to_bin(self, bin_path, field_data, date_index):
         if bin_path.exists():
             with bin_path.open("rb+") as fp:
-                (start_idx,) = struct.unpack(DATA_TYPE, fp.read(DATA_SIZE))
-                fp.truncate(max(0, date_index - int(start_idx) + 1) * DATA_SIZE)
+                (start_idx,) = struct.unpack(self._data_settings["float_data_type"], fp.read(self._data_settings["float_data_size"]))
+                fp.truncate(max(0, date_index - int(start_idx) + 1) * self._data_settings["float_data_size"])
                 if date_index >= start_idx:
                     fp.seek(0, 2)
                 else:
                     fp.seek(0, 0)
-                    fp.write(struct.pack(DATA_TYPE, date_index))
-                np.array(field_data).astype(DATA_TYPE).tofile(fp)
+                    fp.write(struct.pack(self._data_settings["float_data_type"], date_index))
+                np.array(field_data).astype(self._data_settings["float_data_type"]).tofile(fp)
 
 
 if __name__ == "__main__":

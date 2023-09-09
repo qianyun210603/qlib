@@ -18,6 +18,7 @@ import multiprocessing
 import os
 import platform
 import re
+import yaml
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional, Union
 
@@ -309,6 +310,7 @@ class QlibConfig(Config):
             """
             self.provider_uri = provider_uri
             self.mount_path = mount_path
+            self._data_settings = {}
 
         @staticmethod
         def format_provider_uri(provider_uri: Union[str, dict, Path]) -> dict:
@@ -357,6 +359,24 @@ class QlibConfig(Config):
                 return Path(self.mount_path[freq])
             else:
                 raise NotImplementedError(f"This type of uri is not supported")
+
+        def get_data_settings(self, field, freq: Optional[Union[str, Freq]] = None, default=None):
+            if freq is not None:
+                freq = str(freq)  # converting Freq to string
+            if freq is None:
+                freq = QlibConfig.DEFAULT_FREQ
+            if freq not in self.provider_uri:
+                freq = "day" if "day" in self.provider_uri else list(self.provider_uri.keys())[0]
+            if freq not in self._data_settings:
+                _provider_uri = self.get_data_uri(freq)
+                _provider_config_uri = Path(_provider_uri) / "data_setting.yaml"
+                if _provider_config_uri.exists():
+                    with open(_provider_config_uri, "r") as f:
+                        self._data_settings[freq] = yaml.safe_load(f)
+                else:
+                    return default
+            return self._data_settings[freq].get(field, default)
+
 
     def set_mode(self, mode):
         # raise KeyError

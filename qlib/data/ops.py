@@ -226,7 +226,7 @@ class Sign(NpElemOperator):
         """
         series = self.feature.load(instrument, start_index, end_index, *args)
         # TODO:  More precision types should be configurable
-        series = series.astype(np.float32)
+        series = series.astype(float)
         return getattr(np, self.func)(series)
 
 
@@ -1924,8 +1924,8 @@ class Corr(PairRolling):
         res: pd.Series = super(Corr, self)._load_internal(instrument, start_index, end_index, *args)
 
         # NOTE: Load uses MemCache, so calling load again will not cause performance degradation
-        series_left = self.feature_left.load(instrument, start_index, end_index, *args)
-        series_right = self.feature_right.load(instrument, start_index, end_index, *args)
+        series_left = self.feature_left.load(instrument, start_index, end_index, *args).reindex(res.index)
+        series_right = self.feature_right.load(instrument, start_index, end_index, *args).reindex(res.index)
         res.loc[np.isclose(series_left.rolling(self.N, min_periods=1).cov(series_right), 0, atol=1e-12)] = 0
         res.loc[np.isclose(res, 0.0, atol=1e-8)] = 0
         res.loc[np.isclose(res, 1.0, atol=1e-6)] = 1

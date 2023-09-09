@@ -338,7 +338,7 @@ class IndexData(metaclass=index_data_ops_creator):
 
     NOTE:
     - For performance issue, only **np.floating** is supported in the underlayer data !!!
-    - Boolean based on np.floating is also supported. Here are some examples
+    - Boolean based on np.float is also supported. Here are some examples
 
     .. code-block:: python
 
@@ -375,7 +375,7 @@ class IndexData(metaclass=index_data_ops_creator):
 
         self.data = self.data.astype(np.float64)
         # Please notice following cases when converting the type
-        # - np.array([None, 1]).astype(np.float64) -> array([nan,  1.])
+        # - np.array([None, 1]).astype(np.float) -> array([nan,  1.])
 
         # create index from user's index data.
         self.indices: List[Index] = self.loc_idx_cls.proc_idx_l(indices, data_shape)
@@ -528,7 +528,7 @@ class SingleData(IndexData):
             the input data
         index : Union[list, pd.Index]
             the index of data.
-            empty list indicates that auto filling the index to the length of data
+            empty list indicates that autofilling the index to the length of data
         """
         # for special data type
         if isinstance(data, dict):

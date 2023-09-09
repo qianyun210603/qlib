@@ -151,7 +151,7 @@ class TestStorage(TestAutoData):
         with self.assertRaises(IndexError):
             print(feature[0])
         assert isinstance(
-            feature[3049][1], (float, np.float32)
+            feature[3049][1], (float, np.float32, np.float64)
         ), f"{feature.__class__.__name__}.__getitem__(i: int) error"
         assert len(feature[3049:3052]) == 3, f"{feature.__class__.__name__}.__getitem__(s: slice) error"
         print(f"feature[3049: 3052]: \n{feature[3049: 3052]}")

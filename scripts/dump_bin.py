@@ -9,7 +9,7 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_compl
 from functools import partial
 from pathlib import Path
 from typing import Iterable, List, Union
-
+import yaml
 import fire
 import numpy as np
 import pandas as pd
@@ -18,7 +18,7 @@ from tqdm import tqdm
 
 from qlib.utils import code_to_fname, fname_to_code
 
-DATA_TYPE = "<f"
+DATA_TYPE = "<d"
 DATA_SIZE = struct.calcsize(DATA_TYPE)
 
 
@@ -33,10 +33,6 @@ class DumpDataBase:
     HIGH_FREQ_FORMAT = "%Y-%m-%d %H:%M:%S"
     INSTRUMENTS_SEP = "\t"
     INSTRUMENTS_FILE_NAME = "all.txt"
-
-    # UPDATE_MODE = "update"
-    # OVERWRITE_MODE = "overwrite"
-    # ALL_MODE = "all"
 
     def __init__(
         self,
@@ -102,6 +98,7 @@ class DumpDataBase:
         self.works = max_workers
         self.date_field_name = date_field_name
 
+        self._setting_file = self.qlib_dir.joinpath("data_setting.yaml")
         self._calendars_dir = self.qlib_dir.joinpath(self.CALENDARS_DIR_NAME)
         self._features_dir = self.qlib_dir.joinpath(self.FEATURES_DIR_NAME)
         self._instruments_dir = self.qlib_dir.joinpath(self.INSTRUMENTS_DIR_NAME)
@@ -113,7 +110,6 @@ class DumpDataBase:
 
         self._calendars_list = []
 
-        # self._mode = mode
         self._kwargs = {}
 
     def _backup_qlib_dir(self, target_dir: Path):
@@ -131,7 +127,7 @@ class DumpDataBase:
         else:
             df = file_or_df
         if df.empty or self.date_field_name not in df.columns.tolist():
-            _calendars = pd.Series(dtype=np.float32)
+            _calendars = pd.Series(dtype=DATA_TYPE)
         else:
             _calendars = df[self.date_field_name]
 
@@ -234,8 +230,6 @@ class DumpDataBase:
             return
         # used when creating a bin file
         date_index = self.get_datetime_index(_df.index.min())
-        # index_min = self._calendars_list.index(min(calendar_list))
-        # index_max = self._calendars_list.index(max(calendar_list))
 
         for field in self.get_dump_fields(_df.columns):
             bin_path = features_dir.joinpath(f"{field.lower()}.{self.freq}{self.DUMP_FILE_SUFFIX}")
@@ -245,24 +239,6 @@ class DumpDataBase:
                 self._append_data_to_bin(bin_path, _df[field], date_index)
             else:
                 np.hstack([date_index, _df[field]]).astype(DATA_TYPE).tofile(str(bin_path.resolve()))
-
-            # if bin_path.exists() and self._mode != self.ALL_MODE:
-            #     if self._mode == self.UPDATE_MODE:
-            #         # update
-            #         with bin_path.open("ab") as fp:
-            #             if index_min + fp.tell() // DATA_SIZE - 1 + len(_df) < index_max:
-            #                 logger.warning("potential mismatch data and calendar")
-            #             np.array(_df[field]).astype(DATA_TYPE).tofile(fp)
-            #     elif self._mode == self.OVERWRITE_MODE:
-            #         with bin_path.open("rb+") as fp:
-            #             start_idx = struct.unpack(DATA_TYPE, fp.read(DATA_SIZE))
-            #             assert start_idx == index_min, f"mismatch start index in {bin_path.name} and instruments.txt"
-            #             # fp.truncate((1+index_min-1)*DATA_SIZE)
-            #             # fp.seek(0, -2)
-            #             # np.array(_df[field]).astype(DATA_TYPE).tofile(fp)
-            # else:
-            #     # append; self._mode == self.ALL_MODE or not bin_path.exists()
-            #     np.hstack([date_index, field_data]).astype(DATA_TYPE).tofile(str(bin_path.resolve()))
 
     def _dump_bin(self, file_or_data: [Path, pd.DataFrame], calendar_list: List[pd.Timestamp]):
         if not calendar_list:
@@ -293,6 +269,10 @@ class DumpDataBase:
     @abc.abstractmethod
     def dump(self):
         raise NotImplementedError("dump not implemented!")
+
+    @abc.abstractmethod
+    def _dump_features(self):
+        raise NotImplementedError("_dump_features not implemented!")
 
     def dump_features(self):
         self._dump_features()
@@ -349,7 +329,14 @@ class DumpDataAll(DumpDataBase):
 
         logger.info("end of features dump.\n")
 
-    def dump(self):
+    def dump(self, data_settings: dict = None):
+        settings = {
+            "float_data_type": DATA_TYPE,
+        }
+        if data_settings is not None:
+            settings.update(data_settings)
+        with open(self._setting_file, "w") as f:
+            yaml.dump(settings, f)
         self._get_all_date()
         self._dump_calendars()
         self._dump_instruments()
@@ -381,7 +368,7 @@ class DumpDataFix(DumpDataAll):
         self.save_instruments(_inst_df.reset_index())
         logger.info("end of instruments dump.\n")
 
-    def dump(self):
+    def dump(self, data_settings: dict = None):
         self._calendars_list = self._read_calendars(self._calendars_dir.joinpath(f"{self.freq}.txt"))
         # noinspection PyAttributeOutsideInit
         self._old_instruments = (
@@ -526,7 +513,13 @@ class DumpDataUpdateBase(DumpDataBase):
 
         logger.info("end of features dump.\n")
 
-    def dump(self):
+    def dump(self, data_settings: dict = None):
+        with open(self._setting_file, "r") as f:
+            orig_settings = yaml.safe_load(f)
+        data_settings["float_data_type"] = DATA_TYPE
+        for k, v in data_settings.items():
+            assert k in orig_settings and orig_settings[k] == v, \
+                f"setting {k}={v} is not consistent with the original setting {k}={orig_settings[k]}"
         self.save_calendars(self._calendars_list)
         self._dump_features()
         df = pd.DataFrame.from_dict(self._update_instruments, orient="index")

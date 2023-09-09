@@ -329,9 +329,9 @@ class QlibConfig(Config):
 
         @staticmethod
         def get_uri_type(uri: Union[str, Path]):
+            uri = uri if isinstance(uri, str) else str(uri.expanduser().resolve())
             if uri.startswith("arctic"):
                 return QlibConfig.ARCTIC_URI
-            uri = uri if isinstance(uri, str) else str(uri.expanduser().resolve())
             is_win = re.match("^[a-zA-Z]:.*", uri) is not None  # such as 'C:\\data', 'D:'
             # such as 'host:/data/'   (User may define short hostname by themselves or use localhost)
             is_nfs_or_win = re.match("^[^/]+:.+", uri) is not None

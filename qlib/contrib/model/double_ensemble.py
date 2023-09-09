@@ -223,8 +223,11 @@ class DEnsembleModel(Model, FeatureInt):
     def get_loss(self, label, pred):
         if self.loss == "mse":
             return (label - pred) ** 2
-        else:
-            raise ValueError("not implemented yet")
+        if self.loss == "mae":
+            return np.abs(label - pred)
+        if self.loss == "huber":
+            return np.where(np.abs(label - pred) < 1, 0.5 * (label - pred) ** 2, np.abs(label - pred) - 0.5)
+        raise ValueError("not implemented yet")
 
     def retrieve_loss_curve(self, model, df_train, features):
         if self.base_model == "gbm":

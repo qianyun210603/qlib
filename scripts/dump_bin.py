@@ -247,7 +247,9 @@ class DumpDataBase:
             if bin_path.exists():
                 self._append_data_to_bin(bin_path, _df[field], date_index)
             else:
-                np.hstack([date_index, _df[field]]).astype(self._data_settings["float_data_type"]).tofile(str(bin_path.resolve()))
+                np.hstack([date_index, _df[field]]).astype(self._data_settings["float_data_type"]).tofile(
+                    str(bin_path.resolve())
+                )
 
     def _dump_bin(self, file_or_data: [Path, pd.DataFrame], calendar_list: List[pd.Timestamp]):
         if not calendar_list:
@@ -287,7 +289,9 @@ class DumpDataBase:
         self._dump_features()
 
     def _append_data_to_bin(self, bin_path, field_data, date_index):
-        np.hstack([date_index, field_data]).astype(self._data_settings["float_data_type"]).tofile(str(bin_path.resolve()))
+        np.hstack([date_index, field_data]).astype(self._data_settings["float_data_type"]).tofile(
+            str(bin_path.resolve())
+        )
 
     def __call__(self, *args, **kwargs):
         self.dump()
@@ -538,7 +542,9 @@ class DumpDataUpdate(DumpDataUpdateBase):
     def _append_data_to_bin(self, bin_path, field_data, date_index):
         if bin_path.exists():
             with bin_path.open("rb+") as fp:
-                (start_idx,) = struct.unpack(self._data_settings["float_data_type"], fp.read(self._data_settings["float_data_size"]))
+                (start_idx,) = struct.unpack(
+                    self._data_settings["float_data_type"], fp.read(self._data_settings["float_data_size"])
+                )
                 fp.seek(0, 2)
                 if start_idx + fp.tell() // self._data_settings["float_data_size"] - 1 < date_index:
                     logger.warning(
@@ -556,7 +562,9 @@ class DumpDataOverwrite(DumpDataUpdateBase):
     def _append_data_to_bin(self, bin_path, field_data, date_index):
         if bin_path.exists():
             with bin_path.open("rb+") as fp:
-                (start_idx,) = struct.unpack(self._data_settings["float_data_type"], fp.read(self._data_settings["float_data_size"]))
+                (start_idx,) = struct.unpack(
+                    self._data_settings["float_data_type"], fp.read(self._data_settings["float_data_size"])
+                )
                 fp.truncate(max(0, date_index - int(start_idx) + 1) * self._data_settings["float_data_size"])
                 if date_index >= start_idx:
                     fp.seek(0, 2)

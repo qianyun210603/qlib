@@ -65,7 +65,7 @@ def read_bin(file_path: Union[str, Path], start_index, end_index, float_dtype="<
         f.seek(float_dtype_size * (si - ref_start_index) + 4)
         # read nbytes
         count = end_index - si + 1
-        data = np.frombuffer(f.read( * count), dtype=float_dtype)
+        data = np.frombuffer(f.read(float_dtype_size * count), dtype=float_dtype)
         series = pd.Series(data, index=pd.RangeIndex(si, si + len(data)))
     return series
 

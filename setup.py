@@ -133,7 +133,7 @@ setup(
         "dev": [
             "coverage",
             "pytest>=3",
-            "sphinx",
+            "sphinx<7.2",
             "sphinx_rtd_theme",
             "pre-commit",
             # CI dependencies

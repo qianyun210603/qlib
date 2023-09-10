@@ -387,7 +387,6 @@ class QlibConfig(Config):
                     raise NotImplementedError(f"This type of uri is not supported")
             return self._data_settings[freq].get(field, default)
 
-
     def set_mode(self, mode):
         # raise KeyError
         self.update(MODE_CONF[mode])

@@ -5,9 +5,7 @@ import numpy as np
 from qlib.data.storage import CalendarStorage, CalVT
 
 
-
 class ArcticCalendarStorage(ArcticStorageMixin, CalendarStorage):
-
     def __init__(self, freq: str, future: bool, calendar_type: str = None):
         super().__init__(freq, future)
         self.calendar_type = calendar_type

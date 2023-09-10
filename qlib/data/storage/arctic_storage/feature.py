@@ -15,9 +15,9 @@ class ArcticFeatureStorage(ArcticStorageMixin, FeatureStorage):
         super().__init__(instrument, field, freq, **kwargs)
         self.arctic_store = self._get_arctic_store()
         self.alias_lib = self.arctic_store.get_library("feature_alias")
-        self.field_lib_mapping = self.alias_lib.read('field_lib_mapping')
-        self.name_alias = self.alias_lib.read('name_alias')
-        self.name_inst_alias = self.alias_lib.read('name_inst_alias')
+        self.field_lib_mapping = self.alias_lib.read("field_lib_mapping")
+        self.name_alias = self.alias_lib.read("name_alias")
+        self.name_inst_alias = self.alias_lib.read("name_inst_alias")
         self.db_field, self.db_inst, self.lib = self._get_arctic_path()
 
     @lru_cache
@@ -26,7 +26,7 @@ class ArcticFeatureStorage(ArcticStorageMixin, FeatureStorage):
         return inst_mapping
 
     def _get_arctic_path(self):
-        freq_suffix = 'd' if self.freq == 'day' else '1m'
+        freq_suffix = "d" if self.freq == "day" else "1m"
         base_db_symbol = qlib_symbol_to_db(self.instrument)
         if self.field in self.name_alias:
             db_field = self.name_alias[self.field]
@@ -41,7 +41,7 @@ class ArcticFeatureStorage(ArcticStorageMixin, FeatureStorage):
             db_field = self.field
             db_inst = base_db_symbol
             lib = self.arctic_store.get_library(self.field_lib_mapping[db_field])
-        if self.field_lib_mapping[db_field] == 'bar_data':
+        if self.field_lib_mapping[db_field] == "bar_data":
             db_inst = f"{db_inst}_{freq_suffix}"
         return db_field, db_inst, lib
 
@@ -90,7 +90,9 @@ class ArcticFeatureStorage(ArcticStorageMixin, FeatureStorage):
         return pd.Timestamp("2099-01-01")
 
     def _read_factor(self, start_index: pd.Timestamp, end_index: pd.Timestamp) -> pd.Series:
-        inferred_index = pd.DatetimeIndex(D.calendar(start_time=start_index, end_time=end_index, freq=self.freq, future=True))
+        inferred_index = pd.DatetimeIndex(
+            D.calendar(start_time=start_index, end_time=end_index, freq=self.freq, future=True)
+        )
         if not self.lib.has_symbol(self.db_inst):
             return pd.Series(1.0, index=inferred_index)
         ll = sorted(s for s, e in self._get_chunk_ranges())
@@ -100,25 +102,27 @@ class ArcticFeatureStorage(ArcticStorageMixin, FeatureStorage):
         if idx == 0:
             df = self.lib.read(self.db_inst, chunk_range=DateRange(start_index, end_index), columns=[self.db_field])
             series = df[self.db_field]
-            series = series.reindex(inferred_index, method='ffill').fillna(1.0)
+            series = series.reindex(inferred_index, method="ffill").fillna(1.0)
             return series
         df = self.lib.read(self.db_inst, chunk_range=DateRange(ll[idx - 1], end_index), columns=[self.db_field])
         series = df[self.db_field]
-        series = series.reindex(inferred_index, method='ffill')
+        series = series.reindex(inferred_index, method="ffill")
         return series
 
     # TODO: make vwap directly available
     def _read_vwap(self, start_index: pd.Timestamp, end_index: pd.Timestamp) -> pd.Series:
-        df = self.lib.read(self.db_inst, chunk_range=DateRange(start_index, end_index), columns=["close_price", "volume", "turnover"])
+        df = self.lib.read(
+            self.db_inst, chunk_range=DateRange(start_index, end_index), columns=["close_price", "volume", "turnover"]
+        )
         series = df.apply(lambda x: x["turnover"] / x["volume"] if x["volume"] > 0 else x["close_price"], axis=1)
         return series
 
     def __getitem__(self, i: Union[pd.Timestamp, slice]) -> pd.Series:
         start_index = max(self.start_index, i.start)
         end_index = min(self.end_index, i.stop)
-        if self.field == 'factor':
+        if self.field == "factor":
             return self._read_factor(start_index, end_index)
-        if self.field == 'vwap':
+        if self.field == "vwap":
             return self._read_vwap(start_index, end_index)
         if not self.lib.has_symbol(self.db_inst):
             raise KeyError(f"{self.instrument} not found in {self.lib}")

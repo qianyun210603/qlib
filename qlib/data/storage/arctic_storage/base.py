@@ -40,7 +40,7 @@ def qlib_symbol_to_db(qlib_symbol: str) -> str:
     str
         qlib symbol
     """
-    exch = 'SSE' if qlib_symbol[:2] == 'SH' else 'SZSE'
+    exch = "SSE" if qlib_symbol[:2] == "SH" else "SZSE"
     return f"{qlib_symbol[2:]}_{exch}"
 
 
@@ -53,6 +53,7 @@ def arctic_auth_hook(*_):
         )
     return None
 
+
 register_get_auth_hook(arctic_auth_hook)
 
 
@@ -60,6 +61,7 @@ class ArcticStorageMixin:
     """ArcticStorageMixin, applicable to ArcticXXXStorage
     Subclasses need
     """
+
     def _get_arctic_store(self):
         db_mgr = get_database()
         return cast(ArcticDatabase, db_mgr).connection

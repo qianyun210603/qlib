@@ -16,7 +16,6 @@ INDEX_MAPPING = {
 
 
 class ArcticInstrumentStorage(ArcticStorageMixin, InstrumentStorage):
-
     def __init__(self, market: str, freq: str, **kwargs):
         super().__init__(market, freq, **kwargs)
         self.arctic_store = self._get_arctic_store()
@@ -26,7 +25,7 @@ class ArcticInstrumentStorage(ArcticStorageMixin, InstrumentStorage):
         self._instruments = None
 
     def _process_all(self):
-        freq_suffix = 'd' if self.freq == 'day' else '1m'
+        freq_suffix = "d" if self.freq == "day" else "1m"
         ov_lib = self.arctic_store.get_library("data_overview")
         if self.market == "cnstock_all":
             stock_meta_lib = self.arctic_store.get_library("stock_meta")
@@ -43,7 +42,12 @@ class ArcticInstrumentStorage(ArcticStorageMixin, InstrumentStorage):
                 get_module_logger("arctic_storage").info(f"Skip {db_symbol} as no data")
                 continue
             ov = ov_lib.read(tmp_sym)
-            instruments[db_symbol_to_qlib(db_symbol)] = [[pd.Timestamp(ov["start"]).tz_localize(None), pd.Timestamp(ov["end"]).tz_localize(None).replace(hour=23, minute=59, second=59)]]
+            instruments[db_symbol_to_qlib(db_symbol)] = [
+                [
+                    pd.Timestamp(ov["start"]).tz_localize(None),
+                    pd.Timestamp(ov["end"]).tz_localize(None).replace(hour=23, minute=59, second=59),
+                ]
+            ]
         return instruments
 
     def _read_instrument(self) -> Dict[InstKT, InstVT]:
@@ -56,7 +60,12 @@ class ArcticInstrumentStorage(ArcticStorageMixin, InstrumentStorage):
             for interval in orig_intervals:
                 if interval[0] == interval[1]:
                     continue
-                intervals.append([pd.Timestamp(interval[0]).tz_localize(None), pd.Timestamp(interval[1]).tz_localize(None).replace(hour=23, minute=59, second=59)])
+                intervals.append(
+                    [
+                        pd.Timestamp(interval[0]).tz_localize(None),
+                        pd.Timestamp(interval[1]).tz_localize(None).replace(hour=23, minute=59, second=59),
+                    ]
+                )
             return intervals
 
         insts = {db_symbol_to_qlib(db_sym): _parse_intervals(intervals) for db_sym, intervals in tmp.items()}
@@ -85,4 +94,3 @@ class ArcticInstrumentStorage(ArcticStorageMixin, InstrumentStorage):
 
     def __len__(self) -> int:
         return len(self.data)
-

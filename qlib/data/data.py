@@ -1046,7 +1046,6 @@ class LocalExpressionProvider(ExpressionProvider):
         super().__init__()
         self.time2idx = time2idx
 
-
     def expression(
         self, instrument, expression, start_time=None, end_time=None, freq="day", instrument_d={}, extend_windows=(0, 0)
     ):
@@ -1060,7 +1059,6 @@ class LocalExpressionProvider(ExpressionProvider):
         # Two kinds of queries are supported
         # - Index-based expression: this may save a lot of memory because the datetime index is not saved on the disk
         # - Data with datetime index expression: this will make it more convenient to integrating with some existing databases
-
 
         lft_etd, rght_etd = expression.get_extended_window_size()
         lft_etd = max(extend_windows[0], lft_etd)

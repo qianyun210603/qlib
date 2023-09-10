@@ -116,6 +116,9 @@ class Index:
     def __getitem__(self, i: int):
         return self.idx_list[i]
 
+    def __iter__(self):
+        return iter(self.idx_list)
+
     def _convert_type(self, item):
         """
 
@@ -131,7 +134,7 @@ class Index:
         if self.idx_list.dtype.type is np.datetime64:
             if isinstance(item, pd.Timestamp):
                 # This happens often when creating index based on pandas.DatetimeIndex and query with pd.Timestamp
-                return item.to_numpy()
+                return item.to_numpy().astype(self.idx_list.dtype)
         return item
 
     def index(self, item) -> int:

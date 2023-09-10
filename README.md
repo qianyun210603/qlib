@@ -23,6 +23,8 @@ I will try to merge some non-debateable features/bugfix to the original qlib. Bu
 | Topk backtest engine I         | Allow sell in limit-up case and allow buy in limit-down case             | [Merged](https://github.com/microsoft/qlib/pull/1407) |
 | Topk backtest engine II        | Sell names which are removed from instrument population (expired, delisted, removed from index etc)             | Done |
 | Ops `Today`                    | Return Calendar days since BASE_DAY(1970-01-01)          | Done |
+| Customize float data precision | Allow customize the precision of dumped data (to float64)          | Done |
+
 <span style="font-size: xx-small; ">
 <b>Note:</b>
 <ul>
@@ -46,11 +48,11 @@ Here is a quick **[demo](https://terminalizer.com/view/3f24561a4470)** shows how
 
 This table demonstrates the supported Python version of `Qlib`:
 
-|               | install with pip           | install from source  | plot |
-| ------------- |:---------------------:|:--------------------:|:----:|
-| Python 3.7    | :x:    | :heavy_check_mark:   | :heavy_check_mark: |
-| Python 3.8    | :x:    | :heavy_check_mark:   | :heavy_check_mark: |
-| Python 3.9    | :x:                   | :heavy_check_mark:   | :heavy_check_mark: |
+|               | install with pip | install from source  |       plot         |
+| ------------- |:----------------:|:--------------------:|:------------------:|
+| Python 3.7    |       :x:        | :heavy_check_mark:   | :heavy_check_mark: |
+| Python 3.8    |       :x:        | :heavy_check_mark:   | :heavy_check_mark: |
+| Python 3.9    |     :x:          | :heavy_check_mark:   | :heavy_check_mark: |
 
 **Note**: 
 1. **Conda** is suggested for managing your Python environment.

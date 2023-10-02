@@ -345,7 +345,7 @@ class Exchange:
             self, "limit_threshold"
         ), "self.limit_type and self.limit_threshold must be set first."
         # $close may contain NaN, the nan indicates that the stock is not tradable at that timestamp
-        suspended = self.quote_dfs[self.freq]["$close"].isna()
+        suspended = self.quote_dfs[self.freq]["$volume"].isna() | np.isclose(self.quote_dfs[self.freq]["$volume"], 0)
         # check limit_threshold
         limit_type = self.limit_type
         if limit_type == self.LT_NONE:
@@ -473,15 +473,16 @@ class Exchange:
             # The $close may contain NaN,
             volume = quote.get_data(stock_id, start_time, end_time, "$volume")
             if volume is None:
-                # if no close record exists
+                # if no volume record exists
                 return True
             elif isinstance(volume, IndexData):
                 # **any** non-NaN $close represents trading opportunity may exist
                 #  if all returned is nan, then the stock is suspended
-                return cast(bool, cast(IndexData, volume).isna().all())
+                idx_data = cast(IndexData, volume)
+                return cast(bool, idx_data.isna().all() or np.isclose(idx_data.data, 0).all())
             else:
                 # it is single value, make sure is not None
-                return np.isnan(volume)
+                return np.isnan(volume) or np.isclose(volume, 0)
         else:
             # if the stock is not in the stock list, then it is not tradable and regarded as suspended
             return True

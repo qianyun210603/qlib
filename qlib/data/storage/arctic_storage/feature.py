@@ -5,8 +5,6 @@ from arctic.date import DateRange
 import numpy as np
 import pandas as pd
 from functools import lru_cache
-from qlib.data import D
-
 from qlib.data.storage import FeatureStorage
 
 
@@ -90,6 +88,8 @@ class ArcticFeatureStorage(ArcticStorageMixin, FeatureStorage):
         return pd.Timestamp("2099-01-01")
 
     def _read_factor(self, start_index: pd.Timestamp, end_index: pd.Timestamp) -> pd.Series:
+        from qlib.data import D  # pylint: disable=import-outside-toplevel
+
         inferred_index = pd.DatetimeIndex(
             D.calendar(start_time=start_index, end_time=end_index, freq=self.freq, future=True)
         )
@@ -109,23 +109,23 @@ class ArcticFeatureStorage(ArcticStorageMixin, FeatureStorage):
         series = series.reindex(inferred_index, method="ffill")
         return series
 
-    # TODO: make vwap directly available
-    def _read_vwap(self, start_index: pd.Timestamp, end_index: pd.Timestamp) -> pd.Series:
-        df = self.lib.read(
-            self.db_inst, chunk_range=DateRange(start_index, end_index), columns=["close_price", "volume", "turnover"]
-        )
-        series = df.apply(lambda x: x["turnover"] / x["volume"] if x["volume"] > 0 else x["close_price"], axis=1)
-        return series
+    # # TODO: make vwap directly available
+    # def _read_vwap(self, start_index: pd.Timestamp, end_index: pd.Timestamp) -> pd.Series:
+    #     df = self.lib.read(
+    #         self.db_inst, chunk_range=DateRange(start_index, end_index), columns=["close_price", "volume", "turnover"]
+    #     )
+    #     series = df.apply(lambda x: x["turnover"] / x["volume"] if x["volume"] > 0 else x["close_price"], axis=1)
+    #     return series
 
     def __getitem__(self, i: Union[pd.Timestamp, slice]) -> pd.Series:
         start_index = max(self.start_index, i.start)
-        end_index = min(self.end_index, i.stop)
         if self.field == "factor":
-            return self._read_factor(start_index, end_index)
-        if self.field == "vwap":
-            return self._read_vwap(start_index, end_index)
+            return self._read_factor(start_index, i.stop)
+        end_index = min(self.end_index, i.stop)
+        if start_index > end_index:
+            return pd.Series(dtype=np.float64)
         if not self.lib.has_symbol(self.db_inst):
-            raise KeyError(f"{self.instrument} not found in {self.lib}")
+            raise KeyError(f"{self.db_inst} not found in {self.lib}")
         df = self.lib.read(self.db_inst, chunk_range=DateRange(start_index, end_index), columns=[self.db_field])
         series = df[self.db_field]
         return series

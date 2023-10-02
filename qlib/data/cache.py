@@ -21,6 +21,8 @@ import pandas as pd
 from typing import Union, Iterable, Optional
 from collections import OrderedDict
 
+from arctic.date import DateRange
+
 from ..config import C
 from ..utils import (
     hash_args,
@@ -30,11 +32,13 @@ from ..utils import (
     remove_fields_space,
     normalize_cache_fields,
     normalize_cache_instruments,
+    get_next_trading_date,
 )
 
 from ..log import get_module_logger
 from .base import Feature
-from .ops import Operators  # pylint: disable=W0611  # noqa: F401
+from .ops import Operators, XSectionOperator  # pylint: disable=W0611  # noqa: F401
+from .storage.arctic_storage.base import ArcticStorageMixin
 
 
 class QlibCacheException(RuntimeError):
@@ -196,7 +200,7 @@ class MemCache:
         elif key == "fs":
             return self._feature_share_mem_cache
         else:
-            raise KeyError("Unknown memcache unit")
+            raise KeyError(f"Unknown memcache unit {key}")
 
     def __contains__(self, item):
         return item in ["c", "i", "f", "fs"]
@@ -369,6 +373,8 @@ class BaseProviderCache:
     def __getattr__(self, attr):
         return getattr(self.provider, attr)
 
+
+class DiskCacheMixin:
     @staticmethod
     def check_cache_exists(cache_path: Union[str, Path], suffix_list: Iterable = (".index", ".meta")) -> bool:
         cache_path = Path(cache_path)
@@ -402,13 +408,21 @@ class ExpressionCache(BaseProviderCache):
     .. note:: Override the `_uri` and `_expression` method to create your own expression cache mechanism.
     """
 
-    def expression(self, instrument, expression, start_time, end_time, freq, instrument_d=None, **_):
+    def expression(self, instrument, expression, start_time, end_time, freq, instrument_d=None, **kwargs):
         """Get expression data.
 
         .. note:: Same interface as `expression` method in expression provider
         """
         try:
-            return self._expression(instrument, expression, start_time, end_time, freq, instrument_d=instrument_d)
+            return self._expression(
+                instrument,
+                expression,
+                start_time,
+                end_time,
+                freq,
+                instrument_d=instrument_d,
+                population_name=kwargs.get("population_name", ""),
+            )
         except NotImplementedError:
             return self.provider.expression(
                 instrument, expression, start_time, end_time, freq, instrument_d=instrument_d
@@ -421,7 +435,7 @@ class ExpressionCache(BaseProviderCache):
         """
         raise NotImplementedError("Implement this function to match your own cache mechanism")
 
-    def _expression(self, instrument, field, start_time, end_time, freq, instrument_d=None):
+    def _expression(self, instrument, field, start_time, end_time, freq, instrument_d=None, population_name=""):
         """Get expression data using cache.
 
         Override this method to define how to get expression data corresponding to users' own cache mechanism.
@@ -556,7 +570,7 @@ class DatasetCache(BaseProviderCache):
         return instruments, fields, freq
 
 
-class DiskExpressionCache(ExpressionCache):
+class DiskExpressionCache(ExpressionCache, DiskCacheMixin):
     """Prepared cache mechanism for server."""
 
     def __init__(self, provider, **kwargs):
@@ -573,7 +587,9 @@ class DiskExpressionCache(ExpressionCache):
         instrument = str(instrument).lower()
         return hash_args(instrument, field, freq)
 
-    def _expression(self, instrument, field, start_time=None, end_time=None, freq="day", instrument_d=None):
+    def _expression(
+        self, instrument, field, start_time=None, end_time=None, freq="day", instrument_d=None, population_name=""
+    ):
         _cache_uri = self._uri(instrument=instrument, field=field, start_time=None, end_time=None, freq=freq)
         _instrument_dir = self.get_cache_dir(freq).joinpath(instrument.lower())
         cache_path = _instrument_dir.joinpath(_cache_uri)
@@ -661,7 +677,7 @@ class DiskExpressionCache(ExpressionCache):
     def update(self, cache_uri, freq: str = "day"):
         cp_cache_uri = self.get_cache_dir(freq).joinpath(cache_uri)
         meta_path = cp_cache_uri.with_suffix(".meta")
-        float_dtype = float_dtype = C.dpm.get_data_settings("float_data_type", freq=freq, default="<f")
+        float_dtype = C.dpm.get_data_settings("float_data_type", freq=freq, default="<f")
         if not self.check_cache_exists(cp_cache_uri, suffix_list=[".meta"]):
             self.logger.info(f"The cache {cp_cache_uri} has corrupted. It will be removed")
             self.clear_cache(cp_cache_uri)
@@ -722,7 +738,146 @@ class DiskExpressionCache(ExpressionCache):
         return 0
 
 
-class DiskDatasetCache(DatasetCache):
+class ArcticExpressionCache(ExpressionCache, ArcticStorageMixin):
+    """Prepared cache mechanism for server."""
+
+    CHUNK_SIZE_MAPPING = {
+        "day": "Y",
+        "1d": "Y",
+        "1min": "D",
+    }
+
+    def __init__(self, provider, **_):
+        super(ArcticExpressionCache, self).__init__(provider)
+        self.arctic_store = self._get_arctic_store()
+        self.features_lib = self.arctic_store.get_library("qlib_features")
+        self.alias_lib = self.arctic_store.get_library("feature_alias")
+        self.hash_mapping = self.alias_lib.read("qlib_feature_hash_mapping")
+
+    def _uri(self, instrument, field, start_time, end_time, freq, population_name="all"):
+        instrument = str(instrument).lower()
+        return "@@".join((instrument, field, freq, population_name))
+
+    def _expression(
+        self, instrument, field, start_time=None, end_time=None, freq="day", instrument_d=None, population_name="all"
+    ):
+        parsed_feature = eval(parse_field(field))
+
+        # for non-cross-section feature, population_name is "all"
+        if not isinstance(parsed_feature, XSectionOperator):
+            population_name = "all"
+
+        _cache_uri = self._uri(
+            instrument=instrument,
+            field=str(parsed_feature),
+            start_time=None,
+            end_time=None,
+            freq=freq,
+            population_name=population_name,
+        )
+
+        # get calendar
+        from .data import Cal  # pylint: disable=C0415
+
+        _calendar = Cal.calendar(freq=freq)
+
+        # _, _, start_index, end_index = Cal.locate_index(start_time, end_time, freq, future=False)
+
+        if self.features_lib.has_symbol(_cache_uri):
+            """
+            In most cases, we do not need reader_lock.
+            Because updating data is a small probability event compare to reading data.
+
+            """
+            if self.update(_cache_uri, freq=freq, instrument_d=instrument_d) < 2:
+                series = self.features_lib.read(_cache_uri, chunk_range=DateRange(start_time, end_time))
+                meta = self.features_lib.read_metadata(_cache_uri)
+                meta["last_visit"] = pd.Timestamp.utcnow()
+                meta["visits"] = meta["visits"] + 1
+                self.features_lib.write_metadata(_cache_uri, meta)
+                return series
+            else:
+                self.logger.error("Arctic cache broken for %s: %s" % (_cache_uri, traceback.format_exc()))
+                self.features_lib.delete(_cache_uri)
+
+        if not isinstance(parsed_feature, Feature):
+            # When the expression is not a raw feature
+            # generate expression cache if the feature is not a Feature
+            # instance
+            series = self.provider.expression(
+                instrument, field, _calendar[0], _calendar[-1], freq, instrument_d=instrument_d
+            )
+            series.dropna(inplace=True)
+            if not series.empty:
+                series.index.name = "date"
+                self.features_lib.write(
+                    _cache_uri,
+                    series,
+                    metadata={"last_update": str(series.index.max()), "last_visit": pd.Timestamp.utcnow(), "visits": 1},
+                    chunk_size=self.CHUNK_SIZE_MAPPING[freq],
+                    chunk_range=DateRange(series.index.min(), series.index.max()),
+                )
+
+                return series.loc[start_time:end_time]
+            else:
+                return series
+        else:
+            # If the expression is a raw feature(such as $close, $open)
+            return self.provider.expression(
+                instrument, field, start_time, end_time, freq, instrument_d=instrument_d
+            )
+
+    def _handle_broken_cache(self, cache_uri):
+        self.logger.error("Arctic cache broken for %s: %s" % (cache_uri, traceback.format_exc()))
+        self.logger.warning("Clean cache for %s" % cache_uri)
+        self.features_lib.delete(cache_uri)
+
+    def update(self, cache_uri, freq: str = "day", instrument_d=None):
+        # get newest calendar
+        from .data import Cal  # pylint: disable=C0415
+
+        meta = self.features_lib.read_metadata(cache_uri)
+        if meta is None:
+            self._handle_broken_cache(cache_uri)
+            return 2
+        instrument, field, freq, population_name = cache_uri.split("@@")
+        last_update_time = meta["last_update"]
+        whole_calendar = Cal.calendar(start_time=None, end_time=None, freq=freq)
+        next_date = get_next_trading_date(last_update_time, future=True)
+        if next_date > whole_calendar[-1]:
+            return 1
+
+        try:
+            if self.features_lib.has_symbol(cache_uri):
+                series = self.provider.expression(
+                    instrument, field, next_date, whole_calendar[-1], freq, instrument_d=instrument_d
+                )
+                series.dropna(inplace=True)
+                if not series.empty:
+                    series.index.name = "date"
+                    self.features_lib.update(
+                        cache_uri,
+                        series,
+                        upsert=True,
+                        metadata={
+                            "last_update": str(series.index.max()),
+                            "last_visit": pd.Timestamp.utcnow(),
+                            "visits": meta["visits"] + 1,
+                        },
+                        chunk_size=self.CHUNK_SIZE_MAPPING[freq],
+                        chunk_range=DateRange(series.index.min(), series.index.max()),
+                    )
+                    return 0
+                else:
+                    return 1
+            else:
+                return 2
+        except Exception:
+            self._handle_broken_cache(cache_uri)
+            return 2
+
+
+class DiskDatasetCache(DatasetCache, DiskCacheMixin):
     """Prepared cache mechanism for server."""
 
     def __init__(self, provider, **kwargs):

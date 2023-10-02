@@ -40,7 +40,7 @@ def qlib_symbol_to_db(qlib_symbol: str) -> str:
     str
         qlib symbol
     """
-    exch = "SSE" if qlib_symbol[:2] == "SH" else "SZSE"
+    exch = "SSE" if qlib_symbol[:2].lower() == "sh" else "SZSE"
     return f"{qlib_symbol[2:]}_{exch}"
 
 

@@ -9,6 +9,7 @@ from .cache import (
     DatasetURICache,
     DiskDatasetCache,
     DiskExpressionCache,
+    ArcticExpressionCache,
     ExpressionCache,
     MemoryCalendarCache,
     SimpleDatasetCache,
@@ -33,6 +34,7 @@ from .data import (
     LocalPITProvider,
     LocalProvider,
 )
+
 
 __all__ = [
     "D",
@@ -60,4 +62,5 @@ __all__ = [
     "SimpleDatasetCache",
     "DatasetURICache",
     "MemoryCalendarCache",
+    "ArcticExpressionCache",
 ]

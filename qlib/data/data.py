@@ -583,7 +583,7 @@ class DatasetProvider(abc.ABC):
         return normalize_column_names, cs_level_summary, level_shared_features, feature_extended_windows
 
     @staticmethod
-    def dataset_processor(instruments_d, column_names, start_time, end_time, freq, inst_processors=[]):
+    def dataset_processor(instruments, column_names, start_time, end_time, freq, inst_processors=[]):
         """
         Load and process the data, return the data set.
         - default using multi-kernel method.
@@ -595,6 +595,16 @@ class DatasetProvider(abc.ABC):
             level_shared_features,
             feature_extended_windows,
         ) = DatasetProvider._analysis_features(column_names)
+
+        instruments_d = DatasetProvider.get_instruments_d(instruments, freq)
+        if isinstance(instruments, dict) and "market" in instruments:
+            population_name = instruments["market"]
+        elif isinstance(instruments, dict):
+            population_name = hash(sorted(instruments.items()))
+        elif isinstance(instruments, (list, tuple, pd.Index, np.ndarray)):
+            population_name = hash(tuple(sorted(instruments)))
+        else:
+            raise ValueError("Unsupported input type for param `instrument`")
         # One process for one task, so that the memory will be freed quicker.
         workers = max(min(C.get_kernels(freq), len(instruments_d)), 1)
 
@@ -631,6 +641,7 @@ class DatasetProvider(abc.ABC):
                         expressions=expressions,
                         feature_extended_windows=feature_extended_windows,
                         g_config=C,
+                        population_name=population_name,  # for cache key
                         population=instruments_d,
                         cache_data={**ts_cache.get(inst, {}), **cs_cache},
                         shared_cache=shared_data_cache,
@@ -666,6 +677,7 @@ class DatasetProvider(abc.ABC):
                         spans=spans,
                         g_config=C,
                         inst_processors=inst_processors,
+                        population_name=population_name,  # for cache key
                         population=instruments_d,
                         cache_data={**ts_cache.get(inst, {}), **cs_cache},
                         shared_cache=shared_data_cache,
@@ -746,6 +758,7 @@ class DatasetProvider(abc.ABC):
         spans=None,
         g_config=None,
         inst_processors=(),
+        population_name="",
         population={},
         cache_data=None,
         shared_cache=None,
@@ -770,7 +783,13 @@ class DatasetProvider(abc.ABC):
         for field in column_names:
             #  The client does not have expression provider, the data will be loaded from cache using static method.
             obj[field] = ExpressionD.expression(
-                inst, expressions[field], start_time, end_time, freq, instrument_d=population
+                inst,
+                expressions[field],
+                start_time,
+                end_time,
+                freq,
+                instrument_d=population,
+                population_name=population_name,
             )
 
         data = pd.DataFrame(obj)
@@ -906,8 +925,10 @@ class LocalFeatureProvider(FeatureProvider, ProviderBackendMixin):
         # validate
         field = str(field)[1:]
         instrument = code_to_fname(instrument)
-        offset = 1 if isinstance(end_index, (int, float)) else pd.Timedelta(days=1)
-        return self.backend_obj(instrument=instrument, field=field, freq=freq)[start_index : end_index + offset]
+        # offset = 1 if isinstance(end_index, (int, float)) else pd.Timedelta(days=1)
+        if isinstance(end_index, (int, float)):
+            end_index += 1
+        return self.backend_obj(instrument=instrument, field=field, freq=freq)[start_index : end_index]
 
 
 class LocalPITProvider(PITProvider):
@@ -1047,7 +1068,15 @@ class LocalExpressionProvider(ExpressionProvider):
         self.time2idx = time2idx
 
     def expression(
-        self, instrument, expression, start_time=None, end_time=None, freq="day", instrument_d={}, extend_windows=(0, 0)
+        self,
+        instrument,
+        expression,
+        start_time=None,
+        end_time=None,
+        freq="day",
+        instrument_d={},
+        population_name="",
+        extend_windows=(0, 0),
     ):
         float_dtype = C.dpm.get_data_settings("float_data_type", freq, default="<f")
         if isinstance(expression, str):
@@ -1074,7 +1103,9 @@ class LocalExpressionProvider(ExpressionProvider):
                 }
         else:
             start_index, end_index = pd.Timestamp(start_time), pd.Timestamp(end_time)
-            query_start, query_end = get_date_by_shift(start_time, -lft_etd), get_date_by_shift(end_time, rght_etd)
+            query_start, query_end = get_date_by_shift(start_time, -lft_etd, future=True), get_date_by_shift(
+                end_time, rght_etd, future=True
+            )
             if isinstance(instrument_d, dict):
                 instrument_d = {
                     inst: [[pd.Timestamp(span[0]), pd.Timestamp(span[1])] for span in spans]
@@ -1143,7 +1174,7 @@ class LocalDatasetProvider(DatasetProvider):
             start_time = cal[0]
             end_time = cal[-1]
         data = self.dataset_processor(
-            instruments_d, column_names, start_time, end_time, freq, inst_processors=inst_processors
+            instruments, column_names, start_time, end_time, freq, inst_processors=inst_processors
         )
 
         return data

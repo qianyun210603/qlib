@@ -14,7 +14,9 @@ import pytest
 import qlib
 from qlib.data import D
 from qlib.tests.data import GetData
-from scripts.dump_pit import DumpPitData
+
+sys.path.append(str(Path(__file__).resolve().parent.parent.joinpath("scripts")))
+from dump_pit import DumpPitData
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.joinpath("scripts/data_collector/pit")))
 from collector import Run

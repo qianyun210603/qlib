@@ -2,19 +2,17 @@
 # Licensed under the MIT License.
 
 import abc
-from typing import Optional, Text, Union
-
+from typing import Union, Text, Optional
 import numpy as np
 import pandas as pd
 
-from qlib.data import D
-from qlib.data.inst_processor import InstProcessor
 from qlib.utils.data import robust_zscore, zscore
-
 from ...constant import EPS
-from ...utils.paral import datetime_groupby_apply
-from ...utils.serial import Serializable
 from .utils import fetch_df_by_index
+from ...utils.serial import Serializable
+from ...utils.paral import datetime_groupby_apply
+from qlib.data.inst_processor import InstProcessor
+from qlib.data import D
 
 
 def get_group_columns(df: pd.DataFrame, group: Union[Text, None]):
@@ -347,9 +345,13 @@ class CSZScoreNorm(Processor):
         # try not modify original dataframe
         if not isinstance(self.fields_group, list):
             self.fields_group = [self.fields_group]
-        for g in self.fields_group:
-            cols = get_group_columns(df, g)
-            df.loc[:, cols] = df.loc[:, cols].groupby("datetime", group_keys=False).apply(self.zscore_func)
+        # depress warning by references:
+        # https://stackoverflow.com/questions/20625582/how-to-deal-with-settingwithcopywarning-in-pandas
+        # https://pandas.pydata.org/pandas-docs/stable/user_guide/options.html#getting-and-setting-options
+        with pd.option_context("mode.chained_assignment", None):
+            for g in self.fields_group:
+                cols = get_group_columns(df, g)
+                df[cols] = df[cols].groupby("datetime", group_keys=False).apply(self.zscore_func)
         return df
 
 

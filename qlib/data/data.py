@@ -928,7 +928,7 @@ class LocalFeatureProvider(FeatureProvider, ProviderBackendMixin):
         # offset = 1 if isinstance(end_index, (int, float)) else pd.Timedelta(days=1)
         if isinstance(end_index, (int, float)):
             end_index += 1
-        return self.backend_obj(instrument=instrument, field=field, freq=freq)[start_index : end_index]
+        return self.backend_obj(instrument=instrument, field=field, freq=freq)[start_index:end_index]
 
 
 class LocalPITProvider(PITProvider):

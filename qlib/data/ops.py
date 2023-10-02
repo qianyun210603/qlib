@@ -1223,9 +1223,6 @@ class Std(Rolling):
     def __init__(self, feature, N):
         super(Std, self).__init__(feature, N, "std")
 
-    def _load_internal(self, instrument, start_index, end_index, *args):
-        return super()._load_internal(instrument, start_index, end_index, *args)
-
 
 class Var(Rolling):
     """Rolling Variance
@@ -1499,6 +1496,7 @@ class Mad(Rolling):
             return series
         factor = self._get_factor(instrument, series.index.min(), series.index.max(), *args)
         series = series * factor**self.feature.adjust_status
+
         # TODO: implement in Cython
         def mad(x):
             x1 = x[~np.isnan(x)]
@@ -1508,7 +1506,7 @@ class Mad(Rolling):
             series = series.expanding(min_periods=1).apply(mad, raw=True)
         else:
             series = series.rolling(self.N, min_periods=1).apply(mad, raw=True)
-        series = series / factor ** self.adjust_status
+        series = series / factor**self.adjust_status
         return series
 
 
@@ -1872,12 +1870,16 @@ class PairRolling(ExpressionOps):
         factor = self._get_factor(instrument, start_index, end_index, *args)
         if isinstance(self.feature_left, Expression):
             series_left = self.feature_left.load(instrument, start_index, end_index, *args)
-            series_left = series_left * factor.reindex(series_left.index, method='pad')**self.feature_left.adjust_status
+            series_left = (
+                series_left * factor.reindex(series_left.index, method="pad") ** self.feature_left.adjust_status
+            )
         else:
             series_left = self.feature_left  # numeric value
         if isinstance(self.feature_right, Expression):
             series_right = self.feature_right.load(instrument, start_index, end_index, *args)
-            series_right = series_right * factor.reindex(series_right.index, method='pad')**self.feature_right.adjust_status
+            series_right = (
+                series_right * factor.reindex(series_right.index, method="pad") ** self.feature_right.adjust_status
+            )
         else:
             series_right = self.feature_right
 
@@ -1885,7 +1887,7 @@ class PairRolling(ExpressionOps):
             series = getattr(series_left.expanding(min_periods=1), self.func)(series_right)
         else:
             series = getattr(series_left.rolling(self.N, min_periods=1), self.func)(series_right)
-        series = series / factor.reindex(series.index, method='pad')**self.adjust_status
+        series = series / factor.reindex(series.index, method="pad") ** self.adjust_status
         return series
 
     def get_longest_back_rolling(self):

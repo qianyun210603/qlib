@@ -823,9 +823,7 @@ class ArcticExpressionCache(ExpressionCache, ArcticStorageMixin):
                 return series
         else:
             # If the expression is a raw feature(such as $close, $open)
-            return self.provider.expression(
-                instrument, field, start_time, end_time, freq, instrument_d=instrument_d
-            )
+            return self.provider.expression(instrument, field, start_time, end_time, freq, instrument_d=instrument_d)
 
     def _handle_broken_cache(self, cache_uri):
         self.logger.error("Arctic cache broken for %s: %s" % (cache_uri, traceback.format_exc()))

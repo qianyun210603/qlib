@@ -144,7 +144,6 @@ class FilterCol(Processor):
 
 
 class DropTouchLimits(Processor):
-
     def __call__(self, df):
         if "limits" not in df.columns:
             return df

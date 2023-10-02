@@ -2,8 +2,12 @@ from typing import cast
 from qlib.log import get_module_logger
 from arctic.auth import Credential
 from arctic.hooks import register_get_auth_hook
-from vnpy.trader.database import SETTINGS, get_database
-from vnpy_arctic.arctic_database import ArcticDatabase
+
+try:
+    from vnpy.trader.database import SETTINGS, get_database
+    from vnpy_arctic.arctic_database import ArcticDatabase
+except ImportError:
+    pass
 
 
 logger = get_module_logger("arctic_storage")

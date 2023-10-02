@@ -221,7 +221,8 @@ class Expression(abc.ABC):
                 f"error info: {str(e)}"
             )
             raise
-        series.name = str(self)
+        series = series.rename(str(self)).astype("float64")
+        # series.name = str(self)
         H["f"][cache_key] = series
         return series
 

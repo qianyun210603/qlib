@@ -67,6 +67,7 @@ REQUIRED = [
     "mlflow>=1.12.1, <=1.30.0",
     "tqdm",
     "loguru",
+    "arctic",
     "lightgbm>=3.3.0",
     "tornado",
     "joblib>=0.17.0",

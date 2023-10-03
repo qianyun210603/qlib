@@ -213,7 +213,11 @@ class Fillna(Processor):
             # So we use numpy to accelerate filling values
             nan_select = np.isnan(df.values)
             nan_select[:, ~df.columns.isin(cols)] = False
-            df[nan_select] = self.fill_value
+            # depress warning by references:
+            # https://stackoverflow.com/questions/20625582/how-to-deal-with-settingwithcopywarning-in-pandas
+            # https://pandas.pydata.org/pandas-docs/stable/user_guide/options.html#getting-and-setting-options
+            with pd.option_context("mode.chained_assignment", None):
+                df[nan_select] = self.fill_value
 
         return df
 
@@ -318,7 +322,11 @@ class RobustZScoreNorm(Processor):
         X /= self.std_train
         if self.clip_outlier:
             X = np.clip(X, -3, 3)
-        df[self.cols] = X
+        # depress warning by references:
+        # https://stackoverflow.com/questions/20625582/how-to-deal-with-settingwithcopywarning-in-pandas
+        # https://pandas.pydata.org/pandas-docs/stable/user_guide/options.html#getting-and-setting-options
+        with pd.option_context("mode.chained_assignment", None):
+            df[self.cols] = X
         return df
 
 

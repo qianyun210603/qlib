@@ -1855,12 +1855,13 @@ class PairRolling(ExpressionOps):
     def __str__(self):
         return "{}({},{},{})".format(type(self).__name__, self.feature_left, self.feature_right, self.N)
 
-    def _get_factor(self, instrument, start_index, end_index, *args):
-        factor = 1.0
+    @staticmethod
+    def _get_factor(instrument, start_index, end_index, *args):
+        factor = pd.Series([1.0], index=[start_index])
         if not C.get("ohlc_adjusted", True):
             factor = Feature("factor").load(instrument, start_index, end_index, *args)
             if factor.isna().all():
-                factor = 1.0
+                factor = pd.Series([1.0], index=[start_index])
         return factor
 
     def _load_internal(self, instrument, start_index, end_index, *args):

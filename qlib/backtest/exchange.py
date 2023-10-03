@@ -482,7 +482,7 @@ class Exchange:
                 return cast(bool, idx_data.isna().all() or np.isclose(idx_data.data, 0).all())
             else:
                 # it is single value, make sure is not None
-                return np.isnan(volume) or np.isclose(volume, 0)
+                return cast(bool, np.isnan(volume) or np.isclose(volume, 0))
         else:
             # if the stock is not in the stock list, then it is not tradable and regarded as suspended
             return True

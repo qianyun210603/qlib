@@ -284,6 +284,7 @@ class InstrumentProvider(abc.ABC):
             end of the time range.
         as_list : bool
             return instruments as list or dict.
+        freq: str
 
         Returns
         -------
@@ -359,6 +360,8 @@ class PITProvider(abc.ABC):
 
         Parameters
         ----------
+        instrument: str
+        field: str
         start_index: int
             start_index is a relative index to the latest period to cur_time
 
@@ -372,6 +375,7 @@ class PITProvider(abc.ABC):
             This is used for query specific period.
             The period is represented with int in Qlib. (e.g. 202001 may represent the first quarter in 2020)
             NOTE: `period`  will override `start_index` and `end_index`
+        cur_time: pd.Timestamp
 
         Returns
         -------
@@ -600,7 +604,7 @@ class DatasetProvider(abc.ABC):
         if isinstance(instruments, dict) and "market" in instruments:
             population_name = instruments["market"]
         elif isinstance(instruments, dict):
-            population_name = hash(sorted(instruments.items()))
+            population_name = hash(tuple(sorted((sym, tuple(interval)) for sym, interval in instruments.items())))
         elif isinstance(instruments, (list, tuple, pd.Index, np.ndarray)):
             population_name = hash(tuple(sorted(instruments)))
         else:
@@ -1162,7 +1166,6 @@ class LocalDatasetProvider(DatasetProvider):
         self.align_time = align_time
 
     def dataset(self, instruments, fields, start_time=None, end_time=None, freq="day", inst_processors=[], **_):
-        instruments_d = self.get_instruments_d(instruments, freq)
         column_names = self.get_column_names(fields)
         if self.align_time:
             # NOTE: if the frequency is a fixed value.
@@ -1234,6 +1237,9 @@ class ClientCalendarProvider(CalendarProvider):
         )
         result = self.queue.get(timeout=C["timeout"])
         return result
+
+    def load_calendar(self, freq, future):
+        pass
 
 
 class ClientInstrumentProvider(InstrumentProvider):

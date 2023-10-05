@@ -1,13 +1,18 @@
-from typing import cast
+import sys
+
+if sys.version_info >= (3, 9):
+    from zoneinfo import ZoneInfo  # noqa
+else:
+    from backports.zoneinfo import ZoneInfo  # noqa
 from qlib.log import get_module_logger
+from arctic import Arctic
 from arctic.auth import Credential
 from arctic.hooks import register_get_auth_hook
 
 try:
-    from vnpy.trader.database import SETTINGS, get_database
-    from vnpy_arctic.arctic_database import ArcticDatabase
+    from vnpy.trader.database import SETTINGS
 except ImportError:
-    pass
+    SETTINGS = {}
 
 
 logger = get_module_logger("arctic_storage")
@@ -36,8 +41,8 @@ def qlib_symbol_to_db(qlib_symbol: str) -> str:
 
     Parameters
     ----------
-    db_symbol : str
-        db_symbol
+    qlib_symbol : str
+        qlib style symbol
 
     Returns
     -------
@@ -67,5 +72,9 @@ class ArcticStorageMixin:
     """
 
     def _get_arctic_store(self):
-        db_mgr = get_database()
-        return cast(ArcticDatabase, db_mgr).connection
+        """get arctic store"""
+        if not hasattr(self, "arctic_store"):
+            self.arctic_store = Arctic(
+                SETTINGS["database.host"], tz_aware=True, tzinfo=ZoneInfo(SETTINGS["database.timezone"])
+            )
+        return self.arctic_store

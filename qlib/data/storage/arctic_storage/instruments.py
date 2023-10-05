@@ -18,20 +18,18 @@ INDEX_MAPPING = {
 class ArcticInstrumentStorage(ArcticStorageMixin, InstrumentStorage):
     def __init__(self, market: str, freq: str, **kwargs):
         super().__init__(market, freq, **kwargs)
-        self.arctic_store = self._get_arctic_store()
-        self.inst_lib = self.arctic_store.get_library("index_components")
         self.market = market
         self.inst_symbol = INDEX_MAPPING[market]
         self._instruments = None
 
-    def _process_all(self):
+    def _process_all(self, arctic_store):
         freq_suffix = "d" if self.freq == "day" else "1m"
-        ov_lib = self.arctic_store.get_library("data_overview")
+        ov_lib = arctic_store.get_library("data_overview")
         if self.market == "cnstock_all":
-            stock_meta_lib = self.arctic_store.get_library("stock_meta")
+            stock_meta_lib = arctic_store.get_library("stock_meta")
             population = stock_meta_lib.list_symbols()
         elif self.market == "cnconvert_all":
-            convert_meta_lib = self.arctic_store.get_library("convert_meta")
+            convert_meta_lib = arctic_store.get_library("convert_meta")
             population = convert_meta_lib.list_symbols()
         else:
             raise NotImplementedError(f"market {self.market} not implemented")
@@ -51,9 +49,11 @@ class ArcticInstrumentStorage(ArcticStorageMixin, InstrumentStorage):
         return instruments
 
     def _read_instrument(self) -> Dict[InstKT, InstVT]:
+        arctic_store = self._get_arctic_store()
+        inst_lib = arctic_store.get_library("index_components")
         if self.market in ["cnstock_all", "cnconvert_all"]:
-            return self._process_all()
-        tmp = self.inst_lib.read(self.inst_symbol)
+            return self._process_all(arctic_store)
+        tmp = inst_lib.read(self.inst_symbol)
 
         def _parse_intervals(orig_intervals):
             intervals = []

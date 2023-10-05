@@ -729,7 +729,7 @@ class DatasetProvider(abc.ABC):
         feature_extended_windows={},
         g_config=None,
         population={},
-        population_name="", # for cache key
+        population_name="",  # for cache key
         shared_features=set(),
         cache_data=None,
         shared_cache=None,
@@ -743,7 +743,14 @@ class DatasetProvider(abc.ABC):
             #  The client does not have expression provider, the data will be loaded from cache using static method.
             for ext_windows in feature_extended_windows.get(str(expression), {(0, 0)}):
                 ExpressionD.expression(
-                    inst, expression, start_time, end_time, freq, instrument_d=population, extend_windows=ext_windows, population_name=population_name
+                    inst,
+                    expression,
+                    start_time,
+                    end_time,
+                    freq,
+                    instrument_d=population,
+                    extend_windows=ext_windows,
+                    population_name=population_name,
                 )
 
         obj = {}

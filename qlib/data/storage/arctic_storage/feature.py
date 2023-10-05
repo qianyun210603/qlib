@@ -9,39 +9,29 @@ from qlib.data.storage import FeatureStorage
 
 
 class ArcticFeatureStorage(ArcticStorageMixin, FeatureStorage):
-    def __init__(self, instrument: str, field: str, freq: str, **kwargs):
-        super().__init__(instrument, field, freq, **kwargs)
-        self.arctic_store = self._get_arctic_store()
-        self.alias_lib = self.arctic_store.get_library("feature_alias")
-        self.field_lib_mapping = self.alias_lib.read("field_lib_mapping")
-        self.name_alias = self.alias_lib.read("name_alias")
-        self.name_inst_alias = self.alias_lib.read("name_inst_alias")
-        self.db_field, self.db_inst, self.lib = self._get_arctic_path()
-
-    @lru_cache
-    def _get_inst_mapping(self, inst_mapping_name):
-        inst_mapping = self.alias_lib.read(inst_mapping_name)
-        return inst_mapping
-
-    def _get_arctic_path(self):
+    def _init_arctic_path(self):
+        arctic_store = self._get_arctic_store()
+        alias_lib = arctic_store.get_library("feature_alias")
+        field_lib_mapping = alias_lib.read("field_lib_mapping")
+        name_alias = alias_lib.read("name_alias")
+        name_inst_alias = alias_lib.read("name_inst_alias")
         freq_suffix = "d" if self.freq == "day" else "1m"
         base_db_symbol = qlib_symbol_to_db(self.instrument)
-        if self.field in self.name_alias:
-            db_field = self.name_alias[self.field]
-            db_inst = base_db_symbol
-            lib = self.arctic_store.get_library(self.field_lib_mapping[db_field])
-        elif self.field in self.name_inst_alias:
-            db_field, inst_mapping_name = self.name_inst_alias[self.field]
-            inst_mapping = self._get_inst_mapping(inst_mapping_name)
-            db_inst = inst_mapping[base_db_symbol]
-            lib = self.arctic_store.get_library(self.field_lib_mapping[db_field])
+        if self.field in name_alias:
+            self.db_field = name_alias[self.field]
+            self.db_inst = base_db_symbol
+            self.lib = arctic_store.get_library(field_lib_mapping[self.db_field])
+        elif self.field in name_inst_alias:
+            self.db_field, inst_mapping_name = name_inst_alias[self.field]
+            inst_mapping = alias_lib.read(inst_mapping_name)
+            self.db_inst = inst_mapping[base_db_symbol]
+            self.lib = arctic_store.get_library(field_lib_mapping[self.db_field])
         else:
-            db_field = self.field
-            db_inst = base_db_symbol
-            lib = self.arctic_store.get_library(self.field_lib_mapping[db_field])
-        if self.field_lib_mapping[db_field] == "bar_data":
-            db_inst = f"{db_inst}_{freq_suffix}"
-        return db_field, db_inst, lib
+            self.db_field = self.field
+            self.db_inst = base_db_symbol
+            self.lib = arctic_store.get_library(field_lib_mapping[self.db_field])
+        if field_lib_mapping[self.db_field] == "bar_data":
+            self.db_inst = f"{self.db_inst}_{freq_suffix}"
 
     def clear(self):
         raise NotImplementedError("ArcticFeatureStorage is read-only")
@@ -64,6 +54,7 @@ class ArcticFeatureStorage(ArcticStorageMixin, FeatureStorage):
     @property
     @lru_cache(maxsize=1)
     def start_index(self) -> Union[pd.Timestamp, None]:
+        self._init_arctic_path()
         if self.lib.has_symbol(self.db_inst):
             ll = self._get_chunk_ranges()
             if len(ll) == 0:
@@ -77,6 +68,7 @@ class ArcticFeatureStorage(ArcticStorageMixin, FeatureStorage):
     @property
     @lru_cache(maxsize=1)
     def end_index(self) -> Union[pd.Timestamp, None]:
+        self._init_arctic_path()
         if self.lib.has_symbol(self.db_inst):
             ll = self._get_chunk_ranges()
             if len(ll) == 0:
@@ -109,15 +101,8 @@ class ArcticFeatureStorage(ArcticStorageMixin, FeatureStorage):
         series = series.reindex(inferred_index, method="ffill")
         return series
 
-    # # TODO: make vwap directly available
-    # def _read_vwap(self, start_index: pd.Timestamp, end_index: pd.Timestamp) -> pd.Series:
-    #     df = self.lib.read(
-    #         self.db_inst, chunk_range=DateRange(start_index, end_index), columns=["close_price", "volume", "turnover"]
-    #     )
-    #     series = df.apply(lambda x: x["turnover"] / x["volume"] if x["volume"] > 0 else x["close_price"], axis=1)
-    #     return series
-
     def __getitem__(self, i: Union[pd.Timestamp, slice]) -> pd.Series:
+        self._init_arctic_path()
         start_index = max(self.start_index, i.start)
         if self.field == "factor":
             return self._read_factor(start_index, i.stop)
@@ -131,5 +116,6 @@ class ArcticFeatureStorage(ArcticStorageMixin, FeatureStorage):
         return series
 
     def __len__(self) -> int:
+        self._init_arctic_path()
         info = self.lib.get_info(self.db_inst)
         return info["len"]

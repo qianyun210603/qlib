@@ -38,7 +38,7 @@ from ..utils import (
     get_date_by_shift,
 )
 from ..utils.paral import ParallelExt
-from .cache import DiskDatasetCache, H, MemCacheLengthUnit
+from .cache import DiskDatasetCache, H, MemCacheLengthUnit, SharedMemCacheUnit
 from .inst_processor import InstProcessor
 from .ops import ExpressionOps, Operators  # pylint: disable=W0611  # noqa: F401
 
@@ -575,7 +575,11 @@ class DatasetProvider(abc.ABC):
             cs_level_summary.setdefault(this_cs_level, {})[this_feature_name] = this_feature
             all_sub_features.setdefault(str(this_feature), set()).add(this_cs_level)
             feature_extended_windows.setdefault(str(this_feature), set()).add(extended_window)
-            next_cs_level = this_cs_level + 1 if this_feature.require_cs_info else this_cs_level
+            if this_feature.require_cs_info:
+                SharedMemCacheUnit.add_lock(str(this_feature))
+                next_cs_level = this_cs_level + 1
+            else:
+                next_cs_level = this_cs_level
             for next_feature in this_feature.get_direct_dependents():
                 feature_queue.append((str(next_feature), next_feature, extended_window, next_cs_level))
 
@@ -584,7 +588,7 @@ class DatasetProvider(abc.ABC):
             if len(levels) > 1:
                 level_shared_features.setdefault(max(levels), set()).add(feature)
 
-        return normalize_column_names, cs_level_summary, level_shared_features, feature_extended_windows
+        return cs_level_summary, level_shared_features, feature_extended_windows
 
     @staticmethod
     def dataset_processor(instruments, column_names, start_time, end_time, freq, inst_processors=[]):
@@ -594,7 +598,6 @@ class DatasetProvider(abc.ABC):
 
         """
         (
-            normalize_column_names,
             cs_level_summary,
             level_shared_features,
             feature_extended_windows,
@@ -629,19 +632,42 @@ class DatasetProvider(abc.ABC):
         ts_cache = {}
         cs_cache = {}
         shared_mgr = None
+
+        class CSShuffler:
+            def __init__(self, cs_level_expressions):
+                self.col_names = sorted(
+                    cs_level_expressions.keys(), key=lambda colname: int(cs_level_expressions[colname].require_cs_info)
+                )
+                self.cs_idxes = set(
+                    idx for idx, col_name in enumerate(self.col_names) if cs_level_expressions[col_name].require_cs_info
+                )
+
+            def __call__(self):
+                if bool(self.cs_idxes):
+                    this_idx = self.cs_idxes.pop()
+                    col_names = self.col_names.copy()
+                    del col_names[this_idx]
+                    return [self.col_names[this_idx]] + col_names
+                return self.col_names
+
         if len(cs_levels) > 1 and C["joblib_backend"] == "multiprocessing":  # pylint: disable=R1702
+            get_module_logger("data").info("shared memory created")
             shared_mgr = multiprocessing.Manager()
             shared_data_cache = shared_mgr.dict()
-
+            get_module_logger("data").info("Using shared memory for cross-section data cache")
+            get_module_logger("data").info(f"num cs_levels: {len(cs_levels)}")
             for dep_level in cs_levels[:-1]:
                 expressions = cs_level_summary[dep_level]
+                shuffler = CSShuffler(expressions)
                 level_shared_feature = level_shared_features.get(dep_level, set())
+                get_module_logger("data").info(f"cs level start: {str(dep_level)} with {str(expressions)}")
                 cache_task_l = [
                     delayed(DatasetProvider.load_cache)(
                         inst,
                         start_time=start_time,
                         end_time=end_time,
                         freq=freq,
+                        column_names=shuffler(),
                         expressions=expressions,
                         feature_extended_windows=feature_extended_windows,
                         g_config=C,
@@ -666,7 +692,11 @@ class DatasetProvider(abc.ABC):
                                 cs_cache[k] = v
                         elif k[0] in level_shared_feature:
                             ts_cache.setdefault(k[1], {})[k[0]] = v
+                get_module_logger("data").info(f"cs level finished: {str(dep_level)}")
 
+        get_module_logger("data").info("Start to calculate the final data")
+
+        shuffler = CSShuffler(cs_level_summary[0])
         inst_l, task_l = zip(
             *list(
                 (
@@ -676,7 +706,7 @@ class DatasetProvider(abc.ABC):
                         start_time=start_time,
                         end_time=end_time,
                         freq=freq,
-                        column_names=normalize_column_names,
+                        column_names=shuffler(),
                         expressions=cs_level_summary[0],
                         spans=spans,
                         g_config=C,
@@ -697,11 +727,11 @@ class DatasetProvider(abc.ABC):
                 ParallelExt(n_jobs=workers, backend=C.joblib_backend, maxtasksperchild=C.maxtasksperchild)(task_l),
             )
         )
-
+        get_module_logger("data").info("end to calculate the final data")
         if len(cs_levels) > 1 and C["joblib_backend"] == "multiprocessing":
             del shared_data_cache
             shared_mgr.shutdown()
-
+            get_module_logger("data").info("shared memory released")
         new_data = dict()
         for inst in sorted(data.keys()):
             if len(data[inst]) > 0:
@@ -725,6 +755,7 @@ class DatasetProvider(abc.ABC):
         start_time,
         end_time,
         freq,
+        column_names,
         expressions,
         feature_extended_windows={},
         g_config=None,
@@ -739,12 +770,12 @@ class DatasetProvider(abc.ABC):
             H["f"].update(cache_data)
         if shared_cache is not None:
             H.create_shared_cache(shared_cache)
-        for field, expression in expressions.items():
+        for field in column_names:
             #  The client does not have expression provider, the data will be loaded from cache using static method.
-            for ext_windows in feature_extended_windows.get(str(expression), {(0, 0)}):
+            for ext_windows in feature_extended_windows.get(str(expressions[field]), {(0, 0)}):
                 ExpressionD.expression(
                     inst,
-                    expression,
+                    expressions[field],
                     start_time,
                     end_time,
                     freq,
@@ -755,7 +786,7 @@ class DatasetProvider(abc.ABC):
 
         obj = {}
         for k, v in H["f"].internal_data.items():
-            if k[1] in inst and (k[0] in expressions or k[0] in shared_features):
+            if k[1] in inst and (k[0] in column_names or k[0] in shared_features):
                 obj[k] = v
         return obj
 

@@ -318,7 +318,7 @@ class ExpressionOps(Expression, abc.ABC):
     """
 
     def set_population(self, population):
-        if hasattr(self, "population") and self.population is None:  # pylint: disable=access-member-before-definition
+        if self.require_cs_info:
             self.population = population
 
         for _, member_var in vars(self).items():
@@ -326,4 +326,4 @@ class ExpressionOps(Expression, abc.ABC):
                 member_var.set_population(population)
 
     def get_direct_dependents(self) -> list:
-        return [v for v in self.__dict__.values() if isinstance(v, ExpressionOps)]
+        return [v for v in self.__dict__.values() if isinstance(v, Expression)]

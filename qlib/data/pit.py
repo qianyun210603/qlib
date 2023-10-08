@@ -59,6 +59,9 @@ class P(ElemOperator):
         # The period data will collapse as a normal feature. So no extending and looking back
         return 0, 0
 
+    def get_direct_dependents(self) -> list:
+        return []
+
 
 class PRef(P):
     def __init__(self, feature, period):

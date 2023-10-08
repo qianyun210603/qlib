@@ -3,7 +3,6 @@
 
 
 from __future__ import division, print_function
-
 import abc
 from abc import ABC
 from typing import List, Type, Union
@@ -145,10 +144,6 @@ class ChangeInstrument(ElemOperator):
     def _load_internal(self, instrument, start_index, end_index, *args):
         return self.feature.load(instrument, start_index, end_index, *args)
 
-    @property
-    def require_cs_info(self):
-        return True
-
 
 class Neg(ElemOperator):
     def _load_internal(self, instrument, start_index, end_index, *args):
@@ -246,6 +241,11 @@ class Log(NpElemOperator):
 
     def __init__(self, feature):
         super(Log, self).__init__(feature, "log")
+
+    def _load_internal(self, instrument, start_index, end_index, *args):
+        series = self.feature.load(instrument, start_index, end_index, *args)
+        series.loc[series <= 0] = np.nan
+        return np.log(series)
 
     @property
     def adjust_status(self):
@@ -1989,9 +1989,15 @@ class Cov(PairRolling):
 
 #################### cross section operator ####################
 class XSectionOperator(ElemOperator):
-    def __init__(self, feature, population=None):
-        self.population = population
-        super().__init__(feature)
+    producer_instrument = {}
+
+    def set_population(self, population):
+        super(XSectionOperator, self).set_population(population)
+        population_sorted = sorted(population)
+        if str(self) not in self.producer_instrument:
+            self.producer_instrument[str(self)] = population_sorted[
+                len(self.producer_instrument) % len(population_sorted)
+            ]
 
     def _process_df(self, df, **_) -> pd.DataFrame:
         raise NotImplementedError("This function must be implemented in your newly defined feature")
@@ -2000,26 +2006,28 @@ class XSectionOperator(ElemOperator):
         from .cache import H  # pylint: disable=C0415
 
         cache_key = str(self), instrument, start_index, end_index, *args
+
         if cache_key not in H["fs"]:
-            # get_module_logger(self.__class__.__name__).info(f"Acquiring cond {id(H['fs'].lock)}")
-            H["fs"].lock.acquire()
+            # get_module_logger(self.__class__.__name__).info(f"Acquiring lock {id(H['fs'].locks[str(self)])} for {str(self)} in {os.getpid()}")
+            H["fs"].locks[str(self)].acquire()
             try:
                 if cache_key not in H["fs"]:
-                    # get_module_logger(self.__class__.__name__).info(f"calculating: {str(self)}")
+                    # get_module_logger(self.__class__.__name__).info(f"calculating: {str(self)} for instrument {instrument}")
                     df = self._load_all_instruments(start_index, end_index, *args)
                     df = self._process_df(df)
                     for inst in df.columns:
                         inst_cache_key = str(self), inst, start_index, end_index, *args
                         H["fs"][inst_cache_key] = df.loc[start_index:end_index, inst].rename(str(self))
                 # else:
-                #    get_module_logger(self.__class__.__name__).info(f"cache hit after waiting: {str(self)}")
+                #     get_module_logger(self.__class__.__name__).info(f"cache hit after waiting: {str(self)}")
             finally:
-                # get_module_logger(self.__class__.__name__).info(f"Release cond {id(H['fs'].lock)}")
-                H["fs"].lock.release()
+                # get_module_logger(self.__class__.__name__).info(f"Release lock {id(H['fs'].locks[str(self)])} for {str(self)} in {os.getpid()}")
+                H["fs"].locks[str(self)].release()
+
         return H["fs"][cache_key]
 
     def _load_all_instruments(self, start_index, end_index, *args) -> pd.DataFrame:
-        if isinstance(self.population, dict):
+        if isinstance(getattr(self, "population"), dict):
 
             def mask_data(series, spans):
                 if bool(spans):
@@ -2032,11 +2040,12 @@ class XSectionOperator(ElemOperator):
 
             sub_features = [
                 mask_data(self.feature.load(inst, start_index, end_index, *args).rename(inst), spans)
-                for inst, spans in self.population.items()
+                for inst, spans in getattr(self, "population", {}).items()
             ]
         else:
             sub_features = [
-                self.feature.load(inst, start_index, end_index, *args).rename(inst) for inst in self.population
+                self.feature.load(inst, start_index, end_index, *args).rename(inst)
+                for inst in getattr(self, "population", [])
             ]
         mydf = pd.concat([s for s in sub_features if not s.empty], axis=1, join="outer", sort=True)
 

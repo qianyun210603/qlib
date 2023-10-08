@@ -326,4 +326,4 @@ class ExpressionOps(Expression, abc.ABC):
                 member_var.set_population(population)
 
     def get_direct_dependents(self) -> list:
-        return [v for v in self.__dict__.values() if isinstance(v, ExpressionOps)]
+        return [v for v in self.__dict__.values() if isinstance(v, Expression)]

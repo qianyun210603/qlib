@@ -19,7 +19,7 @@ class ArcticInstrumentStorage(ArcticStorageMixin, InstrumentStorage):
     def __init__(self, market: str, freq: str, **kwargs):
         super().__init__(market, freq, **kwargs)
         self.market = market
-        self.inst_symbol = INDEX_MAPPING[market]
+        self.inst_symbol = INDEX_MAPPING[market] if market in INDEX_MAPPING else market
         self._instruments = None
 
     def _process_all(self, arctic_store):
@@ -27,17 +27,25 @@ class ArcticInstrumentStorage(ArcticStorageMixin, InstrumentStorage):
         ov_lib = arctic_store.get_library("data_overview")
         if self.market == "cnstock_all":
             stock_meta_lib = arctic_store.get_library("stock_meta")
-            population = stock_meta_lib.list_symbols()
+            population = []
+            for sym in stock_meta_lib.list_symbols():
+                meta = stock_meta_lib.read(sym)
+                if meta["exchange"] in {"SSE", "SZSE"}:
+                    population.append(sym)
         elif self.market == "cnconvert_all":
             convert_meta_lib = arctic_store.get_library("convert_meta")
-            population = convert_meta_lib.list_symbols()
+            population = []
+            for sym in convert_meta_lib.list_symbols():
+                meta = convert_meta_lib.read(sym)
+                if meta["exchange"] in {"SSE", "SZSE"}:
+                    population.append(sym)
         else:
             raise NotImplementedError(f"market {self.market} not implemented")
         instruments = {}
         for db_symbol in population:
             tmp_sym = f"{db_symbol}_{freq_suffix}"
             if tmp_sym not in ov_lib.list_symbols():
-                get_module_logger("arctic_storage").info(f"Skip {db_symbol} as no data")
+                get_module_logger("arctic_storage").debug(f"Skip {db_symbol} as no data")
                 continue
             ov = ov_lib.read(tmp_sym)
             instruments[db_symbol_to_qlib(db_symbol)] = [

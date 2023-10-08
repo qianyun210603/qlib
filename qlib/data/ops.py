@@ -1989,6 +1989,7 @@ class Cov(PairRolling):
 
 #################### cross section operator ####################
 class XSectionOperator(ElemOperator):
+
     producer_instrument = {}
 
     def set_population(self, population):

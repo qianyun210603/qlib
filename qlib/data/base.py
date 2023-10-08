@@ -318,7 +318,7 @@ class ExpressionOps(Expression, abc.ABC):
     """
 
     def set_population(self, population):
-        if hasattr(self, "population") and self.population is None:  # pylint: disable=access-member-before-definition
+        if self.require_cs_info:
             self.population = population
 
         for _, member_var in vars(self).items():

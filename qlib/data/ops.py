@@ -4,6 +4,8 @@
 
 from __future__ import division, print_function
 import abc
+import os
+import time
 from abc import ABC
 from typing import List, Type, Union
 
@@ -2009,20 +2011,23 @@ class XSectionOperator(ElemOperator):
         cache_key = str(self), instrument, start_index, end_index, *args
 
         if cache_key not in H["fs"]:
-            # get_module_logger(self.__class__.__name__).info(f"Acquiring lock {id(H['fs'].locks[str(self)])} for {str(self)} in {os.getpid()}")
+            get_module_logger(self.__class__.__name__).info(f"Acquiring lock {id(H['fs'].locks[str(self)])} for {str(self)} in {os.getpid()}")
             H["fs"].locks[str(self)].acquire()
             try:
                 if cache_key not in H["fs"]:
-                    # get_module_logger(self.__class__.__name__).info(f"calculating: {str(self)} for instrument {instrument}")
+                    start_time = time.time()
+                    get_module_logger(self.__class__.__name__).info(f"calculating: {str(self)} for instrument {instrument}")
                     df = self._load_all_instruments(start_index, end_index, *args)
                     df = self._process_df(df)
                     for inst in df.columns:
                         inst_cache_key = str(self), inst, start_index, end_index, *args
                         H["fs"][inst_cache_key] = df.loc[start_index:end_index, inst].rename(str(self))
-                # else:
-                #     get_module_logger(self.__class__.__name__).info(f"cache hit after waiting: {str(self)}")
+                    get_module_logger(self.__class__.__name__).info(
+                        f"calculating: {str(self)} for instrument {instrument} finished, time used: {time.time() - start_time}")
+                else:
+                    get_module_logger(self.__class__.__name__).info(f"cache hit after waiting: {str(self)}")
             finally:
-                # get_module_logger(self.__class__.__name__).info(f"Release lock {id(H['fs'].locks[str(self)])} for {str(self)} in {os.getpid()}")
+                get_module_logger(self.__class__.__name__).info(f"Release lock {id(H['fs'].locks[str(self)])} for {str(self)} in {os.getpid()}")
                 H["fs"].locks[str(self)].release()
 
         return H["fs"][cache_key]

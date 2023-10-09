@@ -678,11 +678,14 @@ class DatasetProvider(abc.ABC):
                     )
                     for inst, _ in it
                 ]
+                get_module_logger("data").info(f"cs level {str(dep_level)} before clear: {str(expressions)}")
                 cs_cache.clear()
                 shared_data_cache.clear()
+                get_module_logger("data").info(f"cs level {str(dep_level)} clear: {str(expressions)}")
                 result = ParallelExt(n_jobs=workers, backend=C.joblib_backend, maxtasksperchild=C.maxtasksperchild)(
                     cache_task_l
                 )
+                get_module_logger("data").info(f"cs level {str(dep_level)} loaded: {str(expressions)}")
                 for inst_cache in result:
                     for k, v in inst_cache.items():
                         if k[0] in expressions:
@@ -765,14 +768,17 @@ class DatasetProvider(abc.ABC):
         cache_data=None,
         shared_cache=None,
     ):
+        get_module_logger("data").info(f"load cache for {inst} I")
         C.register_from_C(g_config)
         if cache_data is not None:
             H["f"].update(cache_data)
         if shared_cache is not None:
             H.create_shared_cache(shared_cache)
+        get_module_logger("data").info(f"load cache for {inst} II")
         for field in column_names:
             #  The client does not have expression provider, the data will be loaded from cache using static method.
             for ext_windows in feature_extended_windows.get(str(expressions[field]), {(0, 0)}):
+                get_module_logger("data").info(f"load cache for {inst} for {field} with {ext_windows}")
                 ExpressionD.expression(
                     inst,
                     expressions[field],
@@ -783,11 +789,12 @@ class DatasetProvider(abc.ABC):
                     extend_windows=ext_windows,
                     population_name=population_name,
                 )
-
+        get_module_logger("data").info(f"load cache for {inst} III")
         obj = {}
         for k, v in H["f"].internal_data.items():
             if k[1] in inst and (k[0] in column_names or k[0] in shared_features):
                 obj[k] = v
+        get_module_logger("data").info(f"load cache for {inst} IV")
         return obj
 
     @staticmethod

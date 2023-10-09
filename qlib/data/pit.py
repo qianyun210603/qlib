@@ -21,6 +21,10 @@ from .data import Cal
 
 
 class P(ElemOperator):
+    @property
+    def is_pit(self):
+        return False
+
     def _load_internal(self, instrument, start_index, end_index, *args):
         freq = args[0]
         _calendar = Cal.calendar(freq=freq)
@@ -73,3 +77,7 @@ class PRef(P):
 
     def _load_feature(self, instrument, start_index, end_index, cur_time):
         return self.feature.load(instrument, start_index, end_index, cur_time, self.period)
+
+    @property
+    def is_pit(self):
+        return False

@@ -102,6 +102,12 @@ class ElemOperator(ExpressionOps, ABC):
             return self.feature.adjust_status
         return 0
 
+    @property
+    def is_pit(self):
+        if isinstance(self.feature, Expression):
+            return self.feature.is_pit
+        return False
+
     def __str__(self):
         return "{}({})".format(type(self).__name__, self.feature)
 
@@ -328,6 +334,19 @@ class PairOperator(ExpressionOps):
 
     def __str__(self):
         return "{}({},{})".format(type(self).__name__, self.feature_left, self.feature_right)
+
+    @property
+    def is_pit(self):
+        if isinstance(self.feature_left, Expression) and isinstance(self.feature_right, Expression):
+            assert (
+                self.feature_left.is_pit == self.feature_right.is_pit
+            ), "pit status of two features should be the same"
+            return self.feature_left.is_pit
+        if isinstance(self.feature_left, Expression):
+            return self.feature_left.is_pit
+        if isinstance(self.feature_right, Expression):
+            return self.feature_right.is_pit
+        return False
 
     @abc.abstractmethod
     def _load_internal(self, instrument, start_index, end_index, *args) -> pd.Series:
@@ -895,6 +914,23 @@ class If(ExpressionOps):
         self.feature_left = feature_left
         self.feature_right = feature_right
 
+    @property
+    def is_pit(self):
+        pit_flag = None
+        if isinstance(self.condition, Expression):
+            pit_flag = self.condition.is_pit
+        if isinstance(self.feature_left, Expression):
+            if pit_flag is None:
+                pit_flag = self.feature_left.is_pit
+            else:
+                assert pit_flag == self.feature_left.is_pit, "pit status of three features should be the same"
+        if isinstance(self.feature_right, Expression):
+            if pit_flag is None:
+                pit_flag = self.feature_right.is_pit
+            else:
+                assert pit_flag == self.feature_right.is_pit, "pit status of three features should be the same"
+        return False if pit_flag is None else pit_flag
+
     def __str__(self):
         return "If({},{},{})".format(self.condition, self.feature_left, self.feature_right)
 
@@ -992,6 +1028,10 @@ class Rolling(ExpressionOps):
 
     def __str__(self):
         return "{}({},{})".format(type(self).__name__, self.feature, self.N)
+
+    @property
+    def is_pit(self):
+        return self.feature.is_pit
 
     def _get_factor(self, instrument, start_index, end_index, *args):
         factor = 1.0
@@ -1855,6 +1895,19 @@ class PairRolling(ExpressionOps):
     def __str__(self):
         return "{}({},{},{})".format(type(self).__name__, self.feature_left, self.feature_right, self.N)
 
+    @property
+    def is_pit(self):
+        if isinstance(self.feature_left, Expression) and isinstance(self.feature_right, Expression):
+            assert (
+                self.feature_left.is_pit == self.feature_right.is_pit
+            ), "pit status of two features should be the same"
+            return self.feature_left.is_pit
+        if isinstance(self.feature_left, Expression):
+            return self.feature_left.is_pit
+        if isinstance(self.feature_right, Expression):
+            return self.feature_right.is_pit
+        return False
+
     @staticmethod
     def _get_factor(instrument, start_index, end_index, *args):
         factor = pd.Series([1.0], index=[start_index])
@@ -1989,7 +2042,6 @@ class Cov(PairRolling):
 
 #################### cross section operator ####################
 class XSectionOperator(ElemOperator):
-
     producer_instrument = {}
 
     def set_population(self, population):
@@ -2006,7 +2058,7 @@ class XSectionOperator(ElemOperator):
     def _load_internal(self, instrument, start_index, end_index, *args) -> pd.Series:
         from .cache import H  # pylint: disable=C0415
 
-        cache_key = str(self), instrument, start_index, end_index, *args
+        cache_key = str(self), instrument, *args
 
         if cache_key not in H["fs"]:
             # get_module_logger(self.__class__.__name__).info(f"Acquiring lock {id(H['fs'].locks[str(self)])} for {str(self)} in {os.getpid()}")
@@ -2014,24 +2066,33 @@ class XSectionOperator(ElemOperator):
             try:
                 if cache_key not in H["fs"]:
                     # get_module_logger(self.__class__.__name__).info(f"calculating: {str(self)} for instrument {instrument}")
-                    df = self._load_all_instruments(start_index, end_index, *args)
+                    df, inst_ranges = self._load_all_instruments(start_index, end_index, *args)
                     df = self._process_df(df)
+
                     for inst in df.columns:
-                        inst_cache_key = str(self), inst, start_index, end_index, *args
-                        H["fs"][inst_cache_key] = df.loc[start_index:end_index, inst].rename(str(self))
+                        inst_cache_key = str(self), inst, *args
+                        inst_st, inst_ed = inst_ranges.get(inst, (None, None))
+                        inst_st = start_index if inst_st is None else max(inst_st, start_index)
+                        inst_ed = end_index if inst_ed is None else min(inst_ed, end_index)
+
+                        H["fs"][inst_cache_key] = (
+                            df.loc[inst_st:inst_ed, inst].rename(str(self)),
+                            start_index,
+                            end_index,
+                        )
                 # else:
                 #     get_module_logger(self.__class__.__name__).info(f"cache hit after waiting: {str(self)}")
             finally:
                 # get_module_logger(self.__class__.__name__).info(f"Release lock {id(H['fs'].locks[str(self)])} for {str(self)} in {os.getpid()}")
                 H["fs"].locks[str(self)].release()
 
-        return H["fs"][cache_key]
+        return H["fs"][cache_key][0]
 
     def _load_all_instruments(self, start_index, end_index, *args) -> pd.DataFrame:
         if isinstance(getattr(self, "population"), dict):
 
             def mask_data(series, spans):
-                if bool(spans):
+                if bool(spans) and not series.empty:
                     mask = np.zeros(len(series), dtype=bool)
                     for begin, end in spans:
                         mask |= (series.index >= begin) & (series.index <= end)
@@ -2049,8 +2110,9 @@ class XSectionOperator(ElemOperator):
                 for inst in getattr(self, "population", [])
             ]
         mydf = pd.concat([s for s in sub_features if not s.empty], axis=1, join="outer", sort=True)
+        inst_ranges = {s.name: (s.index.min(), s.index.max()) for s in sub_features if not s.empty}
 
-        return mydf
+        return mydf, inst_ranges
 
     @property
     def require_cs_info(self):
@@ -2081,6 +2143,10 @@ class TrailingStop(ExpressionOps):
         self.N = N
         self.stop_loss_mode = stop_loss_mode
         self.stop_loss_threshold = stop_loss_threshold
+
+    @property
+    def is_pit(self):
+        return False
 
     def _get_stop_loss_factor(self, current_ret=0.0):
         if self.stop_loss_mode == 0:

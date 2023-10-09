@@ -80,6 +80,9 @@ class ArcticFeatureStorage(ArcticStorageMixin, FeatureStorage):
         return pd.Timestamp("2099-01-01")
 
     def _read_factor(self, start_index: pd.Timestamp, end_index: pd.Timestamp) -> pd.Series:
+        if start_index > end_index:
+            return pd.Series(dtype=np.float64, index=pd.DatetimeIndex([], name="datetime"))
+
         from qlib.data import D  # pylint: disable=import-outside-toplevel
 
         inferred_index = pd.DatetimeIndex(

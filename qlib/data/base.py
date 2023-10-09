@@ -5,6 +5,7 @@
 from __future__ import division, print_function
 
 import abc
+import traceback
 
 import pandas as pd
 
@@ -35,6 +36,10 @@ class Expression(abc.ABC):
     @property
     def adjust_status(self):
         return 0
+
+    @property
+    def is_pit(self):
+        return False
 
     def __str__(self):
         return type(self).__name__
@@ -157,6 +162,21 @@ class Expression(abc.ABC):
 
         return Or(other, self)
 
+    def _load_from_source(self, instrument, load_start_index, load_end_index, *args):
+        try:
+            # get_module_logger('data').info(f're-calculate for {str(cache_key)}')
+            _series = self._load_internal(instrument, load_start_index, load_end_index, *args)
+        except Exception as e:
+            get_module_logger("data").error(
+                f"Loading data error: instrument={instrument}, expression={str(self)}, "
+                f"start_index={load_start_index}, end_index={load_end_index}, args={args}. "
+                f"error info: {str(e)}"
+            )
+            traceback.print_exc()
+            raise
+        _series = _series.rename(str(self)).astype("float64")
+        return _series
+
     def load(self, instrument, start_index, end_index, *args):
         """load  feature
         This function is responsible for loading feature/expression based on the expression engine.
@@ -201,30 +221,58 @@ class Expression(abc.ABC):
         """
         from .cache import H  # pylint: disable=C0415
 
-        # cache
-        cache_key = str(self), instrument, start_index, end_index, *args
-        if cache_key in H["f"]:
-            # get_module_logger('data').info(f'cache hit in f for {str(cache_key)}')
-            return H["f"][cache_key]
-        if H.has_shared_cache() and cache_key in H["fs"]:
-            # get_module_logger('data').info(f'cache hit in fs for {str(cache_key)}')
-            return H["fs"][cache_key]
         if start_index is not None and end_index is not None and start_index > end_index:
             raise ValueError("Invalid index range: {} {}".format(start_index, end_index))
-        try:
-            # get_module_logger('data').info(f're-calculate for {str(cache_key)}')
-            series = self._load_internal(instrument, start_index, end_index, *args)
-        except Exception as e:
-            get_module_logger("data").error(
-                f"Loading data error: instrument={instrument}, expression={str(self)}, "
-                f"start_index={start_index}, end_index={end_index}, args={args}. "
-                f"error info: {str(e)}"
+        # cache
+        cache_key = str(self), instrument, *args
+        cached_series, cached_start_index, cached_end_index = H["f"].get(
+            cache_key, H["fs"][cache_key] if H.has_shared_cache() and cache_key in H["fs"] else (None, 0, 0)
+        )
+        if cached_series is None:
+            series = self._load_from_source(instrument, start_index, end_index, *args)
+            if self.is_pit:
+                cached_start_index = self.get_longest_back_rolling() + start_index
+            else:
+                lbr = max(self.get_longest_back_rolling(), 0)
+                if lbr < len(series):
+                    cached_start_index = series.index[lbr]
+            H["f"][cache_key] = series, cached_start_index, end_index
+        else:
+            if cached_start_index <= start_index and cached_end_index >= end_index:
+                st = max(start_index, cached_start_index)
+                ed = min(end_index, cached_end_index)
+                if self.is_pit:
+                    return cached_series.iloc[st - 1 :]
+                if st <= ed:
+                    return cached_series.loc[st:ed]
+                return pd.Series(dtype="float64")
+
+            series_left = (
+                self._load_from_source(instrument, start_index, cached_start_index, *args)
+                if start_index < cached_start_index
+                else pd.Series(dtype="float64")
             )
-            raise
-        series = series.rename(str(self)).astype("float64")
-        # series.name = str(self)
-        H["f"][cache_key] = series
-        return series
+            series_right = (
+                self._load_from_source(instrument, cached_end_index, end_index, *args)
+                if end_index > cached_end_index
+                else pd.Series(dtype="float64")
+            )
+            non_dup_index = cached_series.index.difference(
+                series_left.dropna().index.union(series_right.dropna().index)
+            )
+            series = (
+                pd.concat(
+                    [
+                        series_left.drop(non_dup_index, errors="ignore"),
+                        cached_series.loc[non_dup_index],
+                        series_right.drop(non_dup_index, errors="ignore"),
+                    ]
+                )
+                .sort_index()
+                .rename(str(self))
+            )
+            H["f"][cache_key] = series, min(cached_start_index, start_index), max(cached_end_index, end_index)
+        return series if self.is_pit else series.loc[start_index:end_index]
 
     @abc.abstractmethod
     def _load_internal(self, instrument, start_index, end_index, *args) -> pd.Series:
@@ -301,6 +349,10 @@ class PFeature(Feature):
     def adjust_status(self):
         fields_need_adjust = C.get("fields_need_adjust", {})
         return fields_need_adjust.get(str(self), 0)
+
+    @property
+    def is_pit(self):
+        return True
 
     def _load_internal(self, instrument, start_index, end_index, *args):
         cur_time = args[0]

@@ -77,6 +77,7 @@ class ArcticInstrumentStorage(ArcticStorageMixin, InstrumentStorage):
             return intervals
 
         insts = {db_symbol_to_qlib(db_sym): _parse_intervals(intervals) for db_sym, intervals in tmp.items()}
+        # insts = {db_symbol_to_qlib(db_sym): _parse_intervals(intervals) for idx, (db_sym, intervals) in enumerate(tmp.items()) if (idx < 10 or db_sym in ("000060_SZSE", "000423_SZSE"))}
         return insts
 
     def clear(self) -> None:

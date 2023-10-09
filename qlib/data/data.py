@@ -574,7 +574,13 @@ class DatasetProvider(abc.ABC):
             this_feature_name, this_feature, extended_window, this_cs_level = feature_queue.pop()
             cs_level_summary.setdefault(this_cs_level, {})[this_feature_name] = this_feature
             all_sub_features.setdefault(str(this_feature), set()).add(this_cs_level)
-            feature_extended_windows.setdefault(str(this_feature), set()).add(extended_window)
+
+            if str(this_feature) not in feature_extended_windows:
+                feature_extended_windows[str(this_feature)] = extended_window
+            else:
+                l, r = feature_extended_windows[str(this_feature)]
+                feature_extended_windows[str(this_feature)] = (max(l, extended_window[0]), max(r, extended_window[1]))
+
             if this_feature.require_cs_info:
                 SharedMemCacheUnit.add_lock(str(this_feature))
                 next_cs_level = this_cs_level + 1
@@ -635,8 +641,14 @@ class DatasetProvider(abc.ABC):
 
         class CSShuffler:
             def __init__(self, cs_level_expressions):
-                self.col_names = sorted(
-                    cs_level_expressions.keys(), key=lambda colname: int(cs_level_expressions[colname].require_cs_info)
+                self.col_names = list(
+                    reversed(
+                        sorted(
+                            cs_level_expressions.keys(),
+                            key=lambda colname: int(cs_level_expressions[colname].require_cs_info),
+                            reverse=True,
+                        )
+                    )
                 )
                 self.cs_idxes = set(
                     idx for idx, col_name in enumerate(self.col_names) if cs_level_expressions[col_name].require_cs_info
@@ -685,6 +697,9 @@ class DatasetProvider(abc.ABC):
                 )
                 for inst_cache in result:
                     for k, v in inst_cache.items():
+                        # if k[0] in ("Corr(CSRank($vwap),CSRank($volume),5)",) and k[1] in ("SZ000009", "SZ000423"):
+                        #     pd.set_option("display.max_rows", None)
+                        #     print(k, v)
                         if k[0] in expressions:
                             if C["joblib_backend"] == "multiprocessing":
                                 shared_data_cache[k] = v
@@ -711,6 +726,7 @@ class DatasetProvider(abc.ABC):
                         spans=spans,
                         g_config=C,
                         inst_processors=inst_processors,
+                        feature_extended_windows=feature_extended_windows,
                         population_name=population_name,  # for cache key
                         population=instruments_d,
                         cache_data={**ts_cache.get(inst, {}), **cs_cache},
@@ -772,17 +788,16 @@ class DatasetProvider(abc.ABC):
             H.create_shared_cache(shared_cache)
         for field in column_names:
             #  The client does not have expression provider, the data will be loaded from cache using static method.
-            for ext_windows in feature_extended_windows.get(str(expressions[field]), {(0, 0)}):
-                ExpressionD.expression(
-                    inst,
-                    expressions[field],
-                    start_time,
-                    end_time,
-                    freq,
-                    instrument_d=population,
-                    extend_windows=ext_windows,
-                    population_name=population_name,
-                )
+            ExpressionD.expression(
+                inst,
+                expressions[field],
+                start_time,
+                end_time,
+                freq,
+                instrument_d=population,
+                extend_windows=feature_extended_windows.get(str(expressions[field]), (0, 0)),
+                population_name=population_name,
+            )
 
         obj = {}
         for k, v in H["f"].internal_data.items():
@@ -801,6 +816,7 @@ class DatasetProvider(abc.ABC):
         spans=None,
         g_config=None,
         inst_processors=(),
+        feature_extended_windows={},
         population_name="",
         population={},
         cache_data=None,
@@ -832,6 +848,7 @@ class DatasetProvider(abc.ABC):
                 end_time,
                 freq,
                 instrument_d=population,
+                extend_windows=feature_extended_windows.get(str(expressions[field]), (0, 0)),
                 population_name=population_name,
             )
 
@@ -1131,10 +1148,9 @@ class LocalExpressionProvider(ExpressionProvider):
         # Two kinds of queries are supported
         # - Index-based expression: this may save a lot of memory because the datetime index is not saved on the disk
         # - Data with datetime index expression: this will make it more convenient to integrating with some existing databases
-
-        lft_etd, rght_etd = expression.get_extended_window_size()
-        lft_etd = max(extend_windows[0], lft_etd)
-        rght_etd = max(extend_windows[1], rght_etd)
+        lft_etd, rght_etd = extend_windows  # expression.get_extended_window_size()
+        # lft_etd = max(extend_windows[0], lft_etd)
+        # rght_etd = max(extend_windows[1], rght_etd)
 
         if self.time2idx:
             _, _, start_index, end_index = Cal.locate_index(start_time, end_time, freq=freq, future=False)
@@ -1146,9 +1162,8 @@ class LocalExpressionProvider(ExpressionProvider):
                 }
         else:
             start_index, end_index = pd.Timestamp(start_time), pd.Timestamp(end_time)
-            query_start, query_end = get_date_by_shift(start_time, -lft_etd, future=True), get_date_by_shift(
-                end_time, rght_etd, future=True
-            )
+            query_start = get_date_by_shift(start_time, -lft_etd, future=True)
+            query_end = get_date_by_shift(end_time, rght_etd, future=True)
             if isinstance(instrument_d, dict):
                 instrument_d = {
                     inst: [[pd.Timestamp(span[0]), pd.Timestamp(span[1])] for span in spans]
@@ -1560,7 +1575,7 @@ class ClientProvider(BaseProvider):
         self.client = Client(C.flask_server, C.flask_port)
         self.logger = get_module_logger(self.__class__.__name__)
         if is_instance_of_provider(Cal, ClientCalendarProvider):
-            Cal.set_conn(self.client)
+            Cal.set_conn(self.client)  # pylint: disable=E1101
         if is_instance_of_provider(Inst, ClientInstrumentProvider):
             Inst.set_conn(self.client)
         if hasattr(DatasetD, "provider"):

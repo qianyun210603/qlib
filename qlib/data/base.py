@@ -201,29 +201,42 @@ class Expression(abc.ABC):
         """
         from .cache import H  # pylint: disable=C0415
 
-        # cache
-        cache_key = str(self), instrument, start_index, end_index, *args
-        if cache_key in H["f"]:
-            # get_module_logger('data').info(f'cache hit in f for {str(cache_key)}')
-            return H["f"][cache_key]
-        if H.has_shared_cache() and cache_key in H["fs"]:
-            # get_module_logger('data').info(f'cache hit in fs for {str(cache_key)}')
-            return H["fs"][cache_key]
+        def load_from_source(instrument, load_start_index, load_end_index, *args):
+            try:
+                # get_module_logger('data').info(f're-calculate for {str(cache_key)}')
+                _series = self._load_internal(instrument, load_start_index, load_end_index, *args)
+            except Exception as e:
+                get_module_logger("data").error(
+                    f"Loading data error: instrument={instrument}, expression={str(self)}, "
+                    f"start_index={load_start_index}, end_index={load_end_index}, args={args}. "
+                    f"error info: {str(e)}"
+                )
+                raise
+            _series = _series.rename(str(self)).astype("float64")
+            return _series
+
         if start_index is not None and end_index is not None and start_index > end_index:
             raise ValueError("Invalid index range: {} {}".format(start_index, end_index))
-        try:
-            # get_module_logger('data').info(f're-calculate for {str(cache_key)}')
-            series = self._load_internal(instrument, start_index, end_index, *args)
-        except Exception as e:
-            get_module_logger("data").error(
-                f"Loading data error: instrument={instrument}, expression={str(self)}, "
-                f"start_index={start_index}, end_index={end_index}, args={args}. "
-                f"error info: {str(e)}"
-            )
-            raise
-        series = series.rename(str(self)).astype("float64")
+        # cache
+        cache_key = str(self), instrument, *args
+        cached_series, cached_start_index, cached_end_index = \
+            H["f"].get(cache_key, H["fs"][cache_key] if H.has_shared_cache() and cache_key in H["fs"] else (None, 0, 0))
+        if cached_series is None:
+            series = load_from_source(instrument, start_index, end_index, *args)
+            H["f"][cache_key] = series, start_index, end_index
+        else:
+            if cached_start_index <= start_index and cached_end_index >= end_index:
+                st = max(start_index, cached_series.index.min())
+                ed = min(end_index, cached_series.index.max())
+                if st <= ed:
+                    return cached_series.loc[st:ed]
+                return pd.Series(dtype="float64")
+            else:
+                series_left = load_from_source(instrument, start_index, cached_start_index - 1, *args) if start_index < cached_start_index else pd.Series(dtype="float64")
+                series_right = load_from_source(instrument, cached_end_index + 1, end_index, *args) if end_index > cached_end_index else pd.Series(dtype="float64")
+                series = pd.concat([series_left, cached_series, series_right]).sort_index().drop_duplicates(keep="first")
         # series.name = str(self)
-        H["f"][cache_key] = series
+        H["f"][cache_key] = series, min(cached_start_index, start_index), max(cached_end_index, end_index)
         return series
 
     @abc.abstractmethod

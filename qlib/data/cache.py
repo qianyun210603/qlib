@@ -113,6 +113,9 @@ class MemCacheUnit(abc.ABC):
 
         return v
 
+    def get(self, k, default=None):
+        return self.od.get(k, default)
+
     def _adjust_size(self, key, value):
         if key in self.od:  # the two lines cannot be combined as one line, because the value of key may be changed
             self._size -= self._get_value_size(self.od[key])
@@ -168,6 +171,9 @@ class SharedMemCacheUnit:
 
     def keys(self):
         return self.od.keys()
+
+    def get(self, k, default=None):
+        return self.od.get(k, default)
 
     def values(self):
         return self.od.values()

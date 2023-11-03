@@ -139,6 +139,9 @@ class HashingStockStorage(BaseHandlerStorage):
         fetch_orig: bool = True,
     ) -> pd.DataFrame:
         fetch_stock_df_list = list(self._fetch_hash_df_by_stock(selector=selector, level=level).values())
+        if isinstance(selector, (list, tuple)):
+            exclude_level = self.stock_level if level is None else level
+            selector = tuple(each_selector for idx, each_selector in enumerate(selector) if idx != exclude_level)
         for _index, stock_df in enumerate(fetch_stock_df_list):
             fetch_col_df = fetch_df_by_col(df=stock_df, col_set=col_set)
             fetch_index_df = fetch_df_by_index(df=fetch_col_df, selector=selector, level=level, fetch_orig=fetch_orig)

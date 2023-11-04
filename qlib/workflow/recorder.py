@@ -2,6 +2,7 @@
 # Licensed under the MIT License.
 
 import os
+import platform
 import pickle
 import shutil
 import subprocess
@@ -317,7 +318,10 @@ class MLflowRecorder(Recorder):
         This function will return the directory path of this recorder.
         """
         if self.artifact_uri is not None:
-            local_dir_path = Path(self.artifact_uri.lstrip("file:")) / ".."
+            if platform.system() == "Windows":
+                local_dir_path = Path(self.artifact_uri.lstrip("file:").lstrip("/")) / ".."
+            else:
+                local_dir_path = Path(self.artifact_uri.lstrip("file:")) / ".."
             local_dir_path = str(local_dir_path.resolve())
             if os.path.isdir(local_dir_path):
                 return local_dir_path

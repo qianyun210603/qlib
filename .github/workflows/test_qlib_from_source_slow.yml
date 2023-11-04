@@ -32,6 +32,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install --upgrade cython numpy
         pip install -e .[dev]
+        pip install git+https://github.com/qianyun210603/arctic.git@master
 
     - name: Downloads dependencies data
       run: |

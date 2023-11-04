@@ -44,8 +44,7 @@ if not _CYTHON_INSTALLED:
 # What packages are required for this module to be executed?
 # `estimator` may depend on other packages. In order to reduce dependencies, it is not written here.
 REQUIRED = [
-    "numpy>=1.12.0, <1.25",
-    "pandas>=0.25.1",
+    "numpy>=1.23",
     "scipy>=1.0.0",
     "requests>=2.18.0",
     "sacred>=0.7.4",
@@ -64,14 +63,13 @@ REQUIRED = [
     "pyyaml>=5.3.1",
     # To ensure stable operation of the experiment manager, we have limited the version of mlflow,
     # and we need to verify whether version 2.0 of mlflow can serve qlib properly.
-    "mlflow>=1.12.1, <=1.30.0",
+    "mlflow>=1.12.1",
     "tqdm",
     "loguru",
-    "arctic",
     "lightgbm>=3.3.0",
     "tornado",
     "joblib>=0.17.0",
-    "ruamel.yaml>=0.16.12",
+    "ruamel.yaml>=0.16.12,<0.18.0",
     "pymongo",  # For task management
     "scikit-learn>=0.22",
     "dill",
@@ -82,6 +80,7 @@ REQUIRED = [
     # Installing the latest version of protobuf for python versions below 3.8 will cause unit tests to fail.
     "protobuf<=3.20.1;python_version<='3.8'",
     "cryptography",
+    "pandas>=2.0.0",
 ]
 
 # Numpy include
@@ -141,7 +140,7 @@ setup(
             "wheel",
             "setuptools",
             "black",
-            "pylint",
+            "pylint==2.17.5",
             # Using the latest versions(0.981 and 0.982) of mypy,
             # the error "multiprocessing.Value()" is detected in the file "qlib/rl/utils/data_queue.py",
             # If this is fixed in a subsequent version of mypy, then we will revert to the latest version of mypy.
@@ -183,12 +182,10 @@ setup(
         # 'License :: OSI Approved :: MIT License',
         "Operating System :: POSIX :: Linux",
         "Operating System :: Microsoft :: Windows",
-        "Operating System :: MacOS",
         "License :: OSI Approved :: MIT License",
         "Development Status :: 3 - Alpha",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
     ],

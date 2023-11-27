@@ -3,18 +3,17 @@
 
 
 import abc
+import time
 import datetime
 import importlib
-import time
-from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from typing import Iterable, Type
+from typing import Type, Iterable
+from concurrent.futures import ProcessPoolExecutor
 
 import pandas as pd
-from joblib import Parallel, delayed
-from loguru import logger
 from tqdm import tqdm
-
+from loguru import logger
+from joblib import Parallel, delayed
 from qlib.utils import code_to_fname
 
 
@@ -315,7 +314,7 @@ class Normalize:
 
         # some symbol_field values such as TRUE, NA are decoded as True(bool), NaN(np.float) by pandas default csv parsing.
         # manually defines dtype and na_values of the symbol_field.
-        default_na = pd._libs.parsers.STR_NA_VALUES
+        default_na = pd._libs.parsers.STR_NA_VALUES  # pylint: disable=I1101
         symbol_na = default_na.copy()
         symbol_na.remove("NA")
         columns = pd.read_csv(file_path, nrows=0).columns

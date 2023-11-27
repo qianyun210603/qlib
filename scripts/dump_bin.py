@@ -5,11 +5,12 @@ import abc
 import shutil
 import struct
 import traceback
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
-from functools import partial
+import yaml
 from pathlib import Path
 from typing import Iterable, List, Union
-import yaml
+from functools import partial
+from concurrent.futures import ThreadPoolExecutor, as_completed, ProcessPoolExecutor
+
 import fire
 import numpy as np
 import pandas as pd
@@ -192,7 +193,7 @@ class DumpDataBase:
     def save_calendars(self, calendars_data: list):
         self._calendars_dir.mkdir(parents=True, exist_ok=True)
         calendars_path = str(self._calendars_dir.joinpath(f"{self.freq}.txt").expanduser().resolve())
-        result_calendars_list = list(map(lambda x: self._format_datetime(x), calendars_data))
+        result_calendars_list = [self._format_datetime(x) for x in calendars_data]
         np.savetxt(calendars_path, result_calendars_list, fmt="%s", encoding="utf-8")  # noqa
 
     def save_instruments(self, instruments_data: Union[list, pd.DataFrame]):

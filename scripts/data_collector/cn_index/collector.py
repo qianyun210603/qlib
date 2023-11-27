@@ -1,21 +1,20 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-import abc
-import datetime
 import re
+import abc
 import sys
 from functools import lru_cache
 from io import BytesIO, StringIO
 from pathlib import Path
 from typing import Iterable, List, Tuple
 
-import baostock as bs
 import fire
-import pandas as pd
 import requests
-from loguru import logger
+import pandas as pd
+import baostock as bs
 from tqdm import tqdm
+from loguru import logger
 
 CUR_DIR = Path(__file__).resolve().parent
 sys.path.append(str(CUR_DIR.parent.parent))
@@ -39,7 +38,7 @@ def retry_request(url: str, method: str = "get", exclude_status: Tuple = None):
     if exclude_status is None:
         exclude_status = []
     method_func = getattr(requests, method)
-    _resp = method_func(url, headers=REQ_HEADERS)
+    _resp = method_func(url, headers=REQ_HEADERS, timeout=None)
     _status = _resp.status_code
     if _status not in exclude_status and _status != 200:
         raise ValueError(f"response status: {_status}, url={url}")

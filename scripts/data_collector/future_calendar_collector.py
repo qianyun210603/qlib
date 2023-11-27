@@ -4,15 +4,17 @@
 import abc
 import importlib
 from pathlib import Path
-from typing import Iterable, List, Union
+from typing import Union, Iterable, List
 
-# pip install baostock
-import baostock as bs
-import exchange_calendars as xcal
 import fire
 import numpy as np
 import pandas as pd
+import exchange_calendars as xcal
+
+# pip install baostock
+import baostock as bs
 from loguru import logger
+
 from utils import generate_minutes_calendar_from_daily
 
 

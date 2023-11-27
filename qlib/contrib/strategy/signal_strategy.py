@@ -220,7 +220,8 @@ class BaseTopkStrategy(BaseSignalStrategy):
                     cash += trade_val - trade_cost
         # buy new stock
         # note the current has been changed
-        value = cash * self.risk_degree / len(buy) if len(buy) > 0.0 else 0.0
+        vacancy = self.topk - len(current_stock_list) + len(sell)
+        value = cash * self.risk_degree / vacancy if vacancy > 0 else 0.0
 
         # open_cost should be considered in the real trading environment, while the backtest in evaluate.py does not
         # consider it as the aim of demo is to accomplish same strategy as evaluate.py, so comment out this line

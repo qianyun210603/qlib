@@ -6,7 +6,7 @@ import abc
 import datetime
 import importlib
 import time
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Iterable, Type
 

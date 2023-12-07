@@ -74,6 +74,8 @@ class Order:
     deal_amount: float = 0.0  # `deal_amount` is a non-negative value
     factor: Optional[float] = None
 
+    remark: Any = ""
+
     # TODO:
     # a status field to indicate the dealing result of the order
 

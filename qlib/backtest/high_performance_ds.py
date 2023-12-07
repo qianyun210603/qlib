@@ -169,7 +169,18 @@ class NumpyQuote(BaseQuote):
             # 1) the day before holiday when daily trading
             # 2) the last minute of the day when intraday trading
             try:
-                return self.data[stock_id].loc[start_time, field]
+                res = self.data[stock_id].loc[start_time, field]
+                if np.isnan(res) and method == "ts_data_last":
+                    col_index = self.data[stock_id].columns.index(field)
+                    if np.all(np.isnan(self.data[stock_id].data[:, col_index])):
+                        return np.nan
+                    time_idx = self.data[stock_id].index.index(start_time) - 1
+                    while time_idx >= 0:
+                        if not pd.isna(self.data[stock_id].data[time_idx, col_index]):
+                            return self.data[stock_id].data[time_idx, col_index]
+                        time_idx -= 1
+                    return np.nan
+                return res
             except KeyError:
                 return None
         else:

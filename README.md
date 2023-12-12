@@ -14,7 +14,7 @@ I will try to merge some non-debateable features/bugfix to the original qlib. Bu
 # Features
 | Feature                        | Description                                                              | Status |
 |--------------------------------|--------------------------------------------------------------------------| -- |
-| Cross Sectional Factor         | Add cross-sectional factors such as cross-sectional ranking; average etc | Done |
+| Cross Sectional Factor         | Add cross-sectional factors such as cross-sectional ranking; average etc | Done (Linux only) |
 | Orthogonalization preprocesser | Add preprocessers to do Schimit and Symetric Orthogonalization           | Done |
 | Support non-adjusted data      | Add support for non-adjusted data                                        | Done |
 | Enhanced plotting I            | Use rangebreak to allow Datetime axis in plottings                       | [Merged](https://github.com/microsoft/qlib/pull/1390) |

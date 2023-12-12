@@ -10,6 +10,7 @@ import abc
 import bisect
 import copy
 import multiprocessing
+import platform
 import queue
 from collections import deque
 from typing import List, Optional, Union
@@ -662,7 +663,11 @@ class DatasetProvider(abc.ABC):
                     return [self.col_names[this_idx]] + col_names
                 return self.col_names
 
-        if len(cs_levels) > 1 and C["joblib_backend"] == "multiprocessing":  # pylint: disable=R1702
+        if len(cs_levels) > 1:
+            if C["joblib_backend"] != "multiprocessing":  # pylint: disable=R1702
+                raise RuntimeError("only multiprocessing backend is supported for cross-section data")
+            if platform.system() == "Windows":
+                raise SystemError("Cross-section data not supported due to the limitation of multiprocessing.")
             get_module_logger("data").info("shared memory created")
             shared_mgr = multiprocessing.Manager()
             shared_data_cache = shared_mgr.dict()

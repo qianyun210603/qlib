@@ -359,6 +359,7 @@ class Position(BasePosition):
         else:
             # exist, add amount
             self.position[stock_id]["amount"] += trade_amount
+            self.position[stock_id]["cost_basis"] += trade_val + cost
 
         self.position["cash"] -= trade_val + cost
 

@@ -325,7 +325,7 @@ class Exchange:
     LT_FLT = "float"  # float:  the trading limitation is based on `abs($change) < limit_threshold`
     LT_NONE = "none"  # none:  there is no trading limitation
 
-    def get_instrument_info(self, symbol: str) -> Optional[Dict]:
+    def get_instrument_info(self, symbol: str) -> Any:
         return self.instrument_info.get(symbol, None)
 
     def _get_limit_type(self) -> str:

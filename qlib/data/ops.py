@@ -407,6 +407,9 @@ class NpPairOperator(PairOperator):
         self.func = func
         super(NpPairOperator, self).__init__(feature_left, feature_right)
 
+    def _pre_process_series(self, series_left, series_right):
+        return series_left, series_right
+
     def _load_internal(self, instrument, start_index, end_index, *args):
         assert any(
             [isinstance(self.feature_left, (Expression,)), self.feature_right, Expression]
@@ -445,6 +448,9 @@ class NpPairOperator(PairOperator):
             ):
                 series_left = series_left[common_index]
                 series_right = series_right[common_index]
+
+        series_left, series_right = self._pre_process_series(series_left, series_right)
+
         try:
             res = getattr(np, self.func)(series_left, series_right)
         except ValueError as e:
@@ -860,6 +866,9 @@ class And(NpPairOperator):
     def __init__(self, feature_left, feature_right):
         super(And, self).__init__(feature_left, feature_right, "bitwise_and")
 
+    def _pre_process_series(self, series_left, series_right):
+        return series_left > 0.5, series_right > 0.5
+
     @property
     def adjust_status(self):
         return 0
@@ -886,6 +895,9 @@ class Or(NpPairOperator):
 
     def __init__(self, feature_left, feature_right):
         super(Or, self).__init__(feature_left, feature_right, "bitwise_or")
+
+    def _pre_process_series(self, series_left, series_right):
+        return series_left > 0.5, series_right > 0.5
 
     @property
     def adjust_status(self):

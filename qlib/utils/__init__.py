@@ -306,8 +306,8 @@ def parse_field(field):
     # \uff09 -> )
     chinese_punctuation_regex = r"\u3001\uff1a\uff08\uff09"
     for pattern, new in [
-        (rf"\$\$([\w{chinese_punctuation_regex}]+)", r'PFeature("\1")'),  # $$ must be before $
-        (rf"\$([\w{chinese_punctuation_regex}]+)", r'Feature("\1")'),
+        (rf"\$\$([\w{chinese_punctuation_regex}@.]+)", r'PFeature("\1")'),  # $$ must be before $
+        (rf"\$([\w{chinese_punctuation_regex}@.]+)", r'Feature("\1")'),
         (r"(\w+\s*)\(", r"Operators.\1("),
     ]:  # Features  # Operators
         field = re.sub(pattern, new, field)

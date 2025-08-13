@@ -15,7 +15,6 @@ from typing import Iterable, Tuple, List
 
 import numpy as np
 import pandas as pd
-from lxml import etree
 from loguru import logger
 from yahooquery import Ticker
 from tqdm import tqdm
@@ -196,17 +195,84 @@ def get_hs_stock_symbols() -> list:
     global _HS_SYMBOLS  # pylint: disable=W0603
 
     def _get_symbol():
-        _res = set()
-        for _k, _v in (("ha", "ss"), ("sa", "sz"), ("gem", "sz")):
-            resp = requests.get(HS_SYMBOLS_URL.format(s_type=_k), timeout=None)
-            _res |= set(
-                map(
-                    lambda x: "{}.{}".format(re.findall(r"\d+", x)[0], _v),  # pylint: disable=W0640
-                    etree.HTML(resp.text).xpath("//div[@class='result']/ul//li/a/text()"),  # pylint: disable=I1101
+        """
+        Get the stock pool from a web page and process it into the format required by yahooquery.
+        Format of data retrieved from the web page: 600519, 000001
+        The data format required by yahooquery: 600519.ss, 000001.sz
+
+        Returns
+        -------
+            set: Returns the set of symbol codes.
+
+        Examples:
+        -------
+            {600000.ss, 600001.ss, 600002.ss, 600003.ss, ...}
+        """
+        # url = "http://99.push2.eastmoney.com/api/qt/clist/get?pn=1&pz=10000&po=1&np=1&fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048&fields=f12"
+
+        base_url = "http://99.push2.eastmoney.com/api/qt/clist/get"
+        params = {
+            "pn": 1,  # page number
+            "pz": 100,  # page size, default to 100
+            "po": 1,
+            "np": 1,
+            "fs": "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048",
+            "fields": "f12",
+        }
+
+        _symbols = []
+        page = 1
+
+        while True:
+            params["pn"] = page
+            try:
+                resp = requests.get(base_url, params=params, timeout=None)
+                resp.raise_for_status()
+                data = resp.json()
+
+                # Check if response contains valid data
+                if not data or "data" not in data or not data["data"] or "diff" not in data["data"]:
+                    logger.warning(f"Invalid response structure on page {page}")
+                    break
+
+                # fetch the current page data
+                current_symbols = [_v["f12"] for _v in data["data"]["diff"]]
+
+                if not current_symbols:  # It's the last page if there is no data in current page
+                    logger.info(f"Last page reached: {page - 1}")
+                    break
+
+                _symbols.extend(current_symbols)
+
+                # show progress
+                logger.info(
+                    f"Page {page}: fetch {len(current_symbols)} stocks:[{current_symbols[0]} ... {current_symbols[-1]}]"
                 )
-            )
-            time.sleep(3)
-        return _res
+
+                page += 1
+
+                # sleep time to avoid overloading the server
+                time.sleep(0.5)
+
+            except requests.exceptions.HTTPError as e:
+                raise requests.exceptions.HTTPError(
+                    f"Request to {base_url} failed with status code {resp.status_code}"
+                ) from e
+            except Exception as e:
+                logger.warning("An error occurred while extracting data from the response.")
+                raise
+
+        if len(_symbols) < 3900:
+            raise ValueError("The complete list of stocks is not available.")
+
+        # Add suffix after the stock code to conform to yahooquery standard, otherwise the data will not be fetched.
+        _symbols = [
+            _symbol + ".ss" if _symbol.startswith("6") else _symbol + ".sz" if _symbol.startswith(("0", "3")) else None
+            for _symbol in _symbols
+        ]
+        _symbols = [_symbol for _symbol in _symbols if _symbol is not None]
+
+        return set(_symbols)
 
     if _HS_SYMBOLS is None:
         symbols = set()
@@ -748,7 +814,7 @@ def calc_paused_num(df: pd.DataFrame, _date_field_name, _symbol_field_name):
     all_nan_nums = 0
     # Record the number of consecutive occurrences of trading days that are not nan throughout the day
     not_nan_nums = 0
-    for _date, _df in df.groupby("_tmp_date"):
+    for _date, _df in df.groupby("_tmp_date", group_keys=False):
         _df["paused"] = 0
         if not _df.loc[_df["volume"] < 0].empty:
             logger.warning(f"volume < 0, will fill np.nan: {_date} {_symbol}")

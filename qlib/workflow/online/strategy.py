@@ -91,7 +91,6 @@ class OnlineStrategy:
 
 
 class RollingStrategy(OnlineStrategy):
-
     """
     This example strategy always uses the latest rolling model sas online models.
     """

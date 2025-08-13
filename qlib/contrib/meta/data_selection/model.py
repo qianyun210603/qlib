@@ -1,25 +1,25 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-import copy
-from typing import List, Union, cast
-
-import numpy as np
 import pandas as pd
+import numpy as np
 import torch
-from torch import nn, optim
+from torch import nn
+from torch import optim
 from tqdm.auto import tqdm
-
-from qlib.contrib.meta.data_selection.net import PredNet
-from qlib.data.dataset.weight import Reweighter
-from qlib.log import get_module_logger
-from qlib.model.meta.task import MetaTask
+import copy
+from typing import Union, List, cast
 
 from ....model.meta.dataset import MetaTaskDataset
 from ....model.meta.model import MetaTaskModel
 from ....workflow import R
-from .dataset import MetaDatasetDS
 from .utils import ICLoss
+from .dataset import MetaDatasetDS
+
+from qlib.log import get_module_logger
+from qlib.model.meta.task import MetaTask
+from qlib.data.dataset.weight import Reweighter
+from qlib.contrib.meta.data_selection.net import PredNet
 
 logger = get_module_logger("data selection")
 
@@ -53,7 +53,12 @@ class MetaModelDS(MetaTaskModel):
         max_epoch=100,
         seed=43,
         alpha=0.0,
+        loss_skip_thresh=50,
     ):
+        """
+        loss_skip_size: int
+            The number of threshold to skip the loss calculation for each day.
+        """
         self.step = step
         self.hist_step_n = hist_step_n
         self.clip_method = clip_method
@@ -63,6 +68,7 @@ class MetaModelDS(MetaTaskModel):
         self.max_epoch = max_epoch
         self.fitted = False
         self.alpha = alpha
+        self.loss_skip_thresh = loss_skip_thresh
         torch.manual_seed(seed)
 
     def run_epoch(self, phase, task_list, epoch, opt, loss_l, ignore_weight=False):
@@ -88,14 +94,14 @@ class MetaModelDS(MetaTaskModel):
                 criterion = nn.MSELoss()
                 loss = criterion(pred, meta_input["y_test"])
             elif self.criterion == "ic_loss":
-                criterion = ICLoss()
+                criterion = ICLoss(self.loss_skip_thresh)
                 try:
-                    loss = criterion(pred, meta_input["y_test"], meta_input["test_idx"], skip_size=50)
+                    loss = criterion(pred, meta_input["y_test"], meta_input["test_idx"])
                 except ValueError as e:
                     get_module_logger("MetaModelDS").warning(f"Exception `{e}` when calculating IC loss")
                     continue
             else:
-                raise ValueError(f"Unknown loss type {self.criterion}")
+                raise ValueError(f"Unknown criterion: {self.criterion}")
 
             assert not np.isnan(loss.detach().item()), "NaN loss!"
 
@@ -119,7 +125,11 @@ class MetaModelDS(MetaTaskModel):
         loss_l.setdefault(phase, []).append(running_loss)
 
         pred_y_all = pd.concat(pred_y_all)
-        ic = pred_y_all.groupby("datetime").apply(lambda df: df["pred"].corr(df["label"], method="spearman")).mean()
+        ic = (
+            pred_y_all.groupby("datetime", group_keys=False)
+            .apply(lambda df: df["pred"].corr(df["label"], method="spearman"))
+            .mean()
+        )
 
         R.log_metrics(**{f"loss/{phase}": running_loss, "step": epoch})
         R.log_metrics(**{f"ic/{phase}": ic, "step": epoch})
@@ -131,11 +141,11 @@ class MetaModelDS(MetaTaskModel):
         Parameters
         ----------
         meta_dataset : MetaDatasetDS
-            The metamodel takes the meta-dataset for its training process.
+            The meta-model takes the meta-dataset for its training process.
         """
 
         if not self.fitted:
-            for k in ["lr", "step", "hist_step_n", "clip_method", "clip_weight", "criterion", "max_epoch"]:
+            for k in set(["lr", "step", "hist_step_n", "clip_method", "clip_weight", "criterion", "max_epoch"]):
                 R.log_params(**{k: getattr(self, k)})
 
         # FIXME: get test tasks for just checking the performance

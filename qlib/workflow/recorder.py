@@ -2,24 +2,23 @@
 # Licensed under the MIT License.
 
 import os
-import platform
-import pickle
-import shutil
-import subprocess
 import sys
-import tempfile
-from datetime import datetime
-from pathlib import Path
 from typing import Optional
-
 import mlflow
-from mlflow.store.artifact.azure_blob_artifact_repo import AzureBlobArtifactRepository
+import shutil
+import pickle
+import tempfile
+import subprocess
+import platform
+from pathlib import Path
+from datetime import datetime
 
+from qlib.utils.serial import Serializable
 from qlib.utils.exceptions import LoadObjectError
 from qlib.utils.paral import AsyncCaller
-from qlib.utils.serial import Serializable
 
 from ..log import TimeInspector, get_module_logger
+from mlflow.store.artifact.azure_blob_artifact_repo import AzureBlobArtifactRepository
 
 logger = get_module_logger("workflow")
 # mlflow limits the length of log_param to 500, but this caused errors when using qrun, so we extended the mlflow limit.
@@ -319,9 +318,9 @@ class MLflowRecorder(Recorder):
         """
         if self.artifact_uri is not None:
             if platform.system() == "Windows":
-                local_dir_path = Path(self.artifact_uri.lstrip("file:").lstrip("/")) / ".."
+                local_dir_path = Path(self.artifact_uri.lstrip("file:").lstrip("/")).parent
             else:
-                local_dir_path = Path(self.artifact_uri.lstrip("file:")) / ".."
+                local_dir_path = Path(self.artifact_uri.lstrip("file:")).parent
             local_dir_path = str(local_dir_path.resolve())
             if os.path.isdir(local_dir_path):
                 return local_dir_path

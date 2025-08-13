@@ -323,7 +323,6 @@ class TRAModel(Model):
 
 
 class LSTM(nn.Module):
-
     """LSTM Model
 
     Args:
@@ -413,7 +412,6 @@ class PositionalEncoding(nn.Module):
 
 
 class Transformer(nn.Module):
-
     """Transformer Model
 
     Args:
@@ -474,7 +472,6 @@ class Transformer(nn.Module):
 
 
 class TRA(nn.Module):
-
     """Temporal Routing Adaptor (TRA)
 
     TRA takes historical prediction errors & latent representation as inputs,

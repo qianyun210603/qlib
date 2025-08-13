@@ -8,15 +8,12 @@ import random
 import sys
 import warnings
 from pathlib import Path
-from typing import List, Optional, cast
+from ruamel.yaml import YAML
+from typing import cast, List, Optional
 
 import numpy as np
 import pandas as pd
 import torch
-import yaml
-from tianshou.policy import BasePolicy
-from torch.utils.data import Dataset
-
 from qlib.backtest import Order
 from qlib.backtest.decision import OrderDir
 from qlib.constant import ONE_MIN
@@ -28,6 +25,8 @@ from qlib.rl.trainer import Checkpoint, backtest, train
 from qlib.rl.trainer.callbacks import Callback, EarlyStopping, MetricsWriter
 from qlib.rl.utils.log import CsvWriter
 from qlib.utils import init_instance_by_config
+from tianshou.policy import BasePolicy
+from torch.utils.data import Dataset
 
 
 def seed_everything(seed: int) -> None:
@@ -264,6 +263,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     with open(args.config_path, "r") as input_stream:
-        config = yaml.safe_load(input_stream)
+        yaml = YAML(typ="safe", pure=True)
+        config = yaml.load(input_stream)
 
     main(config, run_training=not args.no_training, run_backtest=args.run_backtest)

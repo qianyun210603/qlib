@@ -97,7 +97,7 @@ class DayCumsum(ElemOperator):
     def _load_internal(self, instrument, start_index, end_index, freq):
         _calendar = get_calendar_day(freq=freq)
         series = self.feature.load(instrument, start_index, end_index, freq)
-        return series.groupby(_calendar[series.index]).transform(self.period_cusum)
+        return series.groupby(_calendar[series.index], group_keys=False).transform(self.period_cusum)
 
 
 class DayLast(ElemOperator):
@@ -117,7 +117,7 @@ class DayLast(ElemOperator):
     def _load_internal(self, instrument, start_index, end_index, freq):
         _calendar = get_calendar_day(freq=freq)
         series = self.feature.load(instrument, start_index, end_index, freq)
-        return series.groupby(_calendar[series.index]).transform("last")
+        return series.groupby(_calendar[series.index], group_keys=False).transform("last")
 
 
 class FFillNan(ElemOperator):

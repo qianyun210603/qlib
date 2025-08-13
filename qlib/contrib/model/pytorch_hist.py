@@ -178,7 +178,7 @@ class HIST(Model):
 
     def get_daily_inter(self, df, shuffle=False):
         # organize the train data into daily batches
-        daily_count = df.groupby(level=0).size().values
+        daily_count = df.groupby(level=0, group_keys=False).size().values
         daily_index = np.roll(np.cumsum(daily_count), 1)
         daily_index[0] = 0
         if shuffle:
@@ -257,7 +257,7 @@ class HIST(Model):
             raise ValueError("Empty data from dataset, please check your dataset config.")
 
         if not os.path.exists(self.stock2concept):
-            url = "http://fintech.msra.cn/stock_data/downloads/qlib_csi300_stock2concept.npy"
+            url = "https://github.com/SunsetWolf/qlib_dataset/releases/download/v0/qlib_csi300_stock2concept.npy"
             urllib.request.urlretrieve(url, self.stock2concept)
 
         stock_index = np.load(self.stock_index, allow_pickle=True).item()

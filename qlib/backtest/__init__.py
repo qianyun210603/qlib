@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Generator, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Generator, List, Optional, Tuple, Union
 
 import pandas as pd
 
@@ -108,11 +108,11 @@ def get_exchange(
 
 
 def create_account_instance(
+    start_time: Union[pd.Timestamp, str],
+    end_time: Union[pd.Timestamp, str],
+    benchmark: Optional[str],
     account: Union[float, int, dict],
     pos_type: str = "Position",
-    benchmark: Optional[str] = None,
-    start_time: Union[pd.Timestamp, str] = None,
-    end_time: Union[pd.Timestamp, str] = None,
 ) -> Account:
     """
     # TODO: is very strange pass benchmark_config in the account (maybe for report)
@@ -120,6 +120,12 @@ def create_account_instance(
 
     Parameters
     ----------
+    start_time
+        start time of the benchmark
+    end_time
+        end time of the benchmark
+    benchmark : str
+        the benchmark for reporting
     account :   Union[
                     float,
                     {
@@ -139,12 +145,6 @@ def create_account_instance(
             ...
     pos_type: str
         Postion type.
-    benchmark : str
-        the benchmark for reporting
-    start_time
-        start time of the benchmark
-    end_time
-        end time of the benchmark
     """
     if isinstance(account, (int, float)):
         init_cash = account
@@ -162,13 +162,15 @@ def create_account_instance(
         position_dict=position_dict,
         pos_type=pos_type,
         pos_timestamp=timestamp,
-        benchmark_config={}
-        if benchmark is None
-        else {
-            "benchmark": benchmark,
-            "start_time": start_time,
-            "end_time": end_time,
-        },
+        benchmark_config=(
+            {}
+            if benchmark is None
+            else {
+                "benchmark": benchmark,
+                "start_time": start_time,
+                "end_time": end_time,
+            }
+        ),
     )
 
 
@@ -221,7 +223,7 @@ def backtest(
     account: Union[float, int, dict] = 1e9,
     exchange_kwargs: dict = {},
     pos_type: str = "Position",
-) -> Tuple[PORT_METRIC, INDICATOR_METRIC, Optional[Dict]]:
+) -> Tuple[PORT_METRIC, INDICATOR_METRIC, dict | None]:
     """initialize the strategy and executor, then backtest function for the interaction of the outermost strategy and
     executor in the nested decision execution
 

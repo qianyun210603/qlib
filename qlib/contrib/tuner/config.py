@@ -6,6 +6,7 @@
 
 import copy
 import os
+from ruamel.yaml import YAML
 
 import yaml
 
@@ -17,7 +18,8 @@ class TunerConfigManager:
         self.config_path = config_path
 
         with open(config_path) as fp:
-            config = yaml.safe_load(fp)
+            yaml = YAML(typ="safe", pure=True)
+            config = yaml.load(fp)
         self.config = copy.deepcopy(config)
 
         self.pipeline_ex_config = PipelineExperimentConfig(config.get("experiment", dict()), self)

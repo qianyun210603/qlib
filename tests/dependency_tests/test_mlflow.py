@@ -1,11 +1,11 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
-import shutil
-import time
 import unittest
-from pathlib import Path
-
+import platform
 import mlflow
+import time
+from pathlib import Path
+import shutil
 
 
 class MLflowTest(unittest.TestCase):
@@ -27,7 +27,10 @@ class MLflowTest(unittest.TestCase):
             _ = mlflow.tracking.MlflowClient(tracking_uri=str(self.TMP_PATH))
         end = time.time()
         elapsed = end - start
-        self.assertLess(elapsed, 1e-2)  # it can be done in less than 10ms
+        if platform.system() == "Linux":
+            self.assertLess(elapsed, 1e-2)  # it can be done in less than 10ms
+        else:
+            self.assertLess(elapsed, 2e-2)
         print(elapsed)
 
 

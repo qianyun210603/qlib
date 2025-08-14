@@ -212,8 +212,8 @@ class ALSTM(Model):
         evals_result=dict(),
         save_path=None,
     ):
-        df_train, df_valid = dataset.prepare(
-            ["train", "valid"],
+        df_train, df_valid, df_test = dataset.prepare(
+            ["train", "valid", "test"],
             col_set=["feature", "label"],
             data_key=DataHandlerLP.DK_L,
         )
@@ -225,7 +225,6 @@ class ALSTM(Model):
 
         save_path = get_or_create_path(save_path)
         stop_steps = 0
-        # train_loss = 0
         best_score = -np.inf
         best_epoch = 0
         evals_result["train"] = []

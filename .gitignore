@@ -50,3 +50,4 @@ tags
 
 ./pretrain
 .idea/
+.aider*

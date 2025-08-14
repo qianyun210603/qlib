@@ -1,28 +1,27 @@
 #  Copyright (c) Microsoft Corporation.
 #  Licensed under the MIT License.
 
-import functools
-import glob
-import inspect
 import os
+import sys
+import fire
+import time
+import glob
 import shutil
 import signal
+import inspect
+import tempfile
+import functools
 import statistics
 import subprocess
-import sys
-import tempfile
-import time
 from datetime import datetime
-from operator import xor
+from ruamel.yaml import YAML
 from pathlib import Path
+from operator import xor
 from pprint import pprint
 
-import fire
-import yaml
-
 import qlib
-from qlib.tests.data import GetData
 from qlib.workflow import R
+from qlib.tests.data import GetData
 
 
 # decorator to check the arguments
@@ -189,7 +188,8 @@ def gen_and_save_md_table(metrics, dataset):
 # read yaml, remove seed kwargs of model, and then save file in the temp_dir
 def gen_yaml_file_without_seed_kwargs(yaml_path, temp_dir):
     with open(yaml_path, "r") as fp:
-        config = yaml.safe_load(fp)
+        yaml = YAML(typ="safe", pure=True)
+        config = yaml.load(fp)
     try:
         del config["task"]["model"]["kwargs"]["seed"]
     except KeyError:

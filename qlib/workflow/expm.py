@@ -1,21 +1,20 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-import os
-from typing import Optional, Text
 from urllib.parse import urlparse
-from urllib.request import url2pathname
-
 import mlflow
 from filelock import FileLock
+from mlflow.exceptions import MlflowException, RESOURCE_ALREADY_EXISTS, ErrorCode
 from mlflow.entities import ViewType
-from mlflow.exceptions import RESOURCE_ALREADY_EXISTS, ErrorCode, MlflowException
+import os
+from typing import Optional, Text
 
+from .exp import MLflowExperiment, Experiment
 from ..config import C
+from .recorder import Recorder
 from ..log import get_module_logger
 from ..utils.exceptions import ExpAlreadyExistError
-from .exp import Experiment, MLflowExperiment
-from .recorder import Recorder
+
 
 logger = get_module_logger("workflow")
 
@@ -234,9 +233,7 @@ class ExpManager:
             # So we supported it in the interface wrapper
             pr = urlparse(self.uri)
             if pr.scheme == "file":
-                with FileLock(
-                    os.path.join(url2pathname(pr.netloc), url2pathname(pr.path), "filelock")
-                ):  # pylint: disable=E0110
+                with FileLock(Path(os.path.join(pr.netloc, pr.path.lstrip("/"), "filelock"))):  # pylint: disable=E0110
                     return self.create_exp(experiment_name), True
             # NOTE: for other schemes like http, we double-check to avoid create exp conflicts
             try:
@@ -430,7 +427,11 @@ class MLflowExpManager(ExpManager):
 
     def list_experiments(self):
         # retrieve all the existing experiments
-        exps = self.client.search_experiments(view_type=ViewType.ACTIVE_ONLY)
+        mlflow_version = int(mlflow.__version__.split(".", maxsplit=1)[0])
+        if mlflow_version >= 2:
+            exps = self.client.search_experiments(view_type=ViewType.ACTIVE_ONLY)
+        else:
+            exps = self.client.list_experiments(view_type=ViewType.ACTIVE_ONLY)  # pylint: disable=E1101
         experiments = dict()
         for exp in exps:
             experiment = MLflowExperiment(exp.experiment_id, exp.name, self.uri)

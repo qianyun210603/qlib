@@ -15,6 +15,24 @@ from qlib.log import TimeInspector
 
 class FeaAnalyser:
     def __init__(self, dataset: pd.DataFrame):
+        """
+
+        Parameters
+        ----------
+        dataset : pd.DataFrame
+
+            We often have multiple columns for dataset. Each column corresponds to one sub figure.
+            There will be a datatime column in the index levels.
+            Aggretation will be used for more summarized metrics overtime.
+            Here is an example of data:
+
+            .. code-block::
+
+                                            return
+                datetime   instrument
+                2007-02-06 equity_tpx     0.010087
+                           equity_spx     0.000786
+        """
         self._dataset = dataset
         with TimeInspector.logt("calc_stat_values"):
             self.calc_stat_values()

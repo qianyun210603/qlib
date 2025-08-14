@@ -9,7 +9,7 @@ pip install -r requirements.txt
 ```
 
 ## Usage of the dataset
-> *Crypto dateset only support Data retrieval function but not support backtest function due to the lack of OHLC data.*
+> *Crypto dataset only support Data retrieval function but not support backtest function due to the lack of OHLC data.*
 
 ## Collector Data
 
@@ -28,7 +28,7 @@ python collector.py normalize_data --source_dir ~/.qlib/crypto_data/source/1d --
 
 # dump data
 cd qlib/scripts
-python dump_bin.py dump_all --csv_path ~/.qlib/crypto_data/source/1d_nor --qlib_dir ~/.qlib/qlib_data/crypto_data --freq day --date_field_name date --include_fields prices,total_volumes,market_caps
+python dump_bin.py dump_all --data_path ~/.qlib/crypto_data/source/1d_nor --qlib_dir ~/.qlib/qlib_data/crypto_data --freq day --date_field_name date --include_fields prices,total_volumes,market_caps
 
 ```
 

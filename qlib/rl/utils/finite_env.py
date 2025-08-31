@@ -13,7 +13,7 @@ import warnings
 from contextlib import contextmanager
 from typing import Any, Callable, Dict, Generator, List, Optional, Set, Tuple, Type, Union, cast
 
-import gym
+import gymnasium as gym
 import numpy as np
 from tianshou.env import BaseVectorEnv, DummyVectorEnv, ShmemVectorEnv, SubprocVectorEnv
 
@@ -73,7 +73,7 @@ def generate_nan_observation(obs_space: gym.Space) -> Any:
     """The NaN observation that indicates the environment receives no seed.
 
     We assume that obs is complex and there must be something like float.
-    Otherwise this logic doesn't work.
+    Otherwise, this logic doesn't work.
     """
 
     sample = obs_space.sample()

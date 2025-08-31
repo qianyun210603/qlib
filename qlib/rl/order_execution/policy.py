@@ -6,11 +6,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, Generator, Iterable, Optional, OrderedDict, Tuple, cast
 
-import gym
+import gymnasium as gym
 import numpy as np
 import torch
 import torch.nn as nn
-from gym.spaces import Discrete
+from gymnasium.spaces import Discrete
 from tianshou.data import Batch, ReplayBuffer, to_torch
 from tianshou.policy import BasePolicy, DQNPolicy, PPOPolicy
 
@@ -25,7 +25,7 @@ __all__ = ["AllOne", "PPO", "DQN"]
 class NonLearnablePolicy(BasePolicy):
     """Tianshou's BasePolicy with empty ``learn`` and ``process_fn``.
 
-    This could be moved outside in future.
+    This could be moved outside in the future.
     """
 
     def __init__(self, obs_space: gym.Space, action_space: gym.Space) -> None:

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import torch
 import torch.nn as nn
-from gym import spaces
+from gymnasium import spaces
 from tianshou.policy import PPOPolicy
 
 from qlib.config import C

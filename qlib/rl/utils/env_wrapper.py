@@ -6,8 +6,7 @@ from __future__ import annotations
 import weakref
 from typing import Any, Callable, Dict, Generic, Iterable, Iterator, Optional, Tuple, cast
 
-import gym
-from gym import Space
+import gymnasium as gym
 
 from qlib.rl.aux_info import AuxiliaryInfoCollector
 from qlib.rl.interpreter import ActionInterpreter, ObsType, PolicyActType, StateInterpreter
@@ -137,11 +136,11 @@ class EnvWrapper(
         self.status: EnvWrapperStatus = cast(EnvWrapperStatus, None)
 
     @property
-    def action_space(self) -> Space:
+    def action_space(self) -> gym.Space:
         return self.action_interpreter.action_space
 
     @property
-    def observation_space(self) -> Space:
+    def observation_space(self) -> gym.Space:
         return self.state_interpreter.observation_space
 
     def reset(self, **kwargs: Any) -> ObsType:

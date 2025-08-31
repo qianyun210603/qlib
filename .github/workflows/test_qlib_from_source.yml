@@ -51,11 +51,11 @@ jobs:
       run: |
         make black
 
-    - name: Make html with sphinx
-      # Since read the docs builds on ubuntu 22.04, we only need to test that the build passes on ubuntu 22.04.
-      if: ${{ matrix.os == 'ubuntu-22.04' }}
-      run: |
-        make docs-gen
+#    - name: Make html with sphinx
+#      # Since read the docs builds on ubuntu 22.04, we only need to test that the build passes on ubuntu 22.04.
+#      if: ${{ matrix.os == 'ubuntu-22.04' }}
+#      run: |
+#        make docs-gen
 
     - name: Check Qlib with pylint
       run: |

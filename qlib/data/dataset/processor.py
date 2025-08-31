@@ -284,7 +284,7 @@ class ZScoreNorm(Processor):
         def normalize(x, mean_train=self.mean_train, std_train=self.std_train):
             return (x - mean_train) / std_train
 
-        df.loc(axis=1)[self.cols] = normalize(df[self.cols].values)
+        df.loc(axis=1)[self.cols] = normalize(df[self.cols].values.astype(df.loc(axis=1)[self.cols].dtypes))
         return df
 
 

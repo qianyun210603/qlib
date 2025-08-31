@@ -678,7 +678,7 @@ class DataHandlerLP(DataHandler):
         self,
         selector: Union[pd.Timestamp, slice, str] = slice(None, None),
         level: Union[str, int] = "datetime",
-        col_set: str | list[str]=DataHandler.CS_ALL,
+        col_set: str | list[str] = DataHandler.CS_ALL,
         data_key: DATA_KEY_TYPE = DataHandler.DK_I,
         squeeze: bool = False,
         proc_func: Callable = None,

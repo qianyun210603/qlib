@@ -129,7 +129,7 @@ def read_period_data(
     data_path,
     period,
     cur_date_int: int,
-    quarterly,
+    pit_mode: str,
     last_period_index: int = None,
 ):
     """
@@ -267,13 +267,13 @@ def parse_config(config):
     if not isinstance(config, str):
         return config
     # Check whether config is a file
-    yaml = YAML(typ="safe", pure=True)
+    yaml_loader = YAML(typ="safe", pure=True)
     if os.path.exists(config):
         with open(config, "r") as f:
-            return yaml.load(f)
+            return yaml_loader.load(f)
     # Check whether the str can be parsed
     try:
-        return yaml.load(config)
+        return yaml_loader.load(config)
     except BaseException as base_exp:
         raise ValueError("cannot parse config!") from base_exp
 

@@ -189,4 +189,4 @@ class HashingStockStorage(BaseHandlerStorage):
         elif len(fetch_stock_df_list) == 1:
             return fetch_stock_df_list[0]
         else:
-            return pd.concat(fetch_stock_df_list, sort=False, copy=~fetch_orig)
+            return pd.concat(fetch_stock_df_list, sort=False, copy=not fetch_orig)

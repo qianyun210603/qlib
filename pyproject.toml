@@ -43,7 +43,7 @@ dependencies = [
   "lightgbm",
   "gym",
   "cvxpy",
-  "joblib",
+  "joblib>=1.5.0",
   "matplotlib",
   "jupyter",
   "nbconvert",

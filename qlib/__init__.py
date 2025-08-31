@@ -52,7 +52,7 @@ def init(default_conf="client", **kwargs):
     default_config_overwrite = default_config_overwrite.expanduser()
     if default_config_overwrite.exists():
         with open(default_config_overwrite, "r") as stream:
-            yaml = YAML(type="safe", pure=True)
+            yaml = YAML(typ="safe", pure=True)
             default_config_overwrite = yaml.load(stream)
         kwargs.update(default_config_overwrite)
         logger.info(f"Load default config overwrite from {default_config_overwrite}")

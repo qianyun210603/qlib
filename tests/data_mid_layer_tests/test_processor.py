@@ -20,13 +20,13 @@ class TestProcessor(TestAutoData):
             ignore = min_val == max_val
             for _i, _con in enumerate(ignore):
                 if _con:
-                    max_val[_i] = 1
-                    min_val[_i] = 0
+                    max_val[_i] = 1.0
+                    min_val[_i] = 0.0
             df.loc(axis=1)[df.columns] = (df.values - min_val) / (max_val - min_val)
             return df
 
         origin_df = D.features([self.TEST_INST], ["$high", "$open", "$low", "$close"]).tail(10)
-        origin_df["test"] = 0
+        # origin_df["test"] = 0
         df = origin_df.copy()
         mmn = MinMaxNorm(fields_group=None, fit_start_time="2021-05-31", fit_end_time="2021-06-11")
         mmn.fit(df)
@@ -38,20 +38,20 @@ class TestProcessor(TestAutoData):
         def normalize(df):
             mean_train = np.nanmean(df.values, axis=0)
             std_train = np.nanstd(df.values, axis=0)
-            ignore = std_train == 0
+            ignore = std_train == 0.0
             for _i, _con in enumerate(ignore):
                 if _con:
-                    std_train[_i] = 1
-                    mean_train[_i] = 0
+                    std_train[_i] = 1.0
+                    mean_train[_i] = 0.0
             df.loc(axis=1)[df.columns] = (df.values - mean_train) / std_train
             return df
 
         origin_df = D.features([self.TEST_INST], ["$high", "$open", "$low", "$close"]).tail(10)
-        origin_df["test"] = 0
+        # origin_df["test"] = 0.0
         df = origin_df.copy()
         zsn = ZScoreNorm(fields_group=None, fit_start_time="2021-05-31", fit_end_time="2021-06-11")
         zsn.fit(df)
-        zsn.__call__(df)
+        zsn(df)
         origin_df = normalize(origin_df)
         assert (df == origin_df).all().all()
 

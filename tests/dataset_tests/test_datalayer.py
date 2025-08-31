@@ -28,8 +28,8 @@ class TestDataset(TestAutoData):
         close_p = D.features(D.instruments("csi300"), ["Ref($close, 1)/$close - 1"])
         close_desc = close_p.describe(percentiles=np.arange(0.1, 1.0, 0.1))
         print(close_desc)
-        self.assertLessEqual(abs(close_desc.loc["90%"][0]), 0.1, "Close value is abnormal")
-        self.assertLessEqual(abs(close_desc.loc["10%"][0]), 0.1, "Close value is abnormal")
+        self.assertLessEqual(abs(close_desc.loc["90%"].iloc[0]), 0.1, "Close value is abnormal")
+        self.assertLessEqual(abs(close_desc.loc["10%"].iloc[0]), 0.1, "Close value is abnormal")
         # FIXME: The yahoo data is not perfect. We have to
         # self.assertLessEqual(abs(close_desc.loc["max"][0]), 0.2, "Close value is abnormal")
         # self.assertGreaterEqual(close_desc.loc["min"][0], -0.2, "Close value is abnormal")

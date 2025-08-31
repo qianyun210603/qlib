@@ -103,7 +103,7 @@ class SepDataFrame:
             if _df_dict_key in self._df_dict:
                 if len(col_name) == 1:
                     col_name = col_name[0]
-                self._df_dict[_df_dict_key][col_name] = df
+                self._df_dict[_df_dict_key].loc[:, col_name] = df
             else:
                 if isinstance(df, pd.Series):
                     if len(col_name) == 1:

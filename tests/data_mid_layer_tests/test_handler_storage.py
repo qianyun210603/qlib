@@ -1,13 +1,11 @@
-import time
 import unittest
-
 import numpy as np
-
-from qlib.contrib.data.handler import check_transform_proc
 from qlib.data import D
-from qlib.data.dataset.handler import DataHandlerLP
-from qlib.log import TimeInspector
 from qlib.tests import TestAutoData
+
+from qlib.data.dataset.handler import DataHandlerLP
+from qlib.contrib.data.handler import check_transform_proc
+from qlib.log import TimeInspector
 
 
 class TestHandler(DataHandlerLP):

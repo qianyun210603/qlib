@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from pathlib import Path
 from urllib.parse import urlparse
 import mlflow
 from filelock import FileLock

@@ -1,19 +1,16 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from typing import List, Text, Tuple, Union
-
-import lightgbm as lgb
 import numpy as np
 import pandas as pd
-
-from qlib.workflow import R
-
+import lightgbm as lgb
+from typing import List, Text, Tuple, Union
+from ...model.base import ModelFT
 from ...data.dataset import DatasetH
 from ...data.dataset.handler import DataHandlerLP
-from ...data.dataset.weight import Reweighter
-from ...model.base import ModelFT
 from ...model.interpret.base import LightGBMFInt
+from ...data.dataset.weight import Reweighter
+from qlib.workflow import R
 
 
 class LGBModel(ModelFT, LightGBMFInt):
@@ -55,7 +52,6 @@ class LGBModel(ModelFT, LightGBMFInt):
                 else:
                     raise ValueError("Unsupported reweighter type.")
                 ds_l.append((lgb.Dataset(x.values, label=y, weight=w), key))
-                self._feature_names = x.columns.tolist()
         return ds_l
 
     def fit(
@@ -85,7 +81,6 @@ class LGBModel(ModelFT, LightGBMFInt):
             valid_sets=ds,
             valid_names=names,
             callbacks=[early_stopping_callback, verbose_eval_callback, evals_result_callback],
-            feature_name=self._feature_names,
             **kwargs,
         )
         for k in names:
